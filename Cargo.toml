@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 range-set-blaze = { version = "0.3.0", default-features = false }
+prettytable-rs = "^0.10"

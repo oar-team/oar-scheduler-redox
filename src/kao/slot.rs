@@ -49,15 +49,15 @@ impl Slot {
         self.next
     }
 
-    pub fn itvs(&self) -> &ProcSet {
+    pub fn intervals(&self) -> &ProcSet {
         &self.intervals
     }
 
-    pub fn b(&self) -> i64 {
+    pub fn begin(&self) -> i64 {
         self.begin
     }
 
-    pub fn e(&self) -> i64 {
+    pub fn end(&self) -> i64 {
         self.end
     }
 
@@ -217,7 +217,7 @@ impl SlotSet {
     pub fn iter_rev(&self) -> SlotIterator {
         SlotIterator {
             slots: &self.slots,
-            current: Some(self.first_id),
+            current: Some(self.last_id),
             end: None,
             forward: false,
         }
@@ -282,15 +282,6 @@ impl SlotSet {
         }
     }
 
-    /// See `split_at`
-    pub fn split_at_before(&mut self, slot_id: i32, time: i64) -> (i32, i32) {
-        self.split_at(slot_id, time, true)
-    }
-    /// See `split_at`
-    pub fn split_at_after(&mut self, slot_id: i32, time: i64) -> (i32, i32) {
-        self.split_at(slot_id, time, false)
-    }
-
     /// Split a given slot just before the given time. Splits between time-1 and time.
     /// The new slot is created and inserted before or after the original slot depending on `before`.
     /// ```
@@ -310,7 +301,7 @@ impl SlotSet {
     ///         --|---------------------|--   --|------------|----------------|--
     ///           |0 = time           10|       |0   time = 0|time+1 = 1    10|
     /// ```
-    fn split_at(&mut self, slot_id: i32, time: i64, before: bool) -> (i32, i32) {
+    pub(crate) fn split_at(&mut self, slot_id: i32, time: i64, before: bool) -> (i32, i32) {
         // Sanity checks
         let slot = self
             .slots
@@ -361,14 +352,13 @@ impl SlotSet {
         self.increment_next_id();
         (new_slot_id, slot_id)
     }
-    /// Find the slot containing the given time and split it just before the time, creating a new slot starting at time. See `split_at` for more details.
-    /// If splitting with time-1 and time already in two different slots, it will panic.
-    pub fn find_and_split_at_after(&mut self, time: i64) -> (i32, i32) {
+    /// Find the slot containing the given time and split it before or after the time. See `Self::split_at`.
+    pub fn find_and_split_at(&mut self, time: i64, before: bool) -> (i32, i32) {
         let slot = self.slot_at(time, None);
         if let Some(slot) = slot {
-            self.split_at_after(slot.id, time)
+            self.split_at(slot.id, time, before)
         } else {
-            panic!("Slot::find_and_split_at_after: no slot found at time {}", time);
+            panic!("Slot::find_and_split_at_before: no slot found at time {}", time);
         }
     }
 
@@ -380,7 +370,7 @@ impl SlotSet {
 
     /// Find the slot right before begin, and the slot right after end. Returns their ids.
     /// Equivalent to calling two times `Self::slot_id_at`, and getting the previous/next ids.
-    pub fn get_encompassing_range_inclusive(&self, begin: i64, end: i64) -> Option<(i32, i32)> {
+    pub fn get_encompassing_range_strict(&self, begin: i64, end: i64) -> Option<(i32, i32)> {
         self.slot_at(begin, None)
             .map(|s| s.prev)
             .flatten()
@@ -421,10 +411,10 @@ impl SlotSet {
         let end_slot_end = end_slot.end;
 
         if begin_slot.begin < begin {
-            self.split_at_before(begin_slot_id, begin);
+            self.split_at(begin_slot_id, begin, true);
         }
         if end_slot_end > end {
-            self.split_at_after(end_slot_id, end + 1);
+            self.split_at(end_slot_id, end + 1, false);
         }
         (begin_slot_id, end_slot_id)
     }

@@ -1,6 +1,7 @@
 use prettytable::{format, row, Table};
 use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
+use std::fs::soft_link;
 
 pub type ProcSet = RangeSetBlaze<u32>;
 
@@ -22,14 +23,7 @@ pub struct Slot {
 const MAX_TIME: i64 = i64::MAX;
 
 impl Slot {
-    pub fn new(
-        id: i32,
-        prev: Option<i32>,
-        next: Option<i32>,
-        itvs: ProcSet,
-        b: i64,
-        e: i64,
-    ) -> Slot {
+    pub fn new(id: i32, prev: Option<i32>, next: Option<i32>, itvs: ProcSet, b: i64, e: i64) -> Slot {
         Slot {
             id,
             prev,
@@ -67,43 +61,34 @@ impl Slot {
     }
 }
 
+/// A SlotSet is a collection of Slots ordered by time.
+/// It is a doubly linked list of Slots with O(1) access by id through a HashMap.
+/// A SlotSet cannot be empty.
 #[derive(Clone, Debug)]
 pub struct SlotSet {
-    begin: i64,
-    end: i64,
-    last_id: i32,
+    begin: i64,    // beginning of the SlotSet (begin of the first slot)
+    end: i64,      // end of the SlotSet (end of the last slot)
+    first_id: i32, // id of the first slot in the list
+    last_id: i32,  // id of the last slot in the list
+    next_id: i32,  // next available id
     slots: HashMap<i32, Slot>,
     // cache: HashMap<i32, i32>,
 }
 
 impl SlotSet {
-    pub fn new() -> SlotSet {
-        SlotSet {
-            begin: 0,
-            end: 0,
-            last_id: 0,
-            slots: HashMap::new(),
-            // cache: HashMap::new(),
-        }
-    }
-
-    /// Create a SlotSet from a HashMap of Slots
-    /// The first Slot must have an id of 1. Slots must form a doubly linked list.
-    pub fn from_map(slots: HashMap<i32, Slot>) -> SlotSet {
+    /// Create a SlotSet from a HashMap of Slots. Slots must form a doubly linked list.
+    pub fn from_map(slots: HashMap<i32, Slot>, first_slot_id: i32) -> SlotSet {
         // Find the first slot
-        let first_slot = slots.get(&1).expect(
-            "SlotSet::from_slots: first slot must have the id of 1, no slot with the id 1 found",
-        );
-        // Find the last slot
+        let first_slot = slots
+            .get(&first_slot_id)
+            .expect(format!("SlotSet::from_slots: first slot not found, no slot with the id {} found", first_slot_id).as_str());
+        // Find the last slot and the biggest id
         let mut last_slot = first_slot;
+        let mut next_id = first_slot.id + 1;
         while let Some(next_slot_id) = last_slot.next {
-            let next_slot = slots.get(&next_slot_id).expect(
-                format!(
-                    "SlotSet::from_slots: next slot of id {} not found.",
-                    next_slot_id
-                )
-                .as_str(),
-            );
+            let next_slot = slots
+                .get(&next_slot_id)
+                .expect(format!("SlotSet::from_slots: next slot of id {} not found.", next_slot_id).as_str());
             // Sanity checks
             assert_eq!(
                 next_slot.id, next_slot_id,
@@ -116,28 +101,30 @@ impl SlotSet {
                     last_slot.id, next_slot_id, next_slot.prev
                 );
             }
+            if next_slot.id >= next_id {
+                next_id = next_slot.id + 1;
+            }
             last_slot = next_slot;
         }
         SlotSet {
             begin: first_slot.b,
             end: last_slot.e,
+            first_id: first_slot.id,
             last_id: last_slot.id,
+            next_id,
             slots,
             // cache: HashMap::new(),
         }
     }
 
     pub fn from_slot(slot: Slot) -> SlotSet {
-        assert_eq!(
-            slot.id, 1,
-            "SlotSet::from_slot: first slot must have the id of 1. It has id {}",
-            slot.id
-        );
         SlotSet {
             begin: slot.b,
             end: slot.e,
+            first_id: slot.id,
             last_id: slot.id,
-            slots: HashMap::from([(1, slot)]),
+            next_id: slot.id + 1,
+            slots: HashMap::from([(slot.id, slot)]),
             // cache: HashMap::new(),
         }
     }
@@ -164,12 +151,8 @@ impl SlotSet {
         while let Some(s) = slot {
             table.add_row(row![
                 s.id,
-                s.prev
-                    .map(|prev| format!("Some({})", prev))
-                    .unwrap_or("None".to_string()),
-                s.next
-                    .map(|next| format!("Some({})", next))
-                    .unwrap_or("None".to_string()),
+                s.prev.map(|prev| format!("Some({})", prev)).unwrap_or("None".to_string()),
+                s.next.map(|next| format!("Some({})", next)).unwrap_or("None".to_string()),
                 s.b,
                 s.e,
                 format!("{:.2}", (s.e - s.b) as f32 / 3600f32 / 24f32),
@@ -177,22 +160,17 @@ impl SlotSet {
                 //s.ph_itvs,
             ]);
 
-            slot = if let Some(next_id) = s.next {
-                self.slots.get(&next_id)
-            } else {
-                None
-            };
+            slot = if let Some(next_id) = s.next { self.slots.get(&next_id) } else { None };
         }
         table
     }
 
-    pub fn new_id(&mut self) -> i32 {
-        self.last_id += 1;
-        self.last_id
+    pub fn increment_next_id(&mut self) {
+        self.next_id += 1;
     }
 
     pub fn first_slot(&self) -> Option<&Slot> {
-        self.slots.get(&1)
+        self.slots.get(&self.first_id)
     }
 
     pub fn last_slot(&self) -> Option<&Slot> {
@@ -212,11 +190,7 @@ impl SlotSet {
             if time <= s.e {
                 return Some(s.id);
             }
-            slot = if let Some(next_id) = s.next {
-                self.slots.get(&next_id)
-            } else {
-                None
-            };
+            slot = if let Some(next_id) = s.next { self.slots.get(&next_id) } else { None };
         }
         None
     }
@@ -224,7 +198,7 @@ impl SlotSet {
     pub fn iter(&self) -> SlotIterator {
         SlotIterator {
             slots: &self.slots,
-            current: Some(1),
+            current: Some(self.first_id),
             end: None,
             forward: true,
         }
@@ -232,7 +206,7 @@ impl SlotSet {
     pub fn iter_rev(&self) -> SlotIterator {
         SlotIterator {
             slots: &self.slots,
-            current: Some(1),
+            current: Some(self.first_id),
             end: None,
             forward: false,
         }
@@ -260,12 +234,7 @@ impl SlotSet {
     /// Create an iterator that iterates from `start_id` to `end_id` (inclusive)
     /// If `end_id` is None or before `start_id` in the doubly linked list, iterates until the end of the list.
     /// The iterator look each time for a following slot making sure that slot.b - following_slot.e + 1 >= min_width. If no such slot is found, the iterator returns None
-    pub fn iter_between_with_width(
-        &self,
-        start_id: i32,
-        end_id: Option<i32>,
-        min_width: i64,
-    ) -> SlotWidthIterator {
+    pub fn iter_between_with_width(&self, start_id: i32, end_id: Option<i32>, min_width: i64) -> SlotWidthIterator {
         SlotWidthIterator {
             slot_iterator: SlotIterator {
                 slots: &self.slots,
@@ -276,9 +245,44 @@ impl SlotSet {
             min_width,
         }
     }
+    
+    fn set_slot_prev_id(&mut self, slot_id: i32, prev_id: Option<i32>) {
+        self.slots.get_mut(&slot_id).map(|slot| slot.prev = prev_id);
+    }
+    fn set_slot_next_id(&mut self, slot_id: i32, next_id: Option<i32>) {
+        self.slots.get_mut(&slot_id).map(|slot| slot.next = next_id);
+    }
+    /// Updates the prev_id of the slot following `slot` to make sure the linked list is correct.
+    /// If `slot` is the last slot, updates `self.last_id`
+    fn set_next_slot_correct_prev_id(&mut self, slot: &Slot) {
+        if let Some(next_id) = slot.next {
+            self.set_slot_prev_id(next_id, Some(slot.id));
+        }else {
+            self.last_id = slot.id;
+        }
+    }
+    /// Updates the next_id of the slot preceding `slot` to make sure the linked list is correct.
+    /// If `slot` is the first slot, updates `self.first_id`
+    fn set_prev_slot_correct_next_id(&mut self, slot: &Slot) {
+        if let Some(prev_id) = slot.prev {
+            self.set_slot_next_id(prev_id, Some(slot.id));
+        }else {
+            self.first_id = slot.id;
+        }
+    }
+    
+
+    /// See `split_at`
+    pub fn split_at_before(&mut self, slot_id: i32, time: i64) -> (i32, i32) {
+        self.split_at(slot_id, time, true)
+    }
+    /// See `split_at`
+    pub fn split_at_after(&mut self, slot_id: i32, time: i64) -> (i32, i32) {
+        self.split_at(slot_id, time, false)
+    }
 
     /// Split a given slot just before the given time. Splits between time-1 and time.
-    /// The new slot is created and inserted before the original slot.
+    /// The new slot is created and inserted before or after the original slot depending on `before`.
     /// ```
     ///           |                     |       |          |          |
     ///           |       Slot 1        |  -->  |  Slot 2  |  Slot 1  |
@@ -286,7 +290,9 @@ impl SlotSet {
     ///         --|---------------------|--   --|----------|----------|--
     ///           |0                  10|       |0   time-1|time    10|
     /// ```
-    /// If the time at which to split is equal to the beginning of the slot, the slot will be split between time and time+1.
+    /// If trying to split with time-1 and time already in two different slots, it will panic (i.e. splitting with time = the beginning of a slot).
+    /// Returns the two slots, starting with the new one.
+    /// [Removed Behavior] If the time at which to split is equal to the beginning of the slot, the slot will be split between time and time+1.
     /// ```
     ///           |                     |       |            |                |
     ///           |       Slot 1        |  -->  |   Slot 2   |     Slot 1     |
@@ -294,117 +300,56 @@ impl SlotSet {
     ///         --|---------------------|--   --|------------|----------------|--
     ///           |0 = time           10|       |0   time = 0|time+1 = 1    10|
     /// ```
-    /// If the slot is of size one (i.e. begin equals end), the slot is not split and the function returns the id of the given slot.
-    /// Returns the two slots, starting with the new one.
-    pub fn split_at_before(&mut self, slot_id: i32, time: i64) -> (i32, i32) {
+    fn split_at(&mut self, slot_id: i32, time: i64, before: bool) -> (i32, i32) {
         // Sanity checks
         let slot = self
             .slots
-            .get(&slot_id)
+            .get_mut(&slot_id)
             .expect(format!("SlotSet::split_at_before: slot of id {} not found", slot_id).as_str());
         assert!(
-            time >= slot.b && time <= slot.e,
-            "SlotSet::split_at_before: split time {} must be between {} and {}",
+            time > slot.b && time <= slot.e,
+            "SlotSet::split_at_before: split time {} not in the slot time range: must be > {} and <={}",
             time,
             slot.b,
             slot.e
         );
-        if slot.b == slot.e {
-            return (slot_id, slot_id);
-        }
+        //assert_ne!(slot.b, slot.e, "SlotSet::split_at_before: slot of id {} is of size one", slot_id); // Already checked via time > slot.b
+        // if slot.b == slot.e {
+        //     return (slot_id, slot_id);
+        // }
         // Prepare to create a new slot
-        let new_id = self.new_id();
-        let slot = self.slots.get_mut(&slot_id).unwrap();
-        let new_begin = if slot.b == time {
-            // Special case if splitting at the beginning
+        let new_begin = /*if slot.b == time {
+            // Special case if splitting at the beginning: checked via an assertion.
             time + 1
-        } else {
+        } else {*/
             time
-        };
+        /*}*/;
+        
         // Create new slot
-        let new_slot = Slot::new(
-            new_id,
-            slot.prev,
-            Some(slot.id),
-            slot.itvs.clone(),
-            slot.b,
-            new_begin - 1,
-        );
-        // Update original slot
-        slot.b = new_begin;
-        slot.prev = Some(new_id);
-        // Update before slot
-        if let Some(before_slot_id) = new_slot.prev {
-            if let Some(before_slot) = self.slots.get_mut(&before_slot_id) {
-                before_slot.next = Some(new_id);
-            }
-        }
-
-        println!(
-            "Splitting slot {} at time {}, begin_time={}",
-            slot_id, time, new_begin
-        );
-        println!("Inserting id {} before id {}", new_id, slot_id);
-        self.slots.insert(new_id, new_slot);
-        (new_id, slot_id)
-    }
-
-    /// Split a given slot just before the given time. Splits between time-1 and time.
-    /// Works like split_at_before but the new slot is created and inserted after the original slot.
-    /// ```
-    ///           |                     |       |          |          |
-    ///           |       Slot 1        |  -->  |  Slot 1  |  Slot 2  |
-    ///           |                     |       |          |          |
-    ///         --|---------------------|--   --|----------|----------|--
-    ///           |0                  10|       |0   time-1|time    10|
-    /// ```
-    /// Return the two slots, starting with the new one.
-    pub fn split_at_after(&mut self, slot_id: i32, time: i64) -> (i32, i32) {
-        // Sanity checks
-        let slot = self
-            .slots
-            .get(&slot_id)
-            .expect(format!("SlotSet::split_at_before: slot of id {} not found", slot_id).as_str());
-        assert!(
-            time >= slot.b && time <= slot.e,
-            "SlotSet::split_at_before: split time {} must be between {} and {}",
-            time,
-            slot.b,
-            slot.e
-        );
-        if slot.b == slot.e {
-            return (slot_id, slot_id);
-        }
-        // Prepare to create a new slot
-        let new_id = self.new_id();
-        let slot = self.slots.get_mut(&slot_id).unwrap();
-        let new_begin = if slot.b == time {
-            // Special case if splitting at the beginning
-            time + 1
-        } else {
-            time
+        let new_slot_id = self.next_id;
+        let new_slot = if before {
+            let new_slot = Slot::new(new_slot_id, slot.prev, Some(slot.id), slot.itvs.clone(), slot.b, new_begin - 1);
+            // Update original slot
+            slot.b = new_begin;
+            slot.prev = Some(new_slot_id);
+            // Update before slot or first_slot_id
+            self.set_prev_slot_correct_next_id(&new_slot);
+            new_slot
+        }else{
+            let new_slot = Slot::new(new_slot_id, Some(slot.id), slot.next, slot.itvs.clone(), new_begin, slot.e);
+            // Update original slot
+            slot.e = new_begin - 1;
+            slot.next = Some(new_slot_id);
+            // Update after slot or last_slot_id
+            self.set_next_slot_correct_prev_id(&new_slot);
+            new_slot
         };
-        // Create new slot
-        let new_slot = Slot::new(
-            new_id,
-            Some(slot.id),
-            slot.next,
-            slot.itvs.clone(),
-            new_begin,
-            slot.e,
-        );
-        // Update original slot
-        slot.e = new_begin - 1;
-        slot.next = Some(new_id);
-        // Update after slot
-        if let Some(after_slot_id) = new_slot.next {
-            if let Some(after_slot) = self.slots.get_mut(&after_slot_id) {
-                after_slot.prev = Some(new_id);
-            }
-        }
 
-        self.slots.insert(new_id, new_slot);
-        (new_id, slot_id)
+        println!("Splitting slot {} at time {}, begin_time={}", slot_id, time, new_begin);
+        println!("Inserting id {} before id {}", new_slot_id, slot_id);
+        self.slots.insert(new_slot_id, new_slot);
+        self.increment_next_id();
+        (new_slot_id, slot_id)
     }
 }
 

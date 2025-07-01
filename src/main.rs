@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use crate::kao::slot::{ProcSet, Slot, SlotSet};
 
 mod kao;
+mod lib;
 
 fn main() {
     let s1: Slot = Slot::new(1, None, Some(2), ProcSet::from_iter([1..=32]), 1, 10);
@@ -15,7 +16,7 @@ fn main() {
     let slots = HashMap::from([(1, s1), (2, s2), (3, s3)]);
     println!("slots: {:?}", slots);
 
-    let mut ss: SlotSet = SlotSet::from_map(slots);
+    let mut ss: SlotSet = SlotSet::from_map(slots, 1);
     println!("ss: {:?}", ss);
     ss.to_table().printstd();
 
@@ -27,20 +28,12 @@ fn main() {
     println!("{:?}", ss.split_at_before(slot_id, 5));
     ss.to_table().printstd();
 
-    println!("Slot at time 15:");
+    println!("Slot at time 16:");
     let slot_id = ss.slot_id_at(15, None).unwrap();
     println!("{:?}", slot_id);
 
-    println!("Split SlotSet at time 15:");
-    println!("{:?}", ss.split_at_before(slot_id, 15));
-    ss.to_table().printstd();
-
-    println!("Slot at time 15:");
-    let slot_id = ss.slot_id_at(15, None).unwrap();
-    println!("{:?}", slot_id);
-
-    println!("Split SlotSet at time 15:");
-    println!("{:?}", ss.split_at_after(slot_id, 15));
+    println!("Split SlotSet at time 16:");
+    println!("{:?}", ss.split_at_before(slot_id, 16));
     ss.to_table().printstd();
 
     println!("Split SlotSet at time 30:");

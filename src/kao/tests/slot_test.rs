@@ -140,7 +140,7 @@ pub fn test_iter_between_with_width() {
 pub fn test_split_slots(){
     let mut ss = get_test_slot_set();
     let job = Job::new(1, 5, 10, ProcSet::from_iter([4..=6]));
-    ss.split_slots_and_update_resources(&job, true, None);
+    ss.split_slots_for_job_and_update_resources(&job, true, None);
     
     assert_eq!(ss.slot_at(4, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=32]));
     assert_eq!(ss.slot_at(5, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=3, 7..=32]));

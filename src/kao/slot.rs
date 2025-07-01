@@ -17,11 +17,13 @@ pub struct Slot {
     intervals: ProcSet,
     begin: i64,
     end: i64,
-    // ts_itvs: HashMap<String, HashMap<String, ProcSet>>,
+    /// Stores the intervals that might be taken, but available to be shared with the user and the job.
+    /// HashMap<user_name or *, HashMap<job name or *, ProcSet>>
+    time_shared_intervals: HashMap<String, HashMap<String, ProcSet>>,
     // ph_itvs: HashMap<String, ProcSet>,
 }
 
-const MAX_TIME: i64 = i64::MAX;
+pub const MAX_TIME: i64 = i64::MAX;
 
 impl Slot {
     pub fn new(id: i32, prev: Option<i32>, next: Option<i32>, itvs: ProcSet, b: i64, e: i64) -> Slot {
@@ -32,7 +34,7 @@ impl Slot {
             intervals: itvs,
             begin: b,
             end: e,
-            //ts_itvs: HashMap::new(),
+            time_shared_intervals: HashMap::new(),
             //ph_itvs: HashMap::new(),
         }
     }
@@ -137,8 +139,8 @@ impl SlotSet {
         }
     }
 
-    pub fn from_itvs(itvs: ProcSet, begin: i64) -> SlotSet {
-        let slot = Slot::new(1, None, None, itvs, begin, MAX_TIME);
+    pub fn from_intervals(ressources: ProcSet, begin: i64) -> SlotSet {
+        let slot = Slot::new(1, None, None, ressources, begin, MAX_TIME);
         SlotSet::from_slot(slot)
     }
 
@@ -244,7 +246,7 @@ impl SlotSet {
     }
     /// Create an iterator that iterates from `start_id` to `end_id` (inclusive)
     /// If `end_id` is None or before `start_id` in the doubly linked list, iterates until the end of the list.
-    /// The iterator look each time for a following slot making sure that slot.b - following_slot.e + 1 >= min_width. If no such slot is found, the iterator returns None
+    /// The iterator looks each time for a following slot making sure that slot.b - following_slot.e + 1 >= min_width. If no such slot is found, the iterator returns None
     pub fn iter_between_with_width(&self, start_id: i32, end_id: Option<i32>, min_width: i64) -> SlotWidthIterator {
         SlotWidthIterator {
             slot_iterator: SlotIterator {
@@ -291,7 +293,7 @@ impl SlotSet {
     ///         --|---------------------|--   --|----------|----------|--
     ///           |0                  10|       |0   time-1|time    10|
     /// ```
-    /// If trying to split with time-1 and time already in two different slots, it will panic (i.e. splitting with time = the beginning of a slot).
+    /// If trying to split with time-1 and time already in two different slots, it will panic (i.e., splitting with time = the beginning of a slot).
     /// Returns the two slots, starting with the new one.
     /// [Removed Behavior] If the time at which to split is equal to the beginning of the slot, the slot will be split between time and time+1.
     /// ```
@@ -347,7 +349,7 @@ impl SlotSet {
         };
 
         println!("Splitting slot {} at time {}, begin_time={}", slot_id, time, new_begin);
-        println!("Inserting id {} before id {}", new_slot_id, slot_id);
+        println!("Inserting id {} before/after id {}", new_slot_id, slot_id);
         self.slots.insert(new_slot_id, new_slot);
         self.increment_next_id();
         (new_slot_id, slot_id)
@@ -387,20 +389,6 @@ impl SlotSet {
         }
     }
 
-    pub fn split_slots_and_update_resources(&mut self, job: &Job, sub_resources: bool, start_slot_id: Option<i32>) {
-        let (begin_slot_id, end_slot_id) = self.split_slots_for_job(job, start_slot_id);
-        self.iter_between(begin_slot_id, Some(end_slot_id))
-            .map(|slot| slot.id)
-            .collect::<Vec<i32>>()
-            .iter()
-            .for_each(|slot_id| {
-                if sub_resources {
-                    self.slots.get_mut(&slot_id).unwrap().sub_resources(&job);
-                } else {
-                    self.slots.get_mut(&slot_id).unwrap().add_resources(&job);
-                }
-            });
-    }
     /// Splits the slots to make them fit the job.
     /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
     /// Returns the first and last slot ids in which the job can be scheduled.
@@ -427,6 +415,22 @@ impl SlotSet {
         }
         (begin_slot_id, end_slot_id)
     }
+    pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
+        let (begin_slot_id, end_slot_id) = self.split_slots_for_job(job, start_slot_id);
+        self.iter_between(begin_slot_id, Some(end_slot_id))
+            .map(|slot| slot.id)
+            .collect::<Vec<i32>>()
+            .iter()
+            .for_each(|slot_id| {
+                if sub_resources {
+                    self.slots.get_mut(&slot_id).unwrap().sub_resources(&job);
+                } else {
+                    self.slots.get_mut(&slot_id).unwrap().add_resources(&job);
+                }
+            });
+        (begin_slot_id, end_slot_id)
+    }
+    
     /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
     /// Used to insert the previously scheduled jobs in the slots or container jobs.
     /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
@@ -437,14 +441,22 @@ impl SlotSet {
             start_slot_id = Some(begin_slot_id);
         }
     }
+    /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
+    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<Job>, sub_resources: bool, mut start_slot_id: Option<i32>) {
+        for job in jobs {
+            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, sub_resources, start_slot_id);
+            start_slot_id = Some(begin_slot_id);
+        }
+    }
     
+
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
     pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
         self.iter_between(begin_slot_id, Some(end_slot_id))
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.intervals())
     }
-    
-    
+
+
 }
 
 #[derive(Clone)]
@@ -452,7 +464,7 @@ pub struct SlotIterator<'a> {
     slots: &'a HashMap<i32, Slot>,
     current: Option<i32>,
     end: Option<i32>,
-    forward: bool, // true for next direction, false for prev direction
+    forward: bool, // true for next direction, false for the prev direction
 }
 impl<'a> Iterator for SlotIterator<'a> {
     type Item = &'a Slot;
@@ -464,7 +476,7 @@ impl<'a> Iterator for SlotIterator<'a> {
             Some(slot) => slot,
             None => return None,
         };
-        // Move to the next slot based on direction
+        // Move to the next slot based on the direction
         self.current = if Some(current_id) == self.end {
             None // Reached the end
         } else if self.forward {

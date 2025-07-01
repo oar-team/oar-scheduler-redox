@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::kao::kamelot_basic::{schedule_cycle, Config, Platform};
 use crate::kao::slot::{ProcSet, Slot, SlotSet};
 use crate::lib::models::Job;
 
@@ -6,6 +7,13 @@ mod kao;
 mod lib;
 
 fn main() {
+    let config = Config {};
+    let platform = Platform {};
+    let queues = vec!["default".to_string()];
+    schedule_cycle(config, platform, queues);
+}
+
+fn test() {
     let s1: Slot = Slot::new(1, None, Some(2), ProcSet::from_iter([1..=32]), 1, 10);
     let s2: Slot = Slot::new(2, Some(1), Some(3), ProcSet::from_iter([1..=16, 28..=32]), 11, 20);
     let s3: Slot = Slot::new(3, Some(2), None, ProcSet::from_iter([1..=8, 30..=32]), 21, 30);
@@ -61,7 +69,7 @@ fn main() {
     }
 
     let job1 = Job::new(1, 18, 8, ProcSet::from_iter([4..=6]));
-    ss.split_slots_and_update_resources(&job1, true, None);
+    ss.split_slots_for_job_and_update_resources(&job1, true, None);
 
     ss.to_table().printstd();
 }

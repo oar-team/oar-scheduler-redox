@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::kao::slot::{ProcSet, Slot, SlotSet};
+use crate::lib::models::Job;
 
 mod kao;
 mod lib;
@@ -58,4 +59,9 @@ fn main() {
     for s in ss.iter_between_with_width(5, None, 10) {
         println!("id {} from {:0width$} to {:0width$} to id {} from {:0width$} to {:0width$}", s.0.id(), s.0.b(), s.0.e(), s.1.id(), s.1.b(), s.1.e(), width = 2);
     }
+    
+    let job1 = Job::new(1, 18, 8, ProcSet::from_iter([4..=6]));
+    ss.split_slots_and_update_resources(&job1, true);
+    
+    ss.to_table().printstd();
 }

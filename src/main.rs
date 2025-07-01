@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use crate::kao::kamelot_basic::{schedule_cycle, Config, Platform};
+use crate::kao::kamelot_basic::{schedule_cycle, Config, ResourceSet};
+use crate::kao::platform::PlatformTest;
 use crate::kao::slot::{ProcSet, Slot, SlotSet};
 use crate::lib::models::Job;
 
@@ -8,7 +9,14 @@ mod lib;
 
 fn main() {
     let config = Config {};
-    let platform = Platform {};
+    
+    let resource_set = ResourceSet::default();
+    let jobs: Vec<Job> = vec![
+        Job::new(3, 1751375836 + 3600 * 24 * 6, 3600 * 6, ProcSet::from_iter([20..=24])),
+        Job::new(2, 1751375836 + 3600 * 24 * 8, 3600 * 24, ProcSet::from_iter([0..=9])),
+    ];
+    let platform = PlatformTest::new(resource_set, jobs);
+    
     let queues = vec!["default".to_string()];
     schedule_cycle(config, platform, queues);
 }

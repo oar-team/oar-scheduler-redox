@@ -430,7 +430,7 @@ impl SlotSet {
             });
         (begin_slot_id, end_slot_id)
     }
-    
+
     /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
     /// Used to insert the previously scheduled jobs in the slots or container jobs.
     /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
@@ -448,7 +448,7 @@ impl SlotSet {
             start_slot_id = Some(begin_slot_id);
         }
     }
-    
+
 
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
     pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {

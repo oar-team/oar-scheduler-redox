@@ -1,7 +1,7 @@
-use std::cmp::{max, min};
 use crate::lib::models::Job;
 use prettytable::{format, row, Table};
 use range_set_blaze::RangeSetBlaze;
+use std::cmp::max;
 use std::collections::HashMap;
 
 pub type ProcSet = RangeSetBlaze<u32>;
@@ -324,7 +324,7 @@ impl SlotSet {
             time + 1
         } else {*/
             time
-        /*}*/;
+            /*}*/;
 
         // Create new slot
         let new_slot_id = self.next_id;
@@ -363,22 +363,32 @@ impl SlotSet {
     }
 
     /// Finds the slot containing begin, and the slot containing end. Returns their ids.
+    ///     /// If start_slot_id is not None, it will be used to find faster the slot of begin and end by not looping through all the slots.
     /// Equivalent to calling two times `Self::slot_id_at`.
-    pub fn get_encompassing_range(&self, begin: i64, end: i64) -> Option<(i32, i32)> {
-        self.slot_id_at(begin, None).zip(self.slot_id_at(end, None))
+    pub fn get_encompassing_range(&self, begin: i64, end: i64, start_slot_id: Option<i32>) -> Option<(&Slot, &Slot)> {
+        if let Some(begin_slot) = self.slot_at(begin, start_slot_id) {
+            if let Some(end_slot) = self.slot_at(end, Some(begin_slot.id)) {
+                return Some((begin_slot, end_slot));
+            }
+        }
+        None
     }
 
     /// Find the slot right before begin, and the slot right after end. Returns their ids.
+    /// If start_slot_id is not None, it will be used to find faster the slot of begin and end by not looping through all the slots.
     /// Equivalent to calling two times `Self::slot_id_at`, and getting the previous/next ids.
-    pub fn get_encompassing_range_strict(&self, begin: i64, end: i64) -> Option<(i32, i32)> {
-        self.slot_at(begin, None)
-            .map(|s| s.prev)
-            .flatten()
-            .zip(self.slot_at(end, None).map(|s| s.next).flatten())
+    pub fn get_encompassing_range_strict(&self, begin: i64, end: i64, start_slot_id: Option<i32>) -> Option<(&Slot, &Slot)> {
+        match self.get_encompassing_range(begin, end, start_slot_id).map(|(s1, s2)| (s1.prev, s2.next)) {
+            Some((Some(begin_id), Some(end_id))) => match (self.slots.get(&begin_id), self.slots.get(&end_id)) {
+                (Some(begin_slot), Some(end_slot)) => Some((begin_slot, end_slot)),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
-    pub fn split_slots_and_update_resources(&mut self, job: &Job, sub_resources: bool) {
-        let (begin_slot_id, end_slot_id) = self.split_slots(job);
+    pub fn split_slots_and_update_resources(&mut self, job: &Job, sub_resources: bool, start_slot_id: Option<i32>) {
+        let (begin_slot_id, end_slot_id) = self.split_slots_for_job(job, start_slot_id);
         self.iter_between(begin_slot_id, Some(end_slot_id))
             .map(|slot| slot.id)
             .collect::<Vec<i32>>()
@@ -392,19 +402,18 @@ impl SlotSet {
             });
     }
     /// Splits the slots to make them fit the job.
+    /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
     /// Returns the first and last slot ids in which the job can be scheduled.
-    pub fn split_slots(&mut self, job: &Job) -> (i32, i32) {
+    pub fn split_slots_for_job(&mut self, job: &Job, start_slot_id: Option<i32>) -> (i32, i32) {
         let begin = job.start_time;
         let end = job.start_time + max(job.walltime - 1, 0);
-        let begin_slot = if let Some(begin_slot) = self.slot_at(begin, None) {
-            begin_slot
+        let (begin_slot, end_slot) = if let Some(slots) = self.get_encompassing_range(begin, end, start_slot_id) {
+            slots
         } else {
-            panic!("Slot::split_slots: no slot found at the start time of the job: {}", begin);
-        };
-        let end_slot = if let Some(end_slot) = self.slot_at(end, Some(begin_slot.id)) {
-            end_slot
-        } else {
-            panic!("Slot::split_slots: no slot found at the end time of the job: {}", end);
+            panic!(
+                "Slot::split_slots_for_job: no encompassing range found: no slot found at time {} or {}",
+                begin, end
+            );
         };
         let begin_slot_id = begin_slot.id;
         let end_slot_id = end_slot.id;
@@ -417,6 +426,16 @@ impl SlotSet {
             self.split_at(end_slot_id, end + 1, false);
         }
         (begin_slot_id, end_slot_id)
+    }
+    /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
+    /// Used to insert the previously scheduled jobs in the slots or container jobs.
+    /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
+    /// Returns the first and last slot ids in which the job can be scheduled.
+    pub fn split_slots_for_jobs(&mut self, jobs: &Vec<Job>, mut start_slot_id: Option<i32>) {
+        for job in jobs {
+            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job(job, start_slot_id);
+            start_slot_id = Some(begin_slot_id);
+        }
     }
 }
 

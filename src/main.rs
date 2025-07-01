@@ -61,7 +61,7 @@ fn main() {
     }
 
     let job1 = Job::new(1, 18, 8, ProcSet::from_iter([4..=6]));
-    ss.split_slots_and_update_resources(&job1, true);
+    ss.split_slots_and_update_resources(&job1, true, None);
 
     ss.to_table().printstd();
 }

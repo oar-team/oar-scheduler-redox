@@ -45,16 +45,16 @@ pub fn test_split() {
 #[test]
 pub fn test_get_encompassing_range() {
     let ss = get_test_slot_set();
-    assert_eq!(ss.get_encompassing_range(5, 16), Some((1, 2)));
-    assert_eq!(ss.get_encompassing_range(5, 25), Some((1, 3)));
+    assert_eq!(ss.get_encompassing_range(5, 16, None).map(|(s1, s2)| (s1.id(), s2.id())), Some((1, 2)));
+    assert_eq!(ss.get_encompassing_range(5, 25, None).map(|(s1, s2)| (s1.id(), s2.id())), Some((1, 3)));
 }
 
 #[test]
 pub fn test_get_encompassing_range_strict() {
     let ss = get_test_slot_set();
-    assert_eq!(ss.get_encompassing_range_strict(5, 16), None);
-    assert_eq!(ss.get_encompassing_range_strict(5, 25), None);
-    assert_eq!(ss.get_encompassing_range_strict(10, 15), Some((1, 3)));
+    assert_eq!(ss.get_encompassing_range_strict(5, 16, None).map(|(s1, s2)| (s1.id(), s2.id())), None);
+    assert_eq!(ss.get_encompassing_range_strict(5, 25, None).map(|(s1, s2)| (s1.id(), s2.id())), None);
+    assert_eq!(ss.get_encompassing_range_strict(10, 15, None).map(|(s1, s2)| (s1.id(), s2.id())), Some((1, 3)));
 }
 
 #[test]
@@ -140,7 +140,7 @@ pub fn test_iter_between_with_width() {
 pub fn test_split_slots(){
     let mut ss = get_test_slot_set();
     let job = Job::new(1, 5, 10, ProcSet::from_iter([4..=6]));
-    ss.split_slots_and_update_resources(&job, true);
+    ss.split_slots_and_update_resources(&job, true, None);
     
     assert_eq!(ss.slot_at(4, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=32]));
     assert_eq!(ss.slot_at(5, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=3, 7..=32]));

@@ -437,6 +437,14 @@ impl SlotSet {
             start_slot_id = Some(begin_slot_id);
         }
     }
+    
+    /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
+    pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
+        self.iter_between(begin_slot_id, Some(end_slot_id))
+            .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.intervals())
+    }
+    
+    
 }
 
 #[derive(Clone)]

@@ -149,3 +149,11 @@ pub fn test_split_slots(){
     assert_eq!(ss.slot_at(14, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=3, 7..=16, 28..=32]));
     assert_eq!(ss.slot_at(15, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=16, 28..=32]));
 }
+
+#[test]
+pub fn test_intersect_slots_intervals(){
+    let ss = get_test_slot_set();
+    assert_eq!(ss.intersect_slots_intervals(1, 2), ProcSet::from_iter([1..=16, 28..=32]));
+    assert_eq!(ss.intersect_slots_intervals(2, 2), ProcSet::from_iter([1..=16, 28..=32]));
+    assert_eq!(ss.intersect_slots_intervals(1, 3), ProcSet::from_iter([1..=8, 30..=32]));
+}

@@ -1,6 +1,6 @@
+use crate::models::models::Job;
 use crate::scheduler::slot::{ProcSet, Slot, SlotSet};
 use std::collections::HashMap;
-use crate::models::models::Job;
 
 pub fn get_test_slot_set() -> SlotSet {
     let s1: Slot = Slot::new(1, None, Some(2), ProcSet::from_iter([1..=32]), 0, 9);
@@ -73,7 +73,7 @@ pub fn test_iter() {
 #[test]
 pub fn test_iter_rev() {
     let ss = get_test_slot_set();
-    let mut it = ss.iter_rev();
+    let mut it = ss.iter().rev();
     assert_eq!(it.next().map(|s| s.id()), Some(3));
     assert_eq!(it.next().map(|s| s.id()), Some(2));
     assert_eq!(it.next().map(|s| s.id()), Some(1));
@@ -83,39 +83,45 @@ pub fn test_iter_rev() {
 #[test]
 pub fn test_iter_between() {
     let ss = get_test_slot_set();
-    let mut it = ss.iter_between(1, Some(2));
+    let mut it = ss.iter().start_at(1).end_at(2);
     assert_eq!(it.next().map(|s| s.id()), Some(1));
     assert_eq!(it.next().map(|s| s.id()), Some(2));
     assert_eq!(it.next().map(|s| s.id()), None);
 
-    let mut it = ss.iter_between(2, None);
+    let mut it = ss.iter().start_at(2);
     assert_eq!(it.next().map(|s| s.id()), Some(2));
     assert_eq!(it.next().map(|s| s.id()), Some(3));
     assert_eq!(it.next().map(|s| s.id()), None);
 
-    let mut it = ss.iter_between(2, Some(2));
+    let mut it = ss.iter().between(2, 2);
     assert_eq!(it.next().map(|s| s.id()), Some(2));
     assert_eq!(it.next().map(|s| s.id()), None);
 
-    let mut it = ss.iter_between(0, Some(2));
+    let mut it = ss.iter().between(0, 2);
     assert_eq!(it.next().map(|s| s.id()), None);
 }
 
 #[test]
 pub fn test_iter_between_rev() {
     let ss = get_test_slot_set();
-    let mut it = ss.iter_between_rev(2, None);
+    let mut it = ss.iter().end_at(2).rev();
     assert_eq!(it.next().map(|s| s.id()), Some(2));
     assert_eq!(it.next().map(|s| s.id()), Some(1));
     assert_eq!(it.next().map(|s| s.id()), None);
 
-    let mut it = ss.iter_between_rev(3, Some(2));
+    let mut it = ss.iter().between(2, 3).rev();
     assert_eq!(it.next().map(|s| s.id()), Some(3));
     assert_eq!(it.next().map(|s| s.id()), Some(2));
     assert_eq!(it.next().map(|s| s.id()), None);
 
-    let mut it = ss.iter_between_rev(2, Some(2));
+    let mut it = ss.iter().start_at(2).end_at(2).rev();
     assert_eq!(it.next().map(|s| s.id()), Some(2));
+    assert_eq!(it.next().map(|s| s.id()), None);
+
+    let mut it = ss.iter().start_at(1).end_at(3).rev();
+    assert_eq!(it.next().map(|s| s.id()), Some(3));
+    assert_eq!(it.next().map(|s| s.id()), Some(2));
+    assert_eq!(it.next().map(|s| s.id()), Some(1));
     assert_eq!(it.next().map(|s| s.id()), None);
 }
 
@@ -123,16 +129,16 @@ pub fn test_iter_between_rev() {
 pub fn test_iter_between_with_width() {
     let ss = get_test_slot_set();
 
-    let mut it = ss.iter_between_with_width(1, Some(2), 10);
+    let mut it = ss.iter().between(1, 2).with_width(10);
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), Some((1, 1)));
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), Some((2, 2)));
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), None);
 
-    let mut it = ss.iter_between_with_width(2, None, 11);
+    let mut it = ss.iter().start_at(2).with_width(11);
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), Some((2, 3)));
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), None);
 
-    let mut it = ss.iter_between_with_width(1, Some(3), 20);
+    let mut it = ss.iter().between(1, 3).with_width(20);
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), Some((1, 2)));
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), Some((2, 3)));
     assert_eq!(it.next().map(|(s1, s2)| (s1.id(), s2.id())), None);
@@ -141,7 +147,7 @@ pub fn test_iter_between_with_width() {
 #[test]
 pub fn test_split_slots() {
     let mut ss = get_test_slot_set();
-    let job = Job::new_scheduled(1, 5, 5 + 10 - 1, 10, ProcSet::from_iter([4..=6]));
+    let job = Job::new_scheduled_from_proc_set(1, 5, 14,ProcSet::from_iter([4..=6]));
     ss.split_slots_for_job_and_update_resources(&job, true, None);
 
     assert_eq!(ss.slot_at(4, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=32]));

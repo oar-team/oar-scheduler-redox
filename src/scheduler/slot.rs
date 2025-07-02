@@ -1,8 +1,7 @@
+use crate::models::models::Job;
 use prettytable::{format, row, Table};
 use range_set_blaze::RangeSetBlaze;
-use std::cmp::max;
 use std::collections::HashMap;
-use crate::models::models::Job;
 
 pub type ProcSet = RangeSetBlaze<u32>;
 
@@ -22,8 +21,6 @@ pub struct Slot {
     time_shared_intervals: HashMap<String, HashMap<String, ProcSet>>,
     // ph_itvs: HashMap<String, ProcSet>,
 }
-
-pub const MAX_TIME: i64 = i64::MAX;
 
 impl Slot {
     pub fn new(id: i32, prev: Option<i32>, next: Option<i32>, itvs: ProcSet, b: i64, e: i64) -> Slot {
@@ -64,10 +61,18 @@ impl Slot {
     }
 
     pub fn sub_resources(&mut self, job: &Job) {
-        self.intervals = self.intervals.clone() - job.res_set.clone();
+        let resources = match &job.gantt_resources {
+            Some(resources) => resources,
+            None => panic!("Slot::sub_resources: job {} must have gantt resources", job.id),
+        };
+        self.intervals = self.intervals.clone() - ProcSet::from_iter(resources.iter().map(|r| r.id));
     }
     pub fn add_resources(&mut self, job: &Job) {
-        self.intervals = self.intervals.clone() | job.res_set.clone();
+        let resources = match &job.gantt_resources {
+            Some(resources) => resources,
+            None => panic!("Slot::add_resources: job {} must have gantt resources", job.id),
+        };
+        self.intervals = self.intervals.clone() | ProcSet::from_iter(resources.iter().map(|r| r.id));
     }
 }
 
@@ -139,8 +144,8 @@ impl SlotSet {
         }
     }
 
-    pub fn from_intervals(ressources: ProcSet, begin: i64) -> SlotSet {
-        let slot = Slot::new(1, None, None, ressources, begin, MAX_TIME);
+    pub fn from_intervals(ressources: ProcSet, begin: i64, end: i64) -> SlotSet {
+        let slot = Slot::new(1, None, None, ressources, begin, end);
         SlotSet::from_slot(slot)
     }
 
@@ -211,51 +216,8 @@ impl SlotSet {
     pub fn iter(&self) -> SlotIterator {
         SlotIterator {
             slots: &self.slots,
-            current: Some(self.first_id),
-            end: None,
-            forward: true,
-        }
-    }
-    pub fn iter_rev(&self) -> SlotIterator {
-        SlotIterator {
-            slots: &self.slots,
-            current: Some(self.last_id),
-            end: None,
-            forward: false,
-        }
-    }
-    /// Create an iterator that iterates from `start_id` to `end_id` (inclusive)
-    /// If `end_id` is None or before `start_id` in the doubly linked list, iterates until the end of the list.
-    pub fn iter_between(&self, start_id: i32, end_id: Option<i32>) -> SlotIterator {
-        SlotIterator {
-            slots: &self.slots,
-            current: Some(start_id),
-            end: end_id,
-            forward: true,
-        }
-    }
-    /// Create a reverse iterator that iterates from `start_id` backwards to `end_id` (inclusive)
-    /// If `end_id` is None or after `start_id` in the doubly linked list, iterates until the start of the list.
-    pub fn iter_between_rev(&self, start_id: i32, end_id: Option<i32>) -> SlotIterator {
-        SlotIterator {
-            slots: &self.slots,
-            current: Some(start_id),
-            end: end_id,
-            forward: false,
-        }
-    }
-    /// Create an iterator that iterates from `start_id` to `end_id` (inclusive)
-    /// If `end_id` is None or before `start_id` in the doubly linked list, iterates until the end of the list.
-    /// The iterator looks each time for a following slot making sure that slot.b - following_slot.e + 1 >= min_width. If no such slot is found, the iterator returns None
-    pub fn iter_between_with_width(&self, start_id: i32, end_id: Option<i32>, min_width: i64) -> SlotWidthIterator {
-        SlotWidthIterator {
-            slot_iterator: SlotIterator {
-                slots: &self.slots,
-                current: Some(start_id),
-                end: end_id,
-                forward: true,
-            },
-            min_width,
+            begin: Some(self.first_id),
+            end: Some(self.last_id),
         }
     }
 
@@ -360,7 +322,7 @@ impl SlotSet {
         if let Some(slot) = slot {
             self.split_at(slot.id, time, before)
         } else {
-            panic!("Slot::find_and_split_at_before: no slot found at time {}", time);
+            panic!("SlotSet::find_and_split_at_before: no slot found at time {}", time);
         }
     }
 
@@ -389,17 +351,15 @@ impl SlotSet {
         }
     }
 
-    /// Splits the slots to make them fit the job.
-    /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
-    /// Returns the first and last slot ids in which the job can be scheduled.
-    pub fn split_slots_for_job(&mut self, job: &Job, start_slot_id: Option<i32>) -> (i32, i32) {
-        let begin = job.start_time;
-        let end = job.start_time + max(job.walltime - 1, 0);
+    /// Splits the slots to make them fit a job at time begin..=end. Create new slots on the outside of the range.
+    /// If start_slot_id is not None, it will be used to find faster the slots of the range by not looping through all the slots.
+    /// Returns the first and last slot ids in which the range can fit, and then in which the job can be scheduled.
+    pub fn split_slots_for_range(&mut self, begin: i64, end: i64, start_slot_id: Option<i32>) -> (i32, i32) {
         let (begin_slot, end_slot) = if let Some(slots) = self.get_encompassing_range(begin, end, start_slot_id) {
             slots
         } else {
             panic!(
-                "Slot::split_slots_for_job: no encompassing range found: no slot found at time {} or {}",
+                "SlotSet::split_slots_for_job: no encompassing range found: no slot found at time {} or {}",
                 begin, end
             );
         };
@@ -416,8 +376,12 @@ impl SlotSet {
         (begin_slot_id, end_slot_id)
     }
     pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
-        let (begin_slot_id, end_slot_id) = self.split_slots_for_job(job, start_slot_id);
-        self.iter_between(begin_slot_id, Some(end_slot_id))
+        let (begin, end) = match (job.begin, job.end) {
+            (Some(begin), Some(end)) => (begin, end),
+            _ => panic!("SlotSet::split_slots_for_job_and_update_resources: Job {} must have start and end times to be used to split slots", job.id),
+        };
+        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(begin, end, start_slot_id);
+        self.iter().between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
             .collect::<Vec<i32>>()
             .iter()
@@ -437,7 +401,11 @@ impl SlotSet {
     /// Returns the first and last slot ids in which the job can be scheduled.
     pub fn split_slots_for_jobs(&mut self, jobs: &Vec<Job>, mut start_slot_id: Option<i32>) {
         for job in jobs {
-            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job(job, start_slot_id);
+            let (begin, end) = match (job.begin, job.end) {
+                (Some(begin), Some(end)) => (begin, end),
+                _ => panic!("SlotSet::split_slots_for_jobs: Job {} must have start and end times to be used to split slots", job.id),
+            };
+            let (begin_slot_id, _end_slot_id) = self.split_slots_for_range(begin, end, start_slot_id);
             start_slot_id = Some(begin_slot_id);
         }
     }
@@ -449,42 +417,66 @@ impl SlotSet {
         }
     }
 
-
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
     pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
-        self.iter_between(begin_slot_id, Some(end_slot_id))
+        self.iter().between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.intervals())
     }
-
-
 }
 
 #[derive(Clone)]
 pub struct SlotIterator<'a> {
     slots: &'a HashMap<i32, Slot>,
-    current: Option<i32>,
-    end: Option<i32>,
-    forward: bool, // true for next direction, false for the prev direction
+    begin: Option<i32>, // Must always be Some unless the iterator reached its end
+    end: Option<i32>,   // Must always be Some unless the iterator is reversed and reached its end
+}
+impl<'a> DoubleEndedIterator for SlotIterator<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let slot = self.slots.get(&self.end?)?;
+        // Move to the previous slot
+        self.end = if Some(slot.id) == self.begin {
+            None // Reached the end
+        } else {
+            slot.prev
+        };
+        Some(slot)
+    }
 }
 impl<'a> Iterator for SlotIterator<'a> {
     type Item = &'a Slot;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let current_id = self.current?;
-        // Get the current slot
-        let slot = match self.slots.get(&current_id) {
-            Some(slot) => slot,
-            None => return None,
-        };
-        // Move to the next slot based on the direction
-        self.current = if Some(current_id) == self.end {
+        let slot = self.slots.get(&self.begin?)?;
+        // Move to the next slot
+        self.begin = if Some(slot.id) == self.end {
             None // Reached the end
-        } else if self.forward {
-            slot.next
         } else {
-            slot.prev
+            slot.next
         };
         Some(slot)
+    }
+}
+impl<'a> SlotIterator<'a> {
+    pub fn between(self, start: i32, end: i32) -> SlotIterator<'a> {
+        SlotIterator {
+            slots: self.slots,
+            begin: Some(start),
+            end: Some(end),
+        }
+    }
+    pub fn start_at(mut self, start_id: i32) -> SlotIterator<'a> {
+        self.begin = Some(start_id);
+        self
+    }
+    pub fn end_at(mut self, end_id: i32) -> SlotIterator<'a> {
+        self.end = Some(end_id);
+        self
+    }
+    pub fn with_width(self, min_width: i64) -> SlotWidthIterator<'a> {
+        SlotWidthIterator {
+            slot_iterator: self,
+            min_width,
+        }
     }
 }
 

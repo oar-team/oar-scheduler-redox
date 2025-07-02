@@ -61,18 +61,16 @@ impl Slot {
     }
 
     pub fn sub_resources(&mut self, job: &Job) {
-        let resources = match &job.gantt_resources {
-            Some(resources) => resources,
-            None => panic!("Slot::sub_resources: job {} must have gantt resources", job.id),
-        };
-        self.intervals = self.intervals.clone() - ProcSet::from_iter(resources.iter().map(|r| r.id));
+        if !job.is_scheduled() {
+            panic!("Slot::sub_resources: job {} must have gantt resources", job.id);
+        }
+        self.intervals = self.intervals.clone() - job.get_proc_set();
     }
     pub fn add_resources(&mut self, job: &Job) {
-        let resources = match &job.gantt_resources {
-            Some(resources) => resources,
-            None => panic!("Slot::add_resources: job {} must have gantt resources", job.id),
-        };
-        self.intervals = self.intervals.clone() | ProcSet::from_iter(resources.iter().map(|r| r.id));
+        if !job.is_scheduled() {
+            panic!("Slot::add_resources: job {} must have gantt resources", job.id);
+        }
+        self.intervals = self.intervals.clone() | job.get_proc_set();
     }
 }
 
@@ -91,6 +89,7 @@ pub struct SlotSet {
 }
 
 impl SlotSet {
+    
     /// Create a SlotSet from a HashMap of Slots. Slots must form a doubly linked list.
     pub fn from_map(slots: HashMap<i32, Slot>, first_slot_id: i32) -> SlotSet {
         // Find the first slot
@@ -190,6 +189,10 @@ impl SlotSet {
 
     pub fn last_slot(&self) -> Option<&Slot> {
         self.slots.get(&self.last_id)
+    }
+    
+    pub fn get_slot(&self, slot_id: i32) -> Option<&Slot> {
+        self.slots.get(&slot_id)
     }
 
     pub fn slot_id_at(&self, time: i64, starting_id: Option<i32>) -> Option<i32> {
@@ -422,6 +425,14 @@ impl SlotSet {
         self.iter().between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.intervals())
     }
+
+    pub fn begin(&self) -> i64 {
+        self.begin
+    }
+
+    pub fn end(&self) -> i64 {
+        self.end
+    }
 }
 
 #[derive(Clone)]
@@ -493,6 +504,7 @@ impl<'a> Iterator for SlotWidthIterator<'a> {
             Some(slot) => slot,
             None => return None,
         };
+        // Todo: Optimize this using two slot iterators. One for the left side, and one for the right side that are stored in memory.
         let mut inner_iter = self.slot_iterator.clone();
         let mut end_slot = start_slot;
         // Continue until we reach a width of at least min_width

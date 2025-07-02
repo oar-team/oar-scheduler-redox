@@ -18,8 +18,8 @@ fn main() {
         Job::new_from_proc_set(0, 20, ProcSet::from_iter([20..=24])),
         Job::new_from_proc_set(1, 50, ProcSet::from_iter([0..=9])),
     ];
-    let platform = PlatformTest::new(resource_set, scheduled_jobs, waiting_jobs);
+    let mut platform = PlatformTest::new(resource_set, scheduled_jobs, waiting_jobs);
 
     let queues = vec!["default".to_string()];
-    schedule_cycle(platform, queues);
+    schedule_cycle(&mut platform, queues);
 }

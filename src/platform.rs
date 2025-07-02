@@ -9,6 +9,8 @@ pub trait PlatformTrait {
     
     fn get_scheduled_jobs(&self) -> &Vec<Job>;
     fn get_waiting_jobs(&self) -> &Vec<Job>;
+    
+    fn set_scheduled_jobs(&mut self, jobs: Vec<Job>);
 }
 
 pub struct PlatformTest {
@@ -44,6 +46,11 @@ impl PlatformTrait for PlatformTest {
     fn get_waiting_jobs(&self) -> &Vec<Job> {
         &self.waiting_jobs
     }
+    
+    fn set_scheduled_jobs(&mut self, mut jobs: Vec<Job>) {
+        self.waiting_jobs.retain(|job| !jobs.iter().any(|j| j.id == job.id));
+        self.scheduled_jobs.append(&mut jobs);
+    }
 }
 
 
@@ -55,7 +62,7 @@ impl Default for ResourceSet {
     fn default() -> ResourceSet {
         ResourceSet {
             default_intervals: ProcSet::from_iter([0..=99]),
-            available_upto: vec![(100, ProcSet::from_iter([0..=49]))],
+            available_upto: vec![(150, ProcSet::from_iter([0..=49]))],
         }
     }
 }

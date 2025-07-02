@@ -4,9 +4,9 @@ use crate::scheduler::slot::ProcSet;
 pub struct Job {
     pub id: u32,
     pub moldable: Vec<Moldable>,
-    pub begin: Option<i64>,                // Defined by the scheduler
-    pub end: Option<i64>,                  // Defined by the scheduler
-    pub gantt_resources: Option<Vec<Resource>>, // Defined by the scheduler
+    pub begin: Option<i64>,      // Defined by the scheduler
+    pub end: Option<i64>,        // Defined by the scheduler
+    pub chosen_moldable_id: Option<u32>, // Defined by the scheduler
 }
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl Job {
             moldable,
             begin: None,
             end: None,
-            gantt_resources: None,
+            chosen_moldable_id: None,
         }
     }
     pub fn new_from_resources(id: u32, walltime: i64, resources: Vec<Resource>) -> Job {
@@ -42,22 +42,28 @@ impl Job {
         Self::new_from_resources(id, walltime, resources)
     }
 
-    pub fn new_scheduled(id: u32, start_time: i64, stop_time: i64, moldable: Vec<Moldable>, gantt_resources: Vec<Resource>) -> Job {
+    pub fn new_scheduled(id: u32, begin: i64, end: i64, moldable: Vec<Moldable>, chosen_moldable_id: u32) -> Job {
         Job {
             id,
             moldable,
-            begin: Some(start_time),
-            end: Some(stop_time),
-            gantt_resources: Some(gantt_resources),
+            begin: Some(begin),
+            end: Some(end),
+            chosen_moldable_id: Some(chosen_moldable_id),
         }
     }
     pub fn new_scheduled_from_resources(id: u32, start_time: i64, stop_time: i64, gantt_resources: Vec<Resource>) -> Job {
         let moldable = vec![Moldable::new(0, stop_time - start_time + 1, gantt_resources.clone())];
-        Self::new_scheduled(id, start_time, stop_time, moldable, gantt_resources)
+        Self::new_scheduled(id, start_time, stop_time, moldable, 0)
     }
     pub fn new_scheduled_from_proc_set(id: u32, start_time: i64, stop_time: i64, proc_set: ProcSet) -> Job {
         let resources = proc_set.iter().map(|r| Resource::new(r)).collect();
         Self::new_scheduled_from_resources(id, start_time, stop_time, resources)
+    }
+    pub fn is_scheduled(&self) -> bool {
+        self.begin.is_some() && self.end.is_some() && self.chosen_moldable_id.is_some()
+    }
+    pub fn get_proc_set(&self) -> ProcSet {
+        self.moldable.get(self.chosen_moldable_id.unwrap() as usize).unwrap().get_proc_set()
     }
 }
 
@@ -69,7 +75,7 @@ impl Moldable {
             assigned_resources,
         }
     }
-    pub fn to_proc_set(&self) -> ProcSet {
+    pub fn get_proc_set(&self) -> ProcSet {
         ProcSet::from_iter(self.assigned_resources.iter().map(|r| r.id))
     }
 }

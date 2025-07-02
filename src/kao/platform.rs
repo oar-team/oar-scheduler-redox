@@ -15,11 +15,11 @@ pub trait PlatformTrait {
 
 pub struct PlatformTest {
     resource_set: ResourceSet,
-    jobs: HashMap<i32, Job>,
+    jobs: HashMap<u32, Job>,
 
-    pub running_jobs_ids: Vec<i32>,
-    pub waiting_jobs_ids: Vec<i32>,
-    pub completed_jobs_ids: Vec<i32>,
+    pub running_jobs_ids: Vec<u32>,
+    pub waiting_jobs_ids: Vec<u32>,
+    pub completed_jobs_ids: Vec<u32>,
 }
 impl PlatformTest {
     pub fn new(resource_set: ResourceSet, jobs: Vec<Job>) -> PlatformTest {

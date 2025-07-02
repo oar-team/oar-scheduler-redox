@@ -1,22 +1,22 @@
-use std::collections::HashMap;
 use crate::kao::kamelot_basic::{schedule_cycle, Config, ResourceSet};
 use crate::kao::platform::PlatformTest;
 use crate::kao::slot::{ProcSet, Slot, SlotSet};
 use crate::lib::models::Job;
+use std::collections::HashMap;
 
 mod kao;
 mod lib;
 
 fn main() {
     let config = Config {};
-    
+
     let resource_set = ResourceSet::default();
     let jobs: Vec<Job> = vec![
-        Job::new(3, 1751375836 + 3600 * 24 * 6, 3600 * 6, ProcSet::from_iter([20..=24])),
-        Job::new(2, 1751375836 + 3600 * 24 * 8, 3600 * 24, ProcSet::from_iter([0..=9])),
+        Job::new_waiting(3, 3600 * 6, ProcSet::from_iter([20..=24])),
+        Job::new_waiting(2, 3600 * 24, ProcSet::from_iter([0..=9])),
     ];
     let platform = PlatformTest::new(resource_set, jobs);
-    
+
     let queues = vec!["default".to_string()];
     schedule_cycle(config, platform, queues);
 }
@@ -57,7 +57,6 @@ fn test() {
     println!("{:?}", ss.split_at(ss.slot_id_at(30, None).unwrap(), 30, false));
     ss.to_table().printstd();
 
-
     println!("Iterating SlotSet:");
     for s in ss.iter() {
         println!("Slot of id {} from {:0width$} to {:0width$}:", s.id(), s.begin(), s.end(), width = 2);
@@ -73,10 +72,19 @@ fn test() {
     println!();
     println!("Iterating SlotSet between 5 and end with width of 10:");
     for s in ss.iter_between_with_width(5, None, 10) {
-        println!("id {} from {:0width$} to {:0width$} to id {} from {:0width$} to {:0width$}", s.0.id(), s.0.begin(), s.0.end(), s.1.id(), s.1.begin(), s.1.end(), width = 2);
+        println!(
+            "id {} from {:0width$} to {:0width$} to id {} from {:0width$} to {:0width$}",
+            s.0.id(),
+            s.0.begin(),
+            s.0.end(),
+            s.1.id(),
+            s.1.begin(),
+            s.1.end(),
+            width = 2
+        );
     }
 
-    let job1 = Job::new(1, 18, 8, ProcSet::from_iter([4..=6]));
+    let job1 = Job::new_scheduled(1, 18, 18 + 8 - 1, 8, ProcSet::from_iter([4..=6]));
     ss.split_slots_for_job_and_update_resources(&job1, true, None);
 
     ss.to_table().printstd();

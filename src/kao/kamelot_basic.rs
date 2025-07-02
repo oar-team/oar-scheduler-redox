@@ -15,6 +15,10 @@ pub struct ResourceSet {
     pub nb_resources_default_not_dead: u32,
     pub nb_resources_default: u32,
     pub available_upto: HashMap<i64, ProcSet>,
+    // roid_itvs
+    // absent_roid_itvs
+    // suspendable_roid_itvs
+    // hierarchy
 }
 impl Default for ResourceSet {
     fn default() -> ResourceSet {
@@ -45,7 +49,7 @@ pub fn schedule_cycle<T: PlatformTrait>(config: Config, platform: T, queues: Vec
         let pseudo_jobs = resource_set
             .available_upto
             .iter()
-            .map(|(time, intervals)| Job::new(0, *time, MAX_TIME - *time + 1, intervals.clone()))
+            .map(|(time, intervals)| Job::new_scheduled(0, *time, MAX_TIME, MAX_TIME - *time + 1, intervals.clone()))
             .collect::<Vec<Job>>();
         initial_slot_set.split_slots_for_jobs_and_update_resources(&pseudo_jobs, true, None);
 

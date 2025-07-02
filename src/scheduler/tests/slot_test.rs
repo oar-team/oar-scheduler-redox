@@ -1,6 +1,6 @@
-use crate::kao::slot::{ProcSet, Slot, SlotSet};
-use crate::lib::models::Job;
+use crate::scheduler::slot::{ProcSet, Slot, SlotSet};
 use std::collections::HashMap;
+use crate::models::models::Job;
 
 pub fn get_test_slot_set() -> SlotSet {
     let s1: Slot = Slot::new(1, None, Some(2), ProcSet::from_iter([1..=32]), 0, 9);

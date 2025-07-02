@@ -1,8 +1,8 @@
-use crate::lib::models::Job;
 use prettytable::{format, row, Table};
 use range_set_blaze::RangeSetBlaze;
 use std::cmp::max;
 use std::collections::HashMap;
+use crate::models::models::Job;
 
 pub type ProcSet = RangeSetBlaze<u32>;
 

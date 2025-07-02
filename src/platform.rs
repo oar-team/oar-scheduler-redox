@@ -1,6 +1,6 @@
-use crate::kao::kamelot_basic::{Config, ResourceSet};
-use crate::lib::models::Job;
+use crate::scheduler::kamelot_basic::{Config, ResourceSet};
 use std::collections::HashMap;
+use crate::models::models::Job;
 
 pub trait PlatformTrait {
     fn get_resource_set(&self, config: &Config) -> &ResourceSet;

@@ -1,4 +1,4 @@
-use crate::kao::slot::ProcSet;
+use crate::scheduler::slot::ProcSet;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

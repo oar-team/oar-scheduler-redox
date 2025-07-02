@@ -1,9 +1,9 @@
-use crate::kao::slot::{ProcSet, SlotSet, MAX_TIME};
-use crate::lib::models::Job;
+use crate::scheduler::slot::{ProcSet, SlotSet, MAX_TIME};
 use std::collections::HashMap;
 use std::time::UNIX_EPOCH;
-use crate::kao::platform::{PlatformTrait};
-use crate::kao::scheduling_basic::{schedule_jobs_ct};
+use crate::models::models::Job;
+use crate::platform::PlatformTrait;
+use crate::scheduler::scheduling_basic::{schedule_jobs_ct};
 
 pub struct Config {}
 

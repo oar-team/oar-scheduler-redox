@@ -1,11 +1,12 @@
-use crate::kao::kamelot_basic::{schedule_cycle, Config, ResourceSet};
-use crate::kao::platform::PlatformTest;
-use crate::kao::slot::{ProcSet, Slot, SlotSet};
-use crate::lib::models::Job;
+use crate::scheduler::kamelot_basic::{schedule_cycle, Config, ResourceSet};
+use crate::platform::PlatformTest;
+use crate::scheduler::slot::{ProcSet, Slot, SlotSet};
 use std::collections::HashMap;
+use crate::models::models::Job;
 
-mod kao;
-mod lib;
+mod platform;
+mod scheduler;
+mod models;
 
 fn main() {
     let config = Config {};

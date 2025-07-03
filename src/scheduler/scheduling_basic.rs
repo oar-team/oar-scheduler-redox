@@ -1,4 +1,4 @@
-use crate::models::models::Job;
+use crate::models::models::{Job, Moldable};
 use crate::scheduler::slot::{ProcSet, SlotSet};
 use std::cmp::max;
 use std::collections::HashMap;
@@ -11,8 +11,8 @@ pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: 
         let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
         assign_resources_mld_job_split_slots(slot_set, job);
     });
-    println!("SlotSet after scheduling jobs: ");
-    slot_sets.get("default").unwrap().to_table().printstd();
+    // println!("SlotSet after scheduling jobs: ");
+    // slot_sets.get("default").unwrap().to_table().printstd();
 }
 
 /// According to a Job’s resources and a `SlotSet`, find the time and the resources to launch a job.
@@ -26,36 +26,42 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
     let mut chosen_slot_id_left = None;
     let mut chosen_begin = None;
     let mut chosen_end = None;
-    let mut chosen_moldable_id = None;
+    let mut chosen_moldable_index = None;
 
-    job.moldable.iter().for_each(|moldable| {
-        let proc_set = moldable.get_proc_set();
+    job.moldables.iter().enumerate().for_each(|(i, moldable)| {
 
-        if let Some((slot_id_left, _slot_id_right)) = find_first_suitable_contiguous_slots(slot_set, moldable.walltime, &proc_set) {
+        if let Some((slot_id_left, _slot_id_right)) = find_first_suitable_contiguous_slots(slot_set, moldable) {
             let begin = slot_set.get_slot(slot_id_left).unwrap().begin();
             let end = begin + max(0, moldable.walltime - 1);
-    
+
             if chosen_end.is_none() || end < chosen_end.unwrap() {
                 chosen_slot_id_left = Some(slot_id_left);
                 chosen_begin = Some(begin);
                 chosen_end = Some(end);
-                chosen_moldable_id = Some(moldable.id);
+                chosen_moldable_index = Some(i);
             }
         }
     });
 
+    // if let Some(chosen_moldable_index) = chosen_moldable_index {
+    //     slot_set.insert_cache_entry(job.moldables.get(chosen_moldable_index).unwrap().get_cache_key(), chosen_slot_id_left.unwrap());
+    // }
     job.begin = chosen_begin;
     job.end = chosen_end;
-    job.chosen_moldable_id = chosen_moldable_id;
+    job.chosen_moldable_index = chosen_moldable_index;
     if chosen_slot_id_left.is_some() {
         slot_set.split_slots_for_job_and_update_resources(job, true, chosen_slot_id_left);
     }
 }
 
-pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, walltime: i64, proc_set: &ProcSet) -> Option<(i32, i32)> {
-    slot_set.iter().with_width(walltime).find(|(left_slot, right_slot)| {
+pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Moldable) -> Option<(i32, i32)> {
+    let mut iter = slot_set.iter();
+    // if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
+    //     iter = iter.start_at(cache_first_slot);
+    // }
+    iter.with_width(moldable.walltime).find(|(left_slot, right_slot)| {
         let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id());
-        proc_set.is_subset(&available_resources)
+        moldable.proc_set.is_subset(&available_resources)
     }).map(|(left_slot, right_slot)| {
         (left_slot.id(), right_slot.id())
     })

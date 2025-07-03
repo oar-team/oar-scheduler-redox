@@ -1,4 +1,4 @@
-use crate::models::models::Job;
+use crate::models::models::{Job, Moldable};
 use prettytable::{format, row, Table};
 use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
@@ -85,11 +85,10 @@ pub struct SlotSet {
     last_id: i32,  // id of the last slot in the list
     next_id: i32,  // next available id
     slots: HashMap<i32, Slot>,
-    // cache: HashMap<i32, i32>,
+    cache: HashMap<String, i32>, // Stores a slot id for a given moldable cache key, allowing to start again at this slot if multiple moldable have the same cache key, i.e., are identical.
 }
 
 impl SlotSet {
-    
     /// Create a SlotSet from a HashMap of Slots. Slots must form a doubly linked list.
     pub fn from_map(slots: HashMap<i32, Slot>, first_slot_id: i32) -> SlotSet {
         // Find the first slot
@@ -127,7 +126,7 @@ impl SlotSet {
             last_id: last_slot.id,
             next_id,
             slots,
-            // cache: HashMap::new(),
+            cache: HashMap::new(),
         }
     }
 
@@ -139,7 +138,7 @@ impl SlotSet {
             last_id: slot.id,
             next_id: slot.id + 1,
             slots: HashMap::from([(slot.id, slot)]),
-            // cache: HashMap::new(),
+            cache: HashMap::new(),
         }
     }
 
@@ -190,9 +189,16 @@ impl SlotSet {
     pub fn last_slot(&self) -> Option<&Slot> {
         self.slots.get(&self.last_id)
     }
-    
+
     pub fn get_slot(&self, slot_id: i32) -> Option<&Slot> {
         self.slots.get(&slot_id)
+    }
+    
+    pub fn get_cache_first_slot(&self, moldable: &Moldable) -> Option<i32> {
+        self.cache.get(&moldable.get_cache_key()).cloned()
+    }
+    pub fn insert_cache_entry(&mut self, key: String, slot_id: i32) {
+        self.cache.insert(key, slot_id);
     }
 
     pub fn slot_id_at(&self, time: i64, starting_id: Option<i32>) -> Option<i32> {
@@ -313,8 +319,6 @@ impl SlotSet {
             new_slot
         };
 
-        println!("Splitting slot {} at time {}, begin_time={}", slot_id, time, new_begin);
-        println!("Inserting id {} before/after id {}", new_slot_id, slot_id);
         self.slots.insert(new_slot_id, new_slot);
         self.increment_next_id();
         (new_slot_id, slot_id)
@@ -381,10 +385,14 @@ impl SlotSet {
     pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
         let (begin, end) = match (job.begin, job.end) {
             (Some(begin), Some(end)) => (begin, end),
-            _ => panic!("SlotSet::split_slots_for_job_and_update_resources: Job {} must have start and end times to be used to split slots", job.id),
+            _ => panic!(
+                "SlotSet::split_slots_for_job_and_update_resources: Job {} must have start and end times to be used to split slots",
+                job.id
+            ),
         };
         let (begin_slot_id, end_slot_id) = self.split_slots_for_range(begin, end, start_slot_id);
-        self.iter().between(begin_slot_id, end_slot_id)
+        self.iter()
+            .between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
             .collect::<Vec<i32>>()
             .iter()
@@ -406,7 +414,10 @@ impl SlotSet {
         for job in jobs {
             let (begin, end) = match (job.begin, job.end) {
                 (Some(begin), Some(end)) => (begin, end),
-                _ => panic!("SlotSet::split_slots_for_jobs: Job {} must have start and end times to be used to split slots", job.id),
+                _ => panic!(
+                    "SlotSet::split_slots_for_jobs: Job {} must have start and end times to be used to split slots",
+                    job.id
+                ),
             };
             let (begin_slot_id, _end_slot_id) = self.split_slots_for_range(begin, end, start_slot_id);
             start_slot_id = Some(begin_slot_id);
@@ -422,7 +433,8 @@ impl SlotSet {
 
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
     pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
-        self.iter().between(begin_slot_id, end_slot_id)
+        self.iter()
+            .between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.intervals())
     }
 
@@ -484,37 +496,45 @@ impl<'a> SlotIterator<'a> {
         self
     }
     pub fn with_width(self, min_width: i64) -> SlotWidthIterator<'a> {
-        SlotWidthIterator {
-            slot_iterator: self,
-            min_width,
-        }
+        SlotWidthIterator::from_iterator(self, min_width)
     }
 }
 
 /// Iterates over Slots, finding each time a following slot with a width of at least min_width
 pub struct SlotWidthIterator<'a> {
-    slot_iterator: SlotIterator<'a>,
+    begin_iterator: SlotIterator<'a>,
+    end_iterator: SlotIterator<'a>,
+    end_slot: Option<&'a Slot>,
     min_width: i64,
+}
+impl<'a> SlotWidthIterator<'a> {
+    pub fn from_iterator(iter: SlotIterator<'a>, min_width: i64) -> SlotWidthIterator<'a> {
+        SlotWidthIterator {
+            begin_iterator: iter.clone(),
+            end_iterator: iter,
+            end_slot: None,
+            min_width,
+        }
+    }
 }
 impl<'a> Iterator for SlotWidthIterator<'a> {
     type Item = (&'a Slot, &'a Slot);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let start_slot = match self.slot_iterator.next() {
+        let start_slot = match self.begin_iterator.next() {
             Some(slot) => slot,
             None => return None,
         };
-        // Todo: Optimize this using two slot iterators. One for the left side, and one for the right side that are stored in memory.
-        let mut inner_iter = self.slot_iterator.clone();
-        let mut end_slot = start_slot;
-        // Continue until we reach a width of at least min_width
-        while end_slot.end - start_slot.begin + 1 < self.min_width {
-            end_slot = match inner_iter.next() {
-                Some(slot) => slot,
-                None => return None,
-            };
-        }
 
+        // Continue until we reach a width of at least min_width
+        let mut end_slot = match self.end_slot {
+            Some(slot) => slot,
+            None => self.end_iterator.next()?,
+        };
+        while end_slot.end - start_slot.begin + 1 < self.min_width {
+            end_slot = self.end_iterator.next()?;
+        }
+        self.end_slot = Some(end_slot);
         Some((start_slot, end_slot))
     }
 }

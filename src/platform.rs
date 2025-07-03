@@ -13,6 +13,7 @@ pub trait PlatformTrait {
     fn set_scheduled_jobs(&mut self, jobs: Vec<Job>);
 }
 
+#[derive(Clone)]
 pub struct PlatformTest {
     resource_set: ResourceSet,
     scheduled_jobs: Vec<Job>,
@@ -33,7 +34,7 @@ impl PlatformTrait for PlatformTest {
         0
     }
     fn get_max_time(&self) -> i64 {
-        10000
+        2i64.pow(60)
     }
     
     fn get_resource_set(&self) -> &ResourceSet {
@@ -54,6 +55,7 @@ impl PlatformTrait for PlatformTest {
 }
 
 
+#[derive(Clone)]
 pub struct ResourceSet {
     pub default_intervals: ProcSet,
     pub available_upto: Vec<(i64, ProcSet)>,

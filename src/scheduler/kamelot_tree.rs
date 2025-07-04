@@ -1,9 +1,8 @@
 use crate::models::models::Job;
 use crate::platform::PlatformTrait;
-use crate::scheduler::scheduling_basic::schedule_jobs_ct;
-use crate::scheduler::slot::SlotSet;
+use crate::scheduler::scheduling_tree::schedule_jobs_ct;
+use crate::scheduler::tree_slotset::TreeSlotSet;
 use std::collections::HashMap;
-
 
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>){
     let now = platform.get_now();
@@ -13,9 +12,10 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>){
 
     if waiting_jobs.len() > 0 {
         let resource_set = platform.get_resource_set();
-        let mut initial_slot_set = SlotSet::from_intervals(resource_set.default_intervals.clone(), now, max_time);
-        
-        // Resource availability (available_upto field) is integrated through pseudo job
+        let mut initial_slot_set = TreeSlotSet::from_proc_set(resource_set.default_intervals.clone(), now, max_time);
+
+        // Not supported for now
+        /*// Resource availability (available_upto field) is integrated through pseudo job
         let mut pseudo_jobs = resource_set
             .available_upto
             .iter()
@@ -27,7 +27,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>){
 
         // Get already scheduled jobs advanced reservations and jobs from higher priority queues
         let scheduled_jobs = platform.get_scheduled_jobs();
-        initial_slot_set.split_slots_for_jobs_and_update_resources(&scheduled_jobs, true, None);
+        initial_slot_set.split_slots_for_jobs_and_update_resources(&scheduled_jobs, true, None);*/
 
         // Scheduling
         let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);

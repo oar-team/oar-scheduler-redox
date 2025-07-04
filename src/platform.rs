@@ -4,12 +4,12 @@ use crate::scheduler::slot::ProcSet;
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;
     fn get_max_time(&self) -> i64;
-    
+
     fn get_resource_set(&self) -> &ResourceSet;
-    
+
     fn get_scheduled_jobs(&self) -> &Vec<Job>;
     fn get_waiting_jobs(&self) -> &Vec<Job>;
-    
+
     fn set_scheduled_jobs(&mut self, jobs: Vec<Job>);
 }
 
@@ -34,9 +34,9 @@ impl PlatformTrait for PlatformTest {
         0
     }
     fn get_max_time(&self) -> i64 {
-        2i64.pow(60)
+        1_000_000
     }
-    
+
     fn get_resource_set(&self) -> &ResourceSet {
         &self.resource_set
     }
@@ -47,7 +47,7 @@ impl PlatformTrait for PlatformTest {
     fn get_waiting_jobs(&self) -> &Vec<Job> {
         &self.waiting_jobs
     }
-    
+
     fn set_scheduled_jobs(&mut self, mut jobs: Vec<Job>) {
         self.waiting_jobs.retain(|job| !jobs.iter().any(|j| j.id == job.id));
         self.scheduled_jobs.append(&mut jobs);

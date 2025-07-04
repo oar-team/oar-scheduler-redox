@@ -1,15 +1,11 @@
 use crate::models::models::{Job, Moldable};
 use crate::platform::{PlatformTest, ResourceSet};
-use crate::scheduler::kamelot_basic::schedule_cycle;
+use crate::scheduler::kamelot_tree::schedule_cycle;
 use crate::scheduler::slot::ProcSet;
-use std::collections::{BTreeMap, HashSet};
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-use futures::future::join_all;
-use plotters::prelude::*;
-use tokio::task::JoinHandle;
 use crate::scheduler::tree_slotset::TreeSlotSet;
+use plotters::prelude::*;
+use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 mod models;
 mod platform;
@@ -17,11 +13,11 @@ mod scheduler;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
-    let averaging = 100;
+    let averaging = 1;
     let times: Vec<(i32, i32)> = futures::future::join_all(
         (1..=30)
         .map(async |i| {
-            let jobs = i * 10;
+            let jobs = i*100;
             let (time, identical) = measure_scheduling_time(averaging, 1_024, jobs).await;
             println!("{} jobs scheduled in {} ms ({}% identical moldables)", jobs, time, (identical as f32 / jobs as f32 * 100.0) as usize);
             (jobs as i32, time as i32)
@@ -30,7 +26,7 @@ async fn main() {
     let max_x = times.iter().map(|(x, _)| *x).max().unwrap() + 50;
     let max_y = times.iter().map(|(_, y)| *y).max().unwrap() + 100;
 
-    let root_area = SVGBackend::new("scheduler-perf-no-cache.svg", (600, 400)).into_drawing_area();
+    let root_area = SVGBackend::new("scheduler-perf-tree.svg", (600, 400)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
     let mut ctx = ChartBuilder::on(&root_area)
         .margin(5)
@@ -68,9 +64,15 @@ async fn measure_scheduling_time(averaging: usize, res_count: u32, jobs_count: u
             let mut scheduled_jobs: Vec<Job> = vec![];
             let mut waiting_jobs: Vec<Job> = vec![];
 
+            // Set for the linked list data structure
             waiting_jobs.append(gen_random_jobs(1_000_000, (jobs_count_clone / 3) as usize, 10, 60, 10, 64, 128, 64, res_count_clone).as_mut());
             waiting_jobs.append(gen_random_jobs(2_000_000, (jobs_count_clone / 3) as usize, 30, 60 * 3, 30, 128, 256, 128, res_count_clone).as_mut());
             waiting_jobs.append(gen_random_jobs(3_000_000, (jobs_count_clone / 3) as usize, 60, 60 * 12, 120, 256, 512, 256, res_count_clone).as_mut());
+
+            // Set with less repetition.
+            // waiting_jobs.append(gen_random_jobs(1_000_000, (jobs_count_clone / 3) as usize, 10, 60, 1, 64, 128, 16, res_count_clone).as_mut());
+            // waiting_jobs.append(gen_random_jobs(2_000_000, (jobs_count_clone / 3) as usize, 30, 60 * 3, 5, 128, 256, 32, res_count_clone).as_mut());
+            // waiting_jobs.append(gen_random_jobs(3_000_000, (jobs_count_clone / 3) as usize, 60, 60 * 12, 15, 256, 512, 64, res_count_clone).as_mut());
 
             // Count number of moldables with the same cache key
             let mut cache = HashSet::new();
@@ -90,7 +92,9 @@ async fn measure_scheduling_time(averaging: usize, res_count: u32, jobs_count: u
             let mut platform = PlatformTest::new(resource_set, scheduled_jobs, waiting_jobs);
             let queues = vec!["default".to_string()];
 
-            let time = measure_time(|| schedule_cycle(&mut platform.clone(), queues.clone()));
+            let time = measure_time(|| {
+                schedule_cycle(&mut platform.clone(), queues.clone())
+            });
             (time, identical)
         })
     })).await.into_iter().map(|f| f.unwrap()).collect::<Vec<(u64, usize)>>().into_iter().fold((0, 0), |(total_time, total_identical), (time, identical)| {
@@ -114,7 +118,7 @@ fn gen_random_jobs(
     for i in offset..(offset + count) {
         let duration = rand::random_range((duration_min / duration_step)..=(duration_max / duration_step));
         let res_size = rand::random_range((res_min / res_step)..=(res_max / res_step)) * res_step;
-        let res_start = rand::random_range(0..=((res_all_max - res_size) / res_step)) * res_step;
+        let res_start = rand::random_range(1..=((res_all_max - res_size) / res_step)) * res_step;
         jobs.push(Job::new_from_proc_set(
             i as u32,
             duration * duration_step,
@@ -137,17 +141,17 @@ where
 
 fn test_tree_slotset() {
     let mut ss = TreeSlotSet::from_proc_set(ProcSet::from_iter([1..=10]), 0, 100);
-    ss.to_table().printstd();
+    ss.to_table(true).printstd();
 
     let m1 = Moldable::new(10, ProcSet::from_iter([1..=5]));
     let m2 = Moldable::new(10, ProcSet::from_iter([3..=7]));
 
     let node1 = ss.find_node_for_moldable(&m1).unwrap();
     ss.claim_node_for_moldable(node1.node_id(), &m1);
-    ss.to_table().printstd();
+    ss.to_table(true).printstd();
 
 
     let node2 = ss.find_node_for_moldable(&m2).unwrap();
     ss.claim_node_for_moldable(node2.node_id(), &m2);
-    ss.to_table().printstd();
+    ss.to_table(true).printstd();
 }

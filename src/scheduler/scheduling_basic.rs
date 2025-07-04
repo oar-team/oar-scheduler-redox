@@ -1,5 +1,5 @@
 use crate::models::models::{Job, Moldable};
-use crate::scheduler::slot::{ProcSet, SlotSet};
+use crate::scheduler::slot::SlotSet;
 use std::cmp::max;
 use std::collections::HashMap;
 
@@ -59,10 +59,14 @@ pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Molda
     // if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
     //     iter = iter.start_at(cache_first_slot);
     // }
-    iter.with_width(moldable.walltime).find(|(left_slot, right_slot)| {
+    let mut count = 0;
+    let res =iter.with_width(moldable.walltime).find(|(left_slot, right_slot)| {
+        count += 1;
         let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id());
         moldable.proc_set.is_subset(&available_resources)
     }).map(|(left_slot, right_slot)| {
         (left_slot.id(), right_slot.id())
-    })
+    });
+    println!("Found slots for moldable visiting {} slots", count);
+    res
 }

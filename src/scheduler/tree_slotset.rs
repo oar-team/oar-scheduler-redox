@@ -1,11 +1,11 @@
 use crate::models::models::Moldable;
 use crate::scheduler::slot::ProcSet;
+use prettytable::{format, row, Table};
 use slab_tree::*;
-use prettytable::{Table, format, row};
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TreeSlot {
     begin: i64,
     end: i64,
@@ -24,7 +24,7 @@ impl TreeSlot {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TreeNode {
     slot: TreeSlot,          // If not a leaf, stores the intersection of the childrens proc_sets
     node_id: Option<NodeId>, // Nodes are never deleted, then it is safe to store the node_id in each node
@@ -108,7 +108,7 @@ pub struct TreeSlotSet {
 }
 impl TreeSlotSet {
     /// Convert the tree structure to a table for display
-    pub fn to_table(&self) -> Table {
+    pub fn to_table(&self, show_nodes: bool) -> Table {
         let mut table = Table::new();
         table.set_format(*format::consts::FORMAT_CLEAN);
         table.add_row(row![
@@ -124,33 +124,35 @@ impl TreeSlotSet {
         // Perform an in-order traversal of the tree
         let root_id = self.tree.root_id().unwrap();
         let root = self.tree.get(root_id).unwrap();
-        self.add_node_to_table(&root, &mut table, 0);
+        self.add_node_to_table(&root, &mut table, 0, show_nodes);
 
         table
     }
 
     /// Helper function to recursively add nodes to the table
-    fn add_node_to_table(&self, node: &NodeRef<TreeNode>, table: &mut Table, indent: usize) {
+    fn add_node_to_table(&self, node: &NodeRef<TreeNode>, table: &mut Table, indent: usize, show_nodes: bool) {
         // Traverse left subtree if exists
         if let Some(left) = node.first_child() {
-            self.add_node_to_table(&left, table, indent + 1);
+            self.add_node_to_table(&left, table, indent + 1, show_nodes);
         }
 
         // Add current node to the table
         let node_data = node.data();
-        table.add_row(row![
-            indent,
-            node_data.is_leaf,
-            node_data.begin(),
-            node_data.end(),
-            format!("{:.2}", (node_data.duration() as f32) / 3600.0 / 24.0),
-            node_data.proc_set(),
-            &node_data.proc_set_union
-        ]);
+        if show_nodes || node_data.is_leaf {
+            table.add_row(row![
+                indent,
+                node_data.is_leaf,
+                node_data.begin(),
+                node_data.end(),
+                format!("{:.2}", (node_data.duration() as f32) / 3600.0 / 24.0),
+                node_data.proc_set(),
+                &node_data.proc_set_union
+            ]);
+        }
 
         // Traverse right subtree if exists
         if let Some(right) = node.last_child() {
-            self.add_node_to_table(&right, table, indent + 1);
+            self.add_node_to_table(&right, table, indent + 1, show_nodes);
         }
     }
     pub fn from_slot(slot: TreeSlot) -> TreeSlotSet {
@@ -167,7 +169,10 @@ impl TreeSlotSet {
         let mut node = self.tree.get_mut(node_id).unwrap();
         let split_before = node.data().slot().begin + moldable.walltime;
 
+        // let tree_node = node.data().clone();
         Self::claim_node_for_moldable_rec(node, &moldable.proc_set, split_before);
+        // println!("Placing moldable of length {} (ps: {}) on node {}-{} ps: {}, psu: {}", moldable.walltime, moldable.proc_set,tree_node.begin(), tree_node.end(), tree_node.proc_set(), tree_node.proc_set_union);
+        // self.to_table(false).printstd();
     }
     fn claim_node_for_moldable_rec(mut node: NodeMut<TreeNode>, proc_set: &ProcSet, split_before: i64) {
         let last_child_end = node.last_child().map(|mut child| child.data().end());
@@ -193,7 +198,7 @@ impl TreeSlotSet {
             }
         } else {
             // Union loses the proc_set only if all children are taken by the moldable
-            if last_child_end.unwrap() >= split_before - 1 {
+            if last_child_end.unwrap() < split_before - 1 {
                 tree_node.sub_union_resources(proc_set);
             }
 
@@ -207,21 +212,23 @@ impl TreeSlotSet {
     }
 
     pub fn find_node_for_moldable(&self, moldable: &Moldable) -> Option<&TreeNode> {
-        let node_id = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable);
+        let (count, node_id) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable);
+        // println!("Found node for moldable iterating over {} nodes", count);
         node_id.map(|node_id| self.tree.get(node_id).unwrap().data())
     }
-    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable) -> Option<NodeId> {
+    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable) -> (usize, Option<NodeId>) {
         match node.data().fit_state(moldable) {
-            FitState::Fit => return Some(node.node_id()),
+            FitState::Fit => return (1, Some(node.node_id())),
             FitState::MaybeChildren => {
                 for child in node.children() {
-                    if let Some(child) = Self::find_node_for_moldable_rec(child, moldable) {
-                        return Some(child);
+                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable);
+                    if let Some(child) = child{
+                        return (1 + count, Some(child));
                     }
                 }
             }
-            FitState::None => return None,
+            FitState::None => return (1, None),
         }
-        None
+        (1, None)
     }
 }

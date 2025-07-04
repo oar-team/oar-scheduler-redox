@@ -1,14 +1,15 @@
-use crate::models::models::Job;
+use crate::models::models::{Job, Moldable};
 use crate::platform::{PlatformTest, ResourceSet};
 use crate::scheduler::kamelot_basic::schedule_cycle;
 use crate::scheduler::slot::ProcSet;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use futures::future::join_all;
 use plotters::prelude::*;
 use tokio::task::JoinHandle;
+use crate::scheduler::tree_slotset::TreeSlotSet;
 
 mod models;
 mod platform;
@@ -131,4 +132,22 @@ where
     f();
     let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     (end.as_millis() - start.as_millis()) as u64
+}
+
+
+fn test_tree_slotset() {
+    let mut ss = TreeSlotSet::from_proc_set(ProcSet::from_iter([1..=10]), 0, 100);
+    ss.to_table().printstd();
+
+    let m1 = Moldable::new(10, ProcSet::from_iter([1..=5]));
+    let m2 = Moldable::new(10, ProcSet::from_iter([3..=7]));
+
+    let node1 = ss.find_node_for_moldable(&m1).unwrap();
+    ss.claim_node_for_moldable(node1.node_id(), &m1);
+    ss.to_table().printstd();
+
+
+    let node2 = ss.find_node_for_moldable(&m2).unwrap();
+    ss.claim_node_for_moldable(node2.node_id(), &m2);
+    ss.to_table().printstd();
 }

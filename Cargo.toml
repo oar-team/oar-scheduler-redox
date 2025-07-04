@@ -10,3 +10,4 @@ rand = "0.9.1"
 plotters = "0.3.7"
 tokio = { version = "1.46.0", features = ["sync", "macros", "rt-multi-thread"] }
 futures = "0.3.31"
+slab_tree = "0.3.2"

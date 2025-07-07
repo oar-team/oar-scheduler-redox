@@ -1,5 +1,6 @@
-use crate::models::models::Job;
-use crate::scheduler::slot::{ProcSet, Slot, SlotSet};
+use crate::models::models::{Job, ScheduledJobData};
+use crate::models::models::ProcSet;
+use crate::scheduler::slot::{Slot, SlotSet};
 use std::collections::HashMap;
 
 pub fn get_test_slot_set() -> SlotSet {
@@ -147,7 +148,7 @@ pub fn test_iter_between_with_width() {
 #[test]
 pub fn test_split_slots() {
     let mut ss = get_test_slot_set();
-    let job = Job::new_scheduled_from_proc_set(1, 5, 14,ProcSet::from_iter([4..=6]));
+    let job = ScheduledJobData::new(5, 14, ProcSet::from_iter([4..=6]), 0);
     ss.split_slots_for_job_and_update_resources(&job, true, None);
 
     assert_eq!(ss.slot_at(4, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=32]));

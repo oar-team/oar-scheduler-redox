@@ -1,18 +1,27 @@
-use crate::scheduler::slot::ProcSet;
+use range_set_blaze::RangeSetBlaze;
+
+pub type ProcSet = RangeSetBlaze<u32>;
 
 #[derive(Debug, Clone)]
 pub struct Job {
     pub id: u32,
     pub moldables: Vec<Moldable>,
-    pub begin: Option<i64>,      // Defined by the scheduler
-    pub end: Option<i64>,        // Defined by the scheduler
-    pub chosen_moldable_index: Option<usize>, // Defined by the scheduler
+    pub scheduled_data: Option<ScheduledJobData>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScheduledJobData {
+    pub begin: i64,
+    pub end: i64,
+    pub proc_set: ProcSet,
+    pub moldable_index: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct Moldable {
     pub walltime: i64,
-    pub proc_set: ProcSet,
+    pub core_count: u32,
+    //pub proc_set: ProcSet,
 }
 
 impl Job {
@@ -20,45 +29,78 @@ impl Job {
         Job {
             id,
             moldables: moldable,
-            begin: None,
-            end: None,
-            chosen_moldable_index: None,
+            scheduled_data: None,
         }
     }
-    pub fn new_from_proc_set(id: u32, walltime: i64, proc_set: ProcSet) -> Job {
-        let moldable = Moldable::new(walltime, proc_set);
-        Job::new(id, vec![moldable])
-    }
 
-    pub fn new_scheduled(id: u32, begin: i64, end: i64, moldable: Vec<Moldable>, chosen_moldable_index: usize) -> Job {
+    pub fn new_scheduled(id: u32, moldable: Vec<Moldable>, scheduled_data: ScheduledJobData) -> Job {
         Job {
             id,
             moldables: moldable,
-            begin: Some(begin),
-            end: Some(end),
-            chosen_moldable_index: Some(chosen_moldable_index),
+            scheduled_data: Some(scheduled_data),
         }
     }
-    pub fn new_scheduled_from_proc_set(id: u32, begin: i64, end: i64, proc_set: ProcSet) -> Job {
-        let moldable = Moldable::new(end - begin + 1, proc_set);
-        Self::new_scheduled(id, begin, end, vec![moldable], 0)
-    }
     pub fn is_scheduled(&self) -> bool {
-        self.begin.is_some() && self.end.is_some() && self.chosen_moldable_index.is_some()
+        self.scheduled_data.is_some()
     }
-    pub fn get_proc_set(&self) -> &ProcSet {
-        &self.moldables.get(self.chosen_moldable_index.unwrap()).unwrap().proc_set
+}
+
+impl ScheduledJobData {
+    pub fn new(begin: i64, end: i64, proc_set: ProcSet, moldable_index: usize) -> ScheduledJobData {
+        ScheduledJobData {
+            begin,
+            end,
+            proc_set,
+            moldable_index,
+        }
     }
 }
 
 impl Moldable {
-    pub fn new(walltime: i64, proc_set: ProcSet) -> Moldable {
+    pub fn new(walltime: i64, core_count: u32 /*, proc_set: ProcSet*/) -> Moldable {
         Moldable {
             walltime,
-            proc_set,
+            core_count,
+            // proc_set,
         }
     }
     pub fn get_cache_key(&self) -> String {
-        format!("{}-{}", self.walltime, self.proc_set.to_string())
+        format!("{}-{}", self.walltime, self.core_count /*, self.proc_set.to_string()*/)
+    }
+}
+
+pub trait ProcSetCoresOp {
+    fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet>;
+    fn core_count(&self) -> u32;
+}
+
+impl ProcSetCoresOp for ProcSet {
+    fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet> {
+        let available_cores = self.core_count();
+        if available_cores < core_count {
+            return None;
+        }
+        let mut selected_proc_set = ProcSet::new();
+        let mut remaining_core_count = core_count;
+        for range in self.ranges() {
+            let core_count = range.end() - range.start() + 1;
+            if remaining_core_count >= core_count {
+                selected_proc_set |= &ProcSet::from_iter(range);
+                if remaining_core_count == core_count {
+                    break;
+                }
+                remaining_core_count -= core_count;
+            } else {
+                // Split and break
+                let sub_range = *range.start()..=(range.start() + remaining_core_count - 1);
+                selected_proc_set |= &ProcSet::from_iter(sub_range);
+                break;
+            }
+        }
+        Some(selected_proc_set)
+    }
+    #[inline]
+    fn core_count(&self) -> u32 {
+        self.len() as u32
     }
 }

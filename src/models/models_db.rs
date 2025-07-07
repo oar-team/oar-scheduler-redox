@@ -1,4 +1,4 @@
-use crate::scheduler::slot::ProcSet;
+use crate::models::models::ProcSet;
 
 #[derive(Debug, Clone)]
 pub enum JobTypeEnum {

@@ -1,5 +1,5 @@
 use crate::models::models::Job;
-use crate::scheduler::slot::ProcSet;
+use crate::models::models::ProcSet;
 
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;

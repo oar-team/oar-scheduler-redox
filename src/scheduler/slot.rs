@@ -1,9 +1,7 @@
-use crate::models::models::{Job, Moldable};
+use crate::models::models::ProcSet;
+use crate::models::models::{Moldable, ScheduledJobData};
 use prettytable::{format, row, Table};
-use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
-
-pub type ProcSet = RangeSetBlaze<u32>;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -13,7 +11,7 @@ pub struct Slot {
     id: i32,
     prev: Option<i32>,
     next: Option<i32>,
-    intervals: ProcSet,
+    proc_set: ProcSet,
     begin: i64,
     end: i64,
     /// Stores the intervals that might be taken, but available to be shared with the user and the job.
@@ -28,7 +26,7 @@ impl Slot {
             id,
             prev,
             next,
-            intervals: itvs,
+            proc_set: itvs,
             begin: b,
             end: e,
             time_shared_intervals: HashMap::new(),
@@ -49,7 +47,7 @@ impl Slot {
     }
 
     pub fn intervals(&self) -> &ProcSet {
-        &self.intervals
+        &self.proc_set
     }
 
     pub fn begin(&self) -> i64 {
@@ -60,17 +58,11 @@ impl Slot {
         self.end
     }
 
-    pub fn sub_resources(&mut self, job: &Job) {
-        if !job.is_scheduled() {
-            panic!("Slot::sub_resources: job {} must have gantt resources", job.id);
-        }
-        self.intervals = self.intervals.clone() - job.get_proc_set();
+    pub fn sub_resources(&mut self, proc_set: &ProcSet) {
+        self.proc_set = self.proc_set.clone() - proc_set;
     }
-    pub fn add_resources(&mut self, job: &Job) {
-        if !job.is_scheduled() {
-            panic!("Slot::add_resources: job {} must have gantt resources", job.id);
-        }
-        self.intervals = self.intervals.clone() | job.get_proc_set();
+    pub fn add_resources(&mut self, proc_set: &ProcSet) {
+        self.proc_set = self.proc_set.clone() | proc_set;
     }
 }
 
@@ -169,7 +161,7 @@ impl SlotSet {
                 s.begin,
                 s.end,
                 format!("{:.2}", (s.end - s.begin) as f32 / 3600f32 / 24f32),
-                s.intervals,
+                s.proc_set,
                 //s.ph_itvs,
             ]);
 
@@ -193,7 +185,7 @@ impl SlotSet {
     pub fn get_slot(&self, slot_id: i32) -> Option<&Slot> {
         self.slots.get(&slot_id)
     }
-    
+
     pub fn get_cache_first_slot(&self, moldable: &Moldable) -> Option<i32> {
         self.cache.get(&moldable.get_cache_key()).cloned()
     }
@@ -302,7 +294,7 @@ impl SlotSet {
         // Create new slot
         let new_slot_id = self.next_id;
         let new_slot = if before {
-            let new_slot = Slot::new(new_slot_id, slot.prev, Some(slot.id), slot.intervals.clone(), slot.begin, new_begin - 1);
+            let new_slot = Slot::new(new_slot_id, slot.prev, Some(slot.id), slot.proc_set.clone(), slot.begin, new_begin - 1);
             // Update original slot
             slot.begin = new_begin;
             slot.prev = Some(new_slot_id);
@@ -310,7 +302,7 @@ impl SlotSet {
             self.set_prev_slot_correct_next_id(&new_slot);
             new_slot
         } else {
-            let new_slot = Slot::new(new_slot_id, Some(slot.id), slot.next, slot.intervals.clone(), new_begin, slot.end);
+            let new_slot = Slot::new(new_slot_id, Some(slot.id), slot.next, slot.proc_set.clone(), new_begin, slot.end);
             // Update original slot
             slot.end = new_begin - 1;
             slot.next = Some(new_slot_id);
@@ -382,15 +374,8 @@ impl SlotSet {
         }
         (begin_slot_id, end_slot_id)
     }
-    pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
-        let (begin, end) = match (job.begin, job.end) {
-            (Some(begin), Some(end)) => (begin, end),
-            _ => panic!(
-                "SlotSet::split_slots_for_job_and_update_resources: Job {} must have start and end times to be used to split slots",
-                job.id
-            ),
-        };
-        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(begin, end, start_slot_id);
+    pub fn split_slots_for_job_and_update_resources(&mut self, job: &ScheduledJobData, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
+        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(job.begin, job.end, start_slot_id);
         self.iter()
             .between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
@@ -398,9 +383,9 @@ impl SlotSet {
             .iter()
             .for_each(|slot_id| {
                 if sub_resources {
-                    self.slots.get_mut(&slot_id).unwrap().sub_resources(&job);
+                    self.slots.get_mut(&slot_id).unwrap().sub_resources(&job.proc_set);
                 } else {
-                    self.slots.get_mut(&slot_id).unwrap().add_resources(&job);
+                    self.slots.get_mut(&slot_id).unwrap().add_resources(&job.proc_set);
                 }
             });
         (begin_slot_id, end_slot_id)
@@ -410,21 +395,14 @@ impl SlotSet {
     /// Used to insert the previously scheduled jobs in the slots or container jobs.
     /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
     /// Returns the first and last slot ids in which the job can be scheduled.
-    pub fn split_slots_for_jobs(&mut self, jobs: &Vec<Job>, mut start_slot_id: Option<i32>) {
+    pub fn split_slots_for_jobs(&mut self, jobs: &Vec<ScheduledJobData>, mut start_slot_id: Option<i32>) {
         for job in jobs {
-            let (begin, end) = match (job.begin, job.end) {
-                (Some(begin), Some(end)) => (begin, end),
-                _ => panic!(
-                    "SlotSet::split_slots_for_jobs: Job {} must have start and end times to be used to split slots",
-                    job.id
-                ),
-            };
-            let (begin_slot_id, _end_slot_id) = self.split_slots_for_range(begin, end, start_slot_id);
+            let (begin_slot_id, _end_slot_id) = self.split_slots_for_range(job.begin, job.end, start_slot_id);
             start_slot_id = Some(begin_slot_id);
         }
     }
     /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
-    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<Job>, sub_resources: bool, mut start_slot_id: Option<i32>) {
+    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<ScheduledJobData>, sub_resources: bool, mut start_slot_id: Option<i32>) {
         for job in jobs {
             let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, sub_resources, start_slot_id);
             start_slot_id = Some(begin_slot_id);

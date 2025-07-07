@@ -1,5 +1,6 @@
-use crate::models::models::Moldable;
-use crate::scheduler::slot::ProcSet;
+use crate::models::models::ProcSet;
+use crate::models::models::{Moldable, ProcSetCoresOp, ScheduledJobData};
+use log::debug;
 use prettytable::{format, row, Table};
 use slab_tree::*;
 
@@ -34,7 +35,7 @@ pub struct TreeNode {
 pub enum FitState {
     None,
     MaybeChildren,
-    Fit,
+    Fit(ProcSet),
 }
 impl TreeNode {
     pub fn new_leaf(slot: TreeSlot) -> TreeNode {
@@ -78,25 +79,25 @@ impl TreeNode {
         self.proc_set_union = &self.proc_set_union - proc_set;
     }
 
-
     pub fn fit_state(&self, moldable: &Moldable) -> FitState {
         if moldable.walltime <= self.slot.duration() {
             if self.is_leaf || moldable.walltime == self.slot.duration() {
                 // Needs to fit for sure because is_leaf or no children will fit as they have a duration strictly smaller
-                return if moldable.proc_set.is_subset(&self.slot.proc_set) {
-                    FitState::Fit
-                } else {
-                    FitState::None
-                };
+                return self.fit_moldable_otherwise(moldable, FitState::None);
             }
-            if moldable.proc_set.is_subset(&self.proc_set_union) {
-                if moldable.proc_set.is_subset(&self.slot.proc_set) {
-                    return FitState::Fit;
-                }
-                return FitState::MaybeChildren;
+            // Check that it might fit on children
+            if self.proc_set_union.core_count() >= moldable.core_count {
+                return self.fit_moldable_otherwise(moldable, FitState::MaybeChildren);
             }
         }
         FitState::None
+    }
+    fn fit_moldable_otherwise(&self, moldable: &Moldable, otherwise: FitState) -> FitState {
+        if let Some(proc_set) = self.slot.proc_set.sub_proc_set_with_cores(moldable.core_count) {
+            FitState::Fit(proc_set)
+        } else {
+            otherwise
+        }
     }
 }
 
@@ -165,16 +166,26 @@ impl TreeSlotSet {
         Self::from_slot(TreeSlot::new(begin, end, proc_set))
     }
 
-    pub fn claim_node_for_moldable(&mut self, node_id: NodeId, moldable: &Moldable) {
+    /// ScheduledJobData begin should be equal to the beginning of the slot NodeId, and ending should be <= end of NodeId
+    pub fn claim_node_for_scheduled_job(&mut self, node_id: NodeId, job: &ScheduledJobData) {
         let mut node = self.tree.get_mut(node_id).unwrap();
-        let split_before = node.data().slot().begin + moldable.walltime;
 
-        // let tree_node = node.data().clone();
-        Self::claim_node_for_moldable_rec(node, &moldable.proc_set, split_before);
-        // println!("Placing moldable of length {} (ps: {}) on node {}-{} ps: {}, psu: {}", moldable.walltime, moldable.proc_set,tree_node.begin(), tree_node.end(), tree_node.proc_set(), tree_node.proc_set_union);
-        // self.to_table(false).printstd();
+        let tree_node = node.data().clone();
+        Self::claim_node_for_scheduled_job_rec(node, &job.proc_set, job.end + 1);
+        debug!(
+            "Placing moldable of length {} (ps: {}) on node {}-{} ps: {}, psu: {}",
+            job.end - job.begin + 1,
+            job.proc_set,
+            tree_node.begin(),
+            tree_node.end(),
+            tree_node.proc_set(),
+            tree_node.proc_set_union
+        );
+        if log::log_enabled!(log::Level::Trace) {
+            self.to_table(false).printstd();
+        }
     }
-    fn claim_node_for_moldable_rec(mut node: NodeMut<TreeNode>, proc_set: &ProcSet, split_before: i64) {
+    fn claim_node_for_scheduled_job_rec(mut node: NodeMut<TreeNode>, proc_set: &ProcSet, split_before: i64) {
         let last_child_end = node.last_child().map(|mut child| child.data().end());
         let tree_node = node.data();
         let original_proc_set = tree_node.slot().proc_set.clone();
@@ -193,7 +204,8 @@ impl TreeSlotSet {
                 node.first_child().unwrap().data().set_node_id(left_child_id);
                 node.last_child().unwrap().data().set_node_id(right_child_id);
                 // Union is unchanged
-            }else{
+            } else {
+                // Taking the full leaf
                 tree_node.proc_set_union = tree_node.proc_set().clone();
             }
         } else {
@@ -202,27 +214,27 @@ impl TreeSlotSet {
                 tree_node.sub_union_resources(proc_set);
             }
 
-            Self::claim_node_for_moldable_rec(node.first_child().unwrap(), proc_set, split_before);
+            Self::claim_node_for_scheduled_job_rec(node.first_child().unwrap(), proc_set, split_before);
 
             let mut last_child = node.last_child().unwrap();
             if last_child.data().begin() < split_before {
-                Self::claim_node_for_moldable_rec(last_child, proc_set, split_before);
+                Self::claim_node_for_scheduled_job_rec(last_child, proc_set, split_before);
             }
         }
     }
 
-    pub fn find_node_for_moldable(&self, moldable: &Moldable) -> Option<&TreeNode> {
-        let (count, node_id) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable);
-        // println!("Found node for moldable iterating over {} nodes", count);
-        node_id.map(|node_id| self.tree.get(node_id).unwrap().data())
+    pub fn find_node_for_moldable(&self, moldable: &Moldable) -> Option<(&TreeNode, ProcSet)> {
+        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable);
+        debug!("Found node for moldable iterating over {} nodes", count);
+        node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set))
     }
-    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable) -> (usize, Option<NodeId>) {
+    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable) -> (usize, Option<(NodeId, ProcSet)>) {
         match node.data().fit_state(moldable) {
-            FitState::Fit => return (1, Some(node.node_id())),
+            FitState::Fit(proc_set) => return (1, Some((node.node_id(), proc_set))),
             FitState::MaybeChildren => {
                 for child in node.children() {
                     let (count, child) = Self::find_node_for_moldable_rec(child, moldable);
-                    if let Some(child) = child{
+                    if let Some(child) = child {
                         return (1 + count, Some(child));
                     }
                 }

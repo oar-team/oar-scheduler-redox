@@ -14,9 +14,9 @@ async fn main() {
 
     let averaging = 30;
     let res_count = 10_000;
-    let target = BenchmarkTarget::Basic(WaitingJobsSampleType::Normal, true);
+    let target = BenchmarkTarget::Tree(WaitingJobsSampleType::Normal);
 
-    let results = target.benchmark_batch(averaging, res_count, 0, 400, 25).await;
+    let results = target.benchmark_batch(averaging, res_count, 0, 800, 100).await;
     graph_benchmark_result(target, results);
 
 }

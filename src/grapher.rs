@@ -4,8 +4,9 @@ use plotters::chart::{ChartBuilder, LabelAreaPosition, SeriesLabelPosition};
 use plotters::data::Quartiles;
 use plotters::drawing::IntoDrawingArea;
 use plotters::element::{Boxplot, PathElement};
-use plotters::prelude::full_palette::{BLUE_900, GREEN_300, GREEN_600, GREY_100, RED_300};
+use plotters::prelude::full_palette::{BLUE_900, GREY_100};
 use plotters::prelude::{Color, LineSeries, WHITE};
+use plotters::style::full_palette::{GREEN_400, RED_400};
 use plotters::style::RGBColor;
 
 pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, results: Vec<BenchmarkAverageResult>) {
@@ -23,24 +24,15 @@ pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, resu
     ));
     series.push(Series::new(
         "Slot count",
-        GREEN_300,
+        GREEN_400,
         true,
         false,
         results.iter().map(|result| (result.jobs_count, &result.slot_count)).collect::<Vec<_>>(),
     ));
-    if target.has_nodes() {
-        series.push(Series::new(
-            "Tree nodes count",
-            GREEN_600,
-            false,
-            false,
-            results.iter().map(|result| (result.jobs_count, &result.nodes_count)).collect::<Vec<_>>(),
-        ));
-    };
     if target.has_cache() {
         series.push(Series::new(
             "Cache hits (%)",
-            RED_300,
+            RED_400,
             true,
             true,
             results.iter().map(|result| (result.jobs_count, &result.cache_hits)).collect::<Vec<_>>(),

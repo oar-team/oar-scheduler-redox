@@ -151,18 +151,18 @@ pub fn test_split_slots() {
     let job = ScheduledJobData::new(5, 14, ProcSet::from_iter([4..=6]), 0);
     ss.split_slots_for_job_and_update_resources(&job, true, None);
 
-    assert_eq!(ss.slot_at(4, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=32]));
-    assert_eq!(ss.slot_at(5, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=3, 7..=32]));
-    assert_eq!(ss.slot_at(9, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=3, 7..=32]));
+    assert_eq!(ss.slot_at(4, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=32]));
+    assert_eq!(ss.slot_at(5, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=3, 7..=32]));
+    assert_eq!(ss.slot_at(9, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=3, 7..=32]));
     assert_eq!(
-        ss.slot_at(10, None).unwrap().intervals().clone(),
+        ss.slot_at(10, None).unwrap().proc_set().clone(),
         ProcSet::from_iter([1..=3, 7..=16, 28..=32])
     );
     assert_eq!(
-        ss.slot_at(14, None).unwrap().intervals().clone(),
+        ss.slot_at(14, None).unwrap().proc_set().clone(),
         ProcSet::from_iter([1..=3, 7..=16, 28..=32])
     );
-    assert_eq!(ss.slot_at(15, None).unwrap().intervals().clone(), ProcSet::from_iter([1..=16, 28..=32]));
+    assert_eq!(ss.slot_at(15, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=16, 28..=32]));
 }
 
 #[test]

@@ -6,7 +6,7 @@ use std::iter::Iterator;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
-/// A slot can have a previous and a next slot to build an ordered, doubly linked list.
+/// A slot can have a previous and a next slot, allowing to build a doubly linked list.
 #[derive(Clone, Debug)]
 pub struct Slot {
     id: i32,
@@ -46,7 +46,7 @@ impl Slot {
     pub fn next(&self) -> Option<i32> {
         self.next
     }
-    pub fn intervals(&self) -> &ProcSet {
+    pub fn proc_set(&self) -> &ProcSet {
         &self.proc_set
     }
     pub fn begin(&self) -> i64 {
@@ -123,7 +123,7 @@ impl SlotSet {
             cache: HashMap::new(),
         }
     }
-
+    /// Create a `SlotSet` with a single slot.
     pub fn from_slot(slot: Slot) -> SlotSet {
         SlotSet {
             begin: slot.begin,
@@ -135,12 +135,13 @@ impl SlotSet {
             cache: HashMap::new(),
         }
     }
-
-    pub fn from_intervals(ressources: ProcSet, begin: i64, end: i64) -> SlotSet {
-        let slot = Slot::new(1, None, None, ressources, begin, end);
+    /// Create a `SlotSet` with a single slot that covers the entire range from `begin` to `end` with the given `ProcSet`.
+    pub fn from_proc_set(proc_set: ProcSet, begin: i64, end: i64) -> SlotSet {
+        let slot = Slot::new(1, None, None, proc_set, begin, end);
         SlotSet::from_slot(slot)
     }
 
+    /// Builds a `Table` for displaying the slots in a human-readable format.
     pub fn to_table(&self) -> Table {
         let mut table = Table::new();
         table.set_format(*format::consts::FORMAT_CLEAN);
@@ -188,6 +189,8 @@ impl SlotSet {
         self.slots.get(&slot_id)
     }
 
+    /// If there is a cache hit with this moldable, returns the slot id of the last slot iterated over for this cache key.
+    /// If there is no cache hit, returns None.
     pub fn get_cache_first_slot(&self, moldable: &Moldable) -> Option<i32> {
         self.cache.get(&moldable.get_cache_key()).cloned()
     }
@@ -195,10 +198,12 @@ impl SlotSet {
         self.cache.insert(key, slot_id);
     }
 
+    /// Returns the id of the slot from [`Self::slot_at`].
     #[allow(dead_code)]
     pub fn slot_id_at(&self, time: i64, starting_id: Option<i32>) -> Option<i32> {
         self.slot_at(time, starting_id).map(|slot| slot.id)
     }
+    /// Returns the slot containing the given time, or None if no such slot exists.
     pub fn slot_at(&self, time: i64, starting_id: Option<i32>) -> Option<&Slot> {
         let mut slot = if let Some(starting_id) = starting_id {
             self.slots.get(&starting_id)
@@ -216,7 +221,10 @@ impl SlotSet {
         }
         None
     }
-
+    /// Returns an iterator over the slots in the SlotSet, starting from the first slot and going to the last slot.
+    /// It is a double-ended iterator, so you can also iterate backwards.
+    /// You can change the start and end slot id of the iterator using [`SlotIterator::start_at`], [`SlotIterator::end_at`], or [`SlotIterator::between`],
+    /// and create an iterator with width using [`SlotIterator::with_width`].
     pub fn iter(&self) -> SlotIterator {
         SlotIterator {
             slots: &self.slots,
@@ -224,10 +232,11 @@ impl SlotSet {
             end: Some(self.last_id),
         }
     }
-
+    /// Helper function to set the previous slot of a slot by its id.
     fn set_slot_prev_id(&mut self, slot_id: i32, prev_id: Option<i32>) {
         self.slots.get_mut(&slot_id).map(|slot| slot.prev = prev_id);
     }
+    /// Helper function to set the next slot of a slot by its id.
     fn set_slot_next_id(&mut self, slot_id: i32, next_id: Option<i32>) {
         self.slots.get_mut(&slot_id).map(|slot| slot.next = next_id);
     }
@@ -259,16 +268,8 @@ impl SlotSet {
     ///         --|---------------------|--   --|----------|----------|--
     ///           |0                  10|       |0   time-1|time    10|
     /// ```
-    /// If trying to split with time-1 and time already in two different slots, it will panic (i.e., splitting with time = the beginning of a slot).
+    /// If trying to split with `time-1` and `time` already in two different slots, it will panic (i.e., splitting with time = the beginning of a slot).
     /// Returns the two slots, starting with the new one.
-    /// [Removed Behavior] If the time at which to split is equal to the beginning of the slot, the slot will be split between time and time+1.
-    /// ```
-    ///           |                     |       |            |                |
-    ///           |       Slot 1        |  -->  |   Slot 2   |     Slot 1     |
-    ///           |                     |       |            |                |
-    ///         --|---------------------|--   --|------------|----------------|--
-    ///           |0 = time           10|       |0   time = 0|time+1 = 1    10|
-    /// ```
     pub(crate) fn split_at(&mut self, slot_id: i32, time: i64, before: bool) -> (i32, i32) {
         // Sanity checks
         let slot = self
@@ -282,17 +283,7 @@ impl SlotSet {
             slot.begin,
             slot.end
         );
-        //assert_ne!(slot.b, slot.e, "SlotSet::split_at_before: slot of id {} is of size one", slot_id); // Already checked via time > slot.b
-        // if slot.b == slot.e {
-        //     return (slot_id, slot_id);
-        // }
-        // Prepare to create a new slot
-        let new_begin = /*if slot.b == time {
-            // Special case if splitting at the beginning: checked via an assertion.
-            time + 1
-        } else {*/
-            time
-            /*}*/;
+        let new_begin = time;
 
         // Create new slot
         let new_slot_id = self.next_id;
@@ -425,7 +416,7 @@ impl SlotSet {
     pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
         self.iter()
             .between(begin_slot_id, end_slot_id)
-            .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.intervals())
+            .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.proc_set())
     }
     #[allow(dead_code)]
     pub fn begin(&self) -> i64 {
@@ -435,12 +426,13 @@ impl SlotSet {
     pub fn end(&self) -> i64 {
         self.end
     }
-
+    /// Returns the number of slots in the SlotSet.
     pub fn slot_count(&self) -> usize {
         self.slots.len()
     }
 }
 
+/// double-ended iterator over Slots in a SlotSet, with the ability to iterate within a beginning and end slot id.
 #[derive(Clone)]
 pub struct SlotIterator<'a> {
     slots: &'a HashMap<i32, Slot>,
@@ -461,7 +453,6 @@ impl<'a> DoubleEndedIterator for SlotIterator<'a> {
 }
 impl<'a> Iterator for SlotIterator<'a> {
     type Item = &'a Slot;
-
     fn next(&mut self) -> Option<Self::Item> {
         let slot = self.slots.get(&self.begin?)?;
         // Move to the next slot
@@ -474,6 +465,9 @@ impl<'a> Iterator for SlotIterator<'a> {
     }
 }
 impl<'a> SlotIterator<'a> {
+    /// Iterate between two slots. If applying .between(x, y).rev(), it will iterate from y to x.
+    /// If start is after end in the linked list, the iterator will go to start till the end of the list,
+    /// or from the end till the start of the list if using .rev().
     pub fn between(self, start: i32, end: i32) -> SlotIterator<'a> {
         SlotIterator {
             slots: self.slots,
@@ -481,21 +475,27 @@ impl<'a> SlotIterator<'a> {
             end: Some(end),
         }
     }
+    /// Start the iterator at a specific slot id. Works like [`SlotIterator::between`], but only sets the start slot id.
     pub fn start_at(mut self, start_id: i32) -> SlotIterator<'a> {
         self.begin = Some(start_id);
         self
     }
+    /// End the iterator at a specific slot id. Works like [`SlotIterator::between`], but only sets the end slot id.
     #[allow(dead_code)]
     pub fn end_at(mut self, end_id: i32) -> SlotIterator<'a> {
         self.end = Some(end_id);
         self
     }
+    /// Create an iterator that iterates with a minimum slot width.
+    /// See [`SlotWidthIterator`].
     pub fn with_width(self, min_width: i64) -> SlotWidthIterator<'a> {
         SlotWidthIterator::from_iterator(self, min_width)
     }
 }
 
-/// Iterates over Slots, finding each time a following slot with a width of at least min_width
+/// Iterates over Slots, finding each time a following slot with a width `slot2.end - slot1.begin >= width`.
+/// It is possible to iterate over a specific range of the linked list by using the [`SlotIterator`] methods like
+/// [`SlotIterator::between`], [`SlotIterator::start_at`], and [`SlotIterator::end_at`] before calling [`SlotIterator::with_width`] or [`SlotWidthIterator::from_iterator`].
 pub struct SlotWidthIterator<'a> {
     begin_iterator: SlotIterator<'a>,
     end_iterator: SlotIterator<'a>,
@@ -503,6 +503,7 @@ pub struct SlotWidthIterator<'a> {
     min_width: i64,
 }
 impl<'a> SlotWidthIterator<'a> {
+    /// Builds a new SlotWidthIterator from a SlotIterator and a minimum width.
     pub fn from_iterator(iter: SlotIterator<'a>, min_width: i64) -> SlotWidthIterator<'a> {
         SlotWidthIterator {
             begin_iterator: iter.clone(),

@@ -33,7 +33,6 @@ pub struct BenchmarkAverageResult {
     pub jobs_count: u32,
     pub scheduling_time: BenchmarkMeasurementStatistics,
     pub slot_count: BenchmarkMeasurementStatistics,
-    pub nodes_count: BenchmarkMeasurementStatistics,
     pub cache_hits: BenchmarkMeasurementStatistics,
 }
 
@@ -111,7 +110,6 @@ impl From<Vec<BenchmarkResult>> for BenchmarkAverageResult {
             jobs_count: value.get(0).map(|x| x.jobs_count).unwrap_or(0),
             scheduling_time: value.iter().map(|r| r.scheduling_time).collect::<Vec<u32>>().into(),
             slot_count: value.iter().map(|r| r.slot_count).collect::<Vec<u32>>().into(),
-            nodes_count: value.iter().map(|r| r.nodes_count).collect::<Vec<u32>>().into(),
             cache_hits: value.iter().map(|r| r.cache_hits).collect::<Vec<u32>>().into(),
         }
     }
@@ -196,8 +194,8 @@ impl BenchmarkTarget {
             let jobs = i * step;
             let result = self.benchmark(averaging, res_count, jobs).await;
             info!(
-                "{} jobs scheduled in {} ms ({}% cache hits, {} slots, {} nodes)",
-                result.jobs_count, result.scheduling_time.mean, result.cache_hits.mean, result.slot_count.mean, result.nodes_count.mean
+                "{} jobs scheduled in {} ms ({}% cache hits, {} slots)",
+                result.jobs_count, result.scheduling_time.mean, result.cache_hits.mean, result.slot_count.mean
             );
             result
         }))

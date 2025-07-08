@@ -7,8 +7,8 @@ pub fn test_claim_node_for_moldable() {
     let mut ss = TreeSlotSet::from_proc_set(ProcSet::from_iter([1..=10]), 0, 100);
     ss.to_table(true).printstd();
 
-    let m1 = Moldable::new(10, 5);
-    let m2 = Moldable::new(10, 6);
+    let m1 = Moldable::new(10, 5, ProcSet::from_iter([1..=10]));
+    let m2 = Moldable::new(10, 6, ProcSet::from_iter([1..=10]));
 
     let (node1, ps1) = ss.find_node_for_moldable(&m1).unwrap();
     assert_eq!(node1.begin(), 0);

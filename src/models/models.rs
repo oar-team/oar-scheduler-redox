@@ -21,7 +21,7 @@ pub struct ScheduledJobData {
 pub struct Moldable {
     pub walltime: i64,
     pub core_count: u32,
-    //pub proc_set: ProcSet,
+    pub filter_proc_set: ProcSet,
 }
 
 impl Job {
@@ -57,24 +57,27 @@ impl ScheduledJobData {
 }
 
 impl Moldable {
-    pub fn new(walltime: i64, core_count: u32 /*, proc_set: ProcSet*/) -> Moldable {
+    pub fn new(walltime: i64, core_count: u32 , filter_proc_set: ProcSet) -> Moldable {
         Moldable {
             walltime,
             core_count,
-            // proc_set,
+            filter_proc_set,
         }
     }
     pub fn get_cache_key(&self) -> String {
-        format!("{}-{}", self.walltime, self.core_count /*, self.proc_set.to_string()*/)
+        format!("{}-{}-{}", self.walltime, self.core_count , self.filter_proc_set.to_string())
     }
 }
+
 
 pub trait ProcSetCoresOp {
     fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet>;
     fn core_count(&self) -> u32;
 }
-
 impl ProcSetCoresOp for ProcSet {
+    /// Tries to claim a subset of the `ProcSet` with the specified number of cores.
+    /// If successful, returns a new `ProcSet` that represents the claimed cores.
+    /// Returns `None` if there are not enough cores available.
     fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet> {
         let available_cores = self.core_count();
         if available_cores < core_count {

@@ -8,7 +8,7 @@ use plotters::prelude::full_palette::{GREY_100, BLUE_900, GREEN_300, GREEN_600, 
 use plotters::prelude::{Color, LineSeries, WHITE};
 use plotters::style::RGBColor;
 
-pub fn graph_benchmark_result(target: BenchmarkTarget, results: Vec<BenchmarkAverageResult>) {
+pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, results: Vec<BenchmarkAverageResult>) {
     let mut series = Vec::with_capacity(6);
 
     series.push(Series::new(
@@ -48,7 +48,7 @@ pub fn graph_benchmark_result(target: BenchmarkTarget, results: Vec<BenchmarkAve
     };
 
 
-    graph_benchmark_series(target, series);
+    graph_benchmark_series(prefix_name, target, series);
 }
 
 struct Series {
@@ -76,11 +76,11 @@ impl Series {
     }
 }
 
-pub fn graph_benchmark_series(target: BenchmarkTarget, series: Vec<Series>) {
+fn graph_benchmark_series(prefix_name: String, target: BenchmarkTarget, series: Vec<Series>) {
     let max_x = (series.iter().map(|s| s.max_x).max().unwrap() as f32 * 1.02) as u32;
     let max_y = series.iter().map(|s| s.max_y as u32).max().unwrap() as f32 * 1.2;
 
-    let path = target.benchmark_file_name();
+    let path = target.benchmark_file_name(prefix_name);
     let root_area = SVGBackend::new(&path, (450, 300)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
 

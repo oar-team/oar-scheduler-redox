@@ -1,3 +1,4 @@
+use std::cmp::max;
 use crate::models::models::{Job, Moldable, ProcSet};
 use crate::platform::{PlatformTest, ResourceSet};
 use crate::scheduler::{kamelot_basic, kamelot_tree};
@@ -79,12 +80,14 @@ impl From<Vec<u32>> for BenchmarkMeasurementStatistics {
 pub enum WaitingJobsSampleType {
     HighCacheHits,
     Normal,
+    NormalMoreIdenticalDurations,
 }
 impl WaitingJobsSampleType {
     pub fn to_friendly_string(&self) -> String {
         match self {
             WaitingJobsSampleType::HighCacheHits => "High cache hits jobs".to_string(),
             WaitingJobsSampleType::Normal => "Normal jobs".to_string(),
+            WaitingJobsSampleType::NormalMoreIdenticalDurations => "Normal with more identical duration jobs".to_string(),
         }
     }
 }
@@ -93,6 +96,7 @@ impl Display for WaitingJobsSampleType {
         let str = match self {
             WaitingJobsSampleType::HighCacheHits => "HighCacheHits",
             WaitingJobsSampleType::Normal => "Normal",
+            WaitingJobsSampleType::NormalMoreIdenticalDurations => "NormalMoreIdenticalDurations",
         }
             .to_string();
         write!(f, "{}", str)
@@ -124,7 +128,7 @@ impl BenchmarkTarget {
             BenchmarkTarget::Tree(sample_type) => sample_type.clone(),
         }
     }
-    pub fn benchmark_file_name(&self) -> String {
+    pub fn benchmark_file_name(&self, prefix: String) -> String {
         #[cfg(debug_assertions)]
         let profile = "debug";
         #[cfg(not(debug_assertions))]
@@ -135,7 +139,7 @@ impl BenchmarkTarget {
             BenchmarkTarget::Basic(_, false) => "basic-NoCache",
             BenchmarkTarget::Tree(_) => "tree",
         };
-        format!("./benchmarks/1_cores_{}_{}-{}.svg", profile, target, self.get_sample_type().to_string())
+        format!("./benchmarks/{}_{}_{}-{}.svg", prefix, profile, target, self.get_sample_type().to_string())
     }
     pub fn benchmark_friendly_name(&self) -> String {
         #[cfg(debug_assertions)]
@@ -239,6 +243,11 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
             waiting_jobs.append(gen_random_jobs(2_000_000, jobs_count / 3, 30, 60 * 3, 5, 1, 201, 5, 128, 256, 32, res_count).as_mut());
             waiting_jobs.append(gen_random_jobs(3_000_000, jobs_count / 3, 60, 60 * 12, 15, 10, 500, 10, 256, 512, 64, res_count).as_mut());
         }
+        WaitingJobsSampleType::NormalMoreIdenticalDurations => {
+            waiting_jobs.append(gen_random_jobs(1_000_000, jobs_count / 3, 10, 60, 5, 1, 11, 2, 0, 128, 16, res_count).as_mut());
+            waiting_jobs.append(gen_random_jobs(2_000_000, jobs_count / 3, 30, 60 * 3, 10, 10, 200, 10, 128, 1024, 32, res_count).as_mut());
+            waiting_jobs.append(gen_random_jobs(3_000_000, jobs_count / 3, 60, 60 * 12, 20, 20, 500, 20, 256, 1024, 64, res_count).as_mut());
+        }
         WaitingJobsSampleType::HighCacheHits => {
             waiting_jobs.append(gen_random_jobs(1_000_000, jobs_count / 3, 10, 60, 1, 1, 11, 2, 64, 128, 64, res_count).as_mut());
             waiting_jobs.append(gen_random_jobs(2_000_000, jobs_count / 3, 30, 60 * 3, 10, 1, 11, 2, 128, 256, 128, res_count).as_mut());
@@ -265,10 +274,11 @@ fn gen_random_jobs(
     for i in offset..(offset + count) {
         let walltime = rand::random_range((duration_min / duration_step)..=(duration_max / duration_step)) * duration_step;
         let core_count = rand::random_range((core_min / core_step)..=(core_max / core_step)) * core_step;
-        let res_size = rand::random_range((res_min / res_step)..=(res_max / res_step)) * res_step;
+
+        let res_size = max(core_count, rand::random_range((res_min / res_step)..=(res_max / res_step)) * res_step);
         let res_start = rand::random_range(1..=((res_all_max - res_size) / res_step)) * res_step;
-        let _proc_set = ProcSet::from_iter([res_start..=(res_start + res_size)]);
-        jobs.push(Job::new(i as u32, vec![Moldable::new(walltime, core_count)]));
+        let filter_proc_set = ProcSet::from_iter([res_start..=(res_start + res_size)]);
+        jobs.push(Job::new(i as u32, vec![Moldable::new(walltime, core_count, filter_proc_set)]));
     }
     jobs
 }

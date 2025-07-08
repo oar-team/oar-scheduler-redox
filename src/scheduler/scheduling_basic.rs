@@ -74,7 +74,7 @@ pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Molda
     let mut count = 0;
     let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
         count += 1;
-        let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id());
+        let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id()) & &moldable.filter_proc_set;
         available_resources.sub_proc_set_with_cores(moldable.core_count).map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))
     });
     debug!("Found slots for moldable visiting {} slots", count);

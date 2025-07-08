@@ -86,14 +86,16 @@ impl TreeNode {
                 return self.fit_moldable_otherwise(moldable, FitState::None);
             }
             // Check that it might fit on children
-            if self.proc_set_union.core_count() >= moldable.core_count {
+            let union_filtered_proc_set = &self.proc_set_union & &moldable.filter_proc_set;
+            if union_filtered_proc_set.core_count() >= moldable.core_count {
                 return self.fit_moldable_otherwise(moldable, FitState::MaybeChildren);
             }
         }
         FitState::None
     }
     fn fit_moldable_otherwise(&self, moldable: &Moldable, otherwise: FitState) -> FitState {
-        if let Some(proc_set) = self.slot.proc_set.sub_proc_set_with_cores(moldable.core_count) {
+        let intersection_filtered_proc_set = &self.slot.proc_set & &moldable.filter_proc_set;
+        if let Some(proc_set) = intersection_filtered_proc_set.sub_proc_set_with_cores(moldable.core_count) {
             FitState::Fit(proc_set)
         } else {
             otherwise

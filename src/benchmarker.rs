@@ -1,12 +1,12 @@
-use std::cmp::max;
 use crate::models::models::{Job, Moldable, ProcSet};
 use crate::platform::{PlatformTest, ResourceSet};
 use crate::scheduler::{kamelot_basic, kamelot_tree};
-use log::{debug, info};
-use std::collections::HashSet;
-use std::fmt::{format, Display};
-use std::time::{SystemTime, UNIX_EPOCH};
+use log::info;
 use plotters::data::Quartiles;
+use std::cmp::max;
+use std::collections::HashSet;
+use std::fmt::Display;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct BenchmarkResult {
@@ -37,6 +37,7 @@ pub struct BenchmarkAverageResult {
     pub cache_hits: BenchmarkMeasurementStatistics,
 }
 
+#[allow(dead_code)]
 pub struct BenchmarkMeasurementStatistics {
     pub min: u32,
     pub max: u32,
@@ -77,6 +78,7 @@ impl From<Vec<u32>> for BenchmarkMeasurementStatistics {
 }
 
 #[derive(Copy, Clone)]
+#[allow(dead_code)]
 pub enum WaitingJobsSampleType {
     HighCacheHits,
     Normal,
@@ -98,7 +100,7 @@ impl Display for WaitingJobsSampleType {
             WaitingJobsSampleType::Normal => "Normal",
             WaitingJobsSampleType::NormalMoreIdenticalDurations => "NormalMoreIdenticalDurations",
         }
-            .to_string();
+        .to_string();
         write!(f, "{}", str)
     }
 }
@@ -117,7 +119,9 @@ impl From<Vec<BenchmarkResult>> for BenchmarkAverageResult {
 
 #[derive(Copy, Clone)]
 pub enum BenchmarkTarget {
+    #[allow(dead_code)]
     Basic(WaitingJobsSampleType, bool),
+    #[allow(dead_code)]
     Tree(WaitingJobsSampleType),
 }
 
@@ -139,7 +143,13 @@ impl BenchmarkTarget {
             BenchmarkTarget::Basic(_, false) => "basic-NoCache",
             BenchmarkTarget::Tree(_) => "tree",
         };
-        format!("./benchmarks/{}_{}_{}-{}.svg", prefix, profile, target, self.get_sample_type().to_string())
+        format!(
+            "./benchmarks/{}_{}_{}-{}.svg",
+            prefix,
+            profile,
+            target,
+            self.get_sample_type().to_string()
+        )
     }
     pub fn benchmark_friendly_name(&self) -> String {
         #[cfg(debug_assertions)]
@@ -149,8 +159,14 @@ impl BenchmarkTarget {
 
         let sample_type_str = self.get_sample_type().to_friendly_string();
         match self {
-            BenchmarkTarget::Basic(_, true) => format!("Basic scheduler performance by number of jobs ({}, With cache, {})", profile, sample_type_str),
-            BenchmarkTarget::Basic(_, false) => format!("Basic scheduler performance by number of jobs ({}, No cache, {})", profile, sample_type_str),
+            BenchmarkTarget::Basic(_, true) => format!(
+                "Basic scheduler performance by number of jobs ({}, With cache, {})",
+                profile, sample_type_str
+            ),
+            BenchmarkTarget::Basic(_, false) => format!(
+                "Basic scheduler performance by number of jobs ({}, No cache, {})",
+                profile, sample_type_str
+            ),
             BenchmarkTarget::Tree(_) => format!("Tree scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
         }
         .to_string()
@@ -175,24 +191,13 @@ impl BenchmarkTarget {
         }
     }
 
-    pub async fn benchmark_batch(
-        &self,
-        averaging: usize,
-        res_count: u32,
-        start: usize,
-        end: usize,
-        step: usize,
-    ) -> Vec<BenchmarkAverageResult> {
+    pub async fn benchmark_batch(&self, averaging: usize, res_count: u32, start: usize, end: usize, step: usize) -> Vec<BenchmarkAverageResult> {
         futures::future::join_all(((start / step)..=(end / step)).map(async |i| {
             let jobs = i * step;
             let result = self.benchmark(averaging, res_count, jobs).await;
             info!(
                 "{} jobs scheduled in {} ms ({}% cache hits, {} slots, {} nodes)",
-                result.jobs_count,
-                result.scheduling_time.mean,
-                result.cache_hits.mean,
-                result.slot_count.mean,
-                result.nodes_count.mean
+                result.jobs_count, result.scheduling_time.mean, result.cache_hits.mean, result.slot_count.mean, result.nodes_count.mean
             );
             result
         }))
@@ -224,7 +229,13 @@ impl BenchmarkTarget {
                     BenchmarkTarget::Basic(_, cache) => (kamelot_basic::schedule_cycle(&mut platform, queues, cache), 0),
                     BenchmarkTarget::Tree(_) => kamelot_tree::schedule_cycle(&mut platform, queues),
                 });
-                BenchmarkResult::new(jobs_count as u32, scheduling_time, (cache_hits * 100 / jobs_count) as u32, slot_count as u32, nodes_count as u32)
+                BenchmarkResult::new(
+                    jobs_count as u32,
+                    scheduling_time,
+                    (cache_hits * 100 / jobs_count) as u32,
+                    slot_count as u32,
+                    nodes_count as u32,
+                )
             })
         }))
         .await

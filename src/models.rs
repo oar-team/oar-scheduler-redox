@@ -1,2 +1,2 @@
-mod models_db;
 pub mod models;
+mod models_db;

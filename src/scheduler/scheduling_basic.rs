@@ -60,7 +60,7 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
         );
         slot_set.split_slots_for_job_and_update_resources(&scheduled_data, true, chosen_slot_id_left);
         job.scheduled_data = Some(scheduled_data);
-    }else {
+    } else {
         info!("Warning: no node found for job {:?}", job);
         slot_set.to_table().printstd();
     }
@@ -75,7 +75,9 @@ pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Molda
     let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
         count += 1;
         let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id()) & &moldable.filter_proc_set;
-        available_resources.sub_proc_set_with_cores(moldable.core_count).map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))
+        available_resources
+            .sub_proc_set_with_cores(moldable.core_count)
+            .map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))
     });
     debug!("Found slots for moldable visiting {} slots", count);
     res

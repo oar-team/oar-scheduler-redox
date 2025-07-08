@@ -4,7 +4,7 @@ use plotters::chart::{ChartBuilder, LabelAreaPosition, SeriesLabelPosition};
 use plotters::data::Quartiles;
 use plotters::drawing::IntoDrawingArea;
 use plotters::element::{Boxplot, PathElement};
-use plotters::prelude::full_palette::{GREY_100, BLUE_900, GREEN_300, GREEN_600, RED_300};
+use plotters::prelude::full_palette::{BLUE_900, GREEN_300, GREEN_600, GREY_100, RED_300};
 use plotters::prelude::{Color, LineSeries, WHITE};
 use plotters::style::RGBColor;
 
@@ -46,7 +46,6 @@ pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, resu
             results.iter().map(|result| (result.jobs_count, &result.cache_hits)).collect::<Vec<_>>(),
         ));
     };
-
 
     graph_benchmark_series(prefix_name, target, series);
 }
@@ -129,8 +128,7 @@ fn graph_benchmark_series(prefix_name: String, target: BenchmarkTarget, series: 
                 .label(series.name.clone())
                 .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 13, y)], series.color));
             if let Some(whiskers) = whiskers {
-                ctx.draw_secondary_series(whiskers)
-                    .unwrap();
+                ctx.draw_secondary_series(whiskers).unwrap();
             }
         } else {
             ctx.draw_series(LineSeries::new(series.means.clone(), &series.color))

@@ -4,7 +4,7 @@ use crate::scheduler::scheduling_tree::schedule_jobs_ct;
 use crate::scheduler::tree_slotset::TreeSlotSet;
 use std::collections::HashMap;
 
-pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -> (usize, usize) {
+pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> (usize, usize) {
     let now = platform.get_now();
     let max_time = platform.get_max_time();
 

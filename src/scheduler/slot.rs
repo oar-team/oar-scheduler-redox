@@ -2,6 +2,7 @@ use crate::models::models::ProcSet;
 use crate::models::models::{Moldable, ScheduledJobData};
 use prettytable::{format, row, Table};
 use std::collections::HashMap;
+use std::iter::Iterator;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -14,46 +15,44 @@ pub struct Slot {
     proc_set: ProcSet,
     begin: i64,
     end: i64,
-    /// Stores the intervals that might be taken, but available to be shared with the user and the job.
-    /// HashMap<user_name or *, HashMap<job name or *, ProcSet>>
-    time_shared_intervals: HashMap<String, HashMap<String, ProcSet>>,
-    // ph_itvs: HashMap<String, ProcSet>,
+    // Stores the intervals that might be taken, but available to be shared with the user and the job.
+    // HashMap<user_name or *, HashMap<job name or *, ProcSet>>
+    //time_shared_proc_set: HashMap<String, HashMap<String, ProcSet>>,
+    // placeholder_proc_set: HashMap<String, ProcSet>,
 }
 
 impl Slot {
-    pub fn new(id: i32, prev: Option<i32>, next: Option<i32>, itvs: ProcSet, b: i64, e: i64) -> Slot {
+    pub fn new(id: i32, prev: Option<i32>, next: Option<i32>, proc_set: ProcSet, begin: i64, end: i64) -> Slot {
         Slot {
             id,
             prev,
             next,
-            proc_set: itvs,
-            begin: b,
-            end: e,
-            time_shared_intervals: HashMap::new(),
-            //ph_itvs: HashMap::new(),
+            proc_set,
+            begin,
+            end,
+            //time_shared_proc_set: HashMap::new(),
+            //placeholder_proc_set: HashMap::new(),
         }
     }
 
     pub fn id(&self) -> i32 {
         self.id
     }
-
+    #[allow(dead_code)]
     pub fn prev(&self) -> Option<i32> {
         self.prev
     }
-
+    #[allow(dead_code)]
     pub fn next(&self) -> Option<i32> {
         self.next
     }
-
     pub fn intervals(&self) -> &ProcSet {
         &self.proc_set
     }
-
     pub fn begin(&self) -> i64 {
         self.begin
     }
-
+    #[allow(dead_code)]
     pub fn end(&self) -> i64 {
         self.end
     }
@@ -71,8 +70,10 @@ impl Slot {
 /// A SlotSet cannot be empty.
 #[derive(Clone, Debug)]
 pub struct SlotSet {
-    begin: i64,    // beginning of the SlotSet (begin of the first slot)
-    end: i64,      // end of the SlotSet (end of the last slot)
+    #[allow(dead_code)]
+    begin: i64, // beginning of the SlotSet (begin of the first slot)
+    #[allow(dead_code)]
+    end: i64, // end of the SlotSet (end of the last slot)
     first_id: i32, // id of the first slot in the list
     last_id: i32,  // id of the last slot in the list
     next_id: i32,  // next available id
@@ -82,6 +83,7 @@ pub struct SlotSet {
 
 impl SlotSet {
     /// Create a SlotSet from a HashMap of Slots. Slots must form a doubly linked list.
+    #[allow(dead_code)]
     pub fn from_map(slots: HashMap<i32, Slot>, first_slot_id: i32) -> SlotSet {
         // Find the first slot
         let first_slot = slots
@@ -149,8 +151,8 @@ impl SlotSet {
             buFc->"Begin (epoch)",
             buFc->"End (epoch)",
             buFc->"Size (days)",
-            buFc->"Itvs",
-            buFc->"Ph_itvs"
+            buFc->"ProcSet",
+            //buFc->"Placeholders ProcSets"
         ]);
         let mut slot = self.first_slot();
         while let Some(s) = slot {
@@ -162,7 +164,7 @@ impl SlotSet {
                 s.end,
                 format!("{:.2}", (s.end - s.begin) as f32 / 3600f32 / 24f32),
                 s.proc_set,
-                //s.ph_itvs,
+                //s.placeholder_proc_set,
             ]);
 
             slot = if let Some(next_id) = s.next { self.slots.get(&next_id) } else { None };
@@ -177,7 +179,7 @@ impl SlotSet {
     pub fn first_slot(&self) -> Option<&Slot> {
         self.slots.get(&self.first_id)
     }
-
+    #[allow(dead_code)]
     pub fn last_slot(&self) -> Option<&Slot> {
         self.slots.get(&self.last_id)
     }
@@ -193,6 +195,7 @@ impl SlotSet {
         self.cache.insert(key, slot_id);
     }
 
+    #[allow(dead_code)]
     pub fn slot_id_at(&self, time: i64, starting_id: Option<i32>) -> Option<i32> {
         self.slot_at(time, starting_id).map(|slot| slot.id)
     }
@@ -316,6 +319,7 @@ impl SlotSet {
         (new_slot_id, slot_id)
     }
     /// Find the slot containing the given time and split it before or after the time. See `Self::split_at`.
+    #[allow(dead_code)]
     pub fn find_and_split_at(&mut self, time: i64, before: bool) -> (i32, i32) {
         let slot = self.slot_at(time, None);
         if let Some(slot) = slot {
@@ -325,9 +329,10 @@ impl SlotSet {
         }
     }
 
-    /// Finds the slot containing begin, and the slot containing end. Returns their ids.
+    /// Finds the slot containing `begin`, and the slot containing `end`. Returns their ids.
     ///     /// If start_slot_id is not None, it will be used to find faster the slot of begin and end by not looping through all the slots.
     /// Equivalent to calling two times `Self::slot_id_at`.
+    #[allow(dead_code)]
     pub fn get_encompassing_range(&self, begin: i64, end: i64, start_slot_id: Option<i32>) -> Option<(&Slot, &Slot)> {
         if let Some(begin_slot) = self.slot_at(begin, start_slot_id) {
             if let Some(end_slot) = self.slot_at(end, Some(begin_slot.id)) {
@@ -338,8 +343,9 @@ impl SlotSet {
     }
 
     /// Find the slot right before begin, and the slot right after end. Returns their ids.
-    /// If start_slot_id is not None, it will be used to find faster the slot of begin and end by not looping through all the slots.
+    /// If start_slot_id is not None, it will be used to find faster the slot of `begin` and end by not looping through all the slots.
     /// Equivalent to calling two times `Self::slot_id_at`, and getting the previous/next ids.
+    #[allow(dead_code)]
     pub fn get_encompassing_range_strict(&self, begin: i64, end: i64, start_slot_id: Option<i32>) -> Option<(&Slot, &Slot)> {
         match self.get_encompassing_range(begin, end, start_slot_id).map(|(s1, s2)| (s1.prev, s2.next)) {
             Some((Some(begin_id), Some(end_id))) => match (self.slots.get(&begin_id), self.slots.get(&end_id)) {
@@ -350,7 +356,7 @@ impl SlotSet {
         }
     }
 
-    /// Splits the slots to make them fit a job at time begin..=end. Create new slots on the outside of the range.
+    /// Splits the slots to make them fit a job at time `begin..=end`. Create new slots on the outside of the range.
     /// If start_slot_id is not None, it will be used to find faster the slots of the range by not looping through all the slots.
     /// Returns the first and last slot ids in which the range can fit, and then in which the job can be scheduled.
     pub fn split_slots_for_range(&mut self, begin: i64, end: i64, start_slot_id: Option<i32>) -> (i32, i32) {
@@ -374,7 +380,12 @@ impl SlotSet {
         }
         (begin_slot_id, end_slot_id)
     }
-    pub fn split_slots_for_job_and_update_resources(&mut self, job: &ScheduledJobData, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
+    pub fn split_slots_for_job_and_update_resources(
+        &mut self,
+        job: &ScheduledJobData,
+        sub_resources: bool,
+        start_slot_id: Option<i32>,
+    ) -> (i32, i32) {
         let (begin_slot_id, end_slot_id) = self.split_slots_for_range(job.begin, job.end, start_slot_id);
         self.iter()
             .between(begin_slot_id, end_slot_id)
@@ -395,6 +406,7 @@ impl SlotSet {
     /// Used to insert the previously scheduled jobs in the slots or container jobs.
     /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
     /// Returns the first and last slot ids in which the job can be scheduled.
+    #[allow(dead_code)]
     pub fn split_slots_for_jobs(&mut self, jobs: &Vec<ScheduledJobData>, mut start_slot_id: Option<i32>) {
         for job in jobs {
             let (begin_slot_id, _end_slot_id) = self.split_slots_for_range(job.begin, job.end, start_slot_id);
@@ -415,11 +427,11 @@ impl SlotSet {
             .between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.intervals())
     }
-
+    #[allow(dead_code)]
     pub fn begin(&self) -> i64 {
         self.begin
     }
-
+    #[allow(dead_code)]
     pub fn end(&self) -> i64 {
         self.end
     }
@@ -473,6 +485,7 @@ impl<'a> SlotIterator<'a> {
         self.begin = Some(start_id);
         self
     }
+    #[allow(dead_code)]
     pub fn end_at(mut self, end_id: i32) -> SlotIterator<'a> {
         self.end = Some(end_id);
         self

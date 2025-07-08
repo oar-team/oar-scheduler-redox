@@ -1,6 +1,6 @@
 use crate::models::models::ProcSet;
 use crate::models::models::{Moldable, ProcSetCoresOp, ScheduledJobData};
-use log::{debug, info};
+use log::debug;
 use prettytable::{format, row, Table};
 use slab_tree::*;
 
@@ -50,6 +50,7 @@ impl TreeNode {
     pub fn slot(&self) -> &TreeSlot {
         &self.slot
     }
+    #[allow(dead_code)]
     pub fn slot_mut(&mut self) -> &mut TreeSlot {
         &mut self.slot
     }
@@ -139,7 +140,7 @@ impl TreeSlotSet {
             self.add_node_to_table(&left, table, indent + 1, show_nodes);
         }
 
-        // Add current node to the table
+        // Add the current node to the table
         let node_data = node.data();
         if show_nodes || node_data.is_leaf {
             table.add_row(row![
@@ -191,7 +192,7 @@ impl TreeSlotSet {
         let last_child_end = node.last_child().map(|mut child| child.data().end());
         let tree_node = node.data();
         let original_proc_set = tree_node.slot().proc_set.clone();
-        tree_node.slot_mut().sub_resources(proc_set);
+        tree_node.sub_resources(proc_set);
 
         if tree_node.is_leaf {
             if tree_node.slot().end >= split_before {
@@ -205,13 +206,13 @@ impl TreeSlotSet {
                 let right_child_id = node.last_child().unwrap().node_id();
                 node.first_child().unwrap().data().set_node_id(left_child_id);
                 node.last_child().unwrap().data().set_node_id(right_child_id);
-                // Union is unchanged
+                // The union is unchanged
             } else {
                 // Taking the full leaf
                 tree_node.proc_set_union = tree_node.proc_set().clone();
             }
         } else {
-            // Union loses the proc_set only if all children are taken by the moldable
+            // The union loses the proc_set only if all children are taken by the moldable
             if last_child_end.unwrap() < split_before - 1 {
                 tree_node.sub_union_resources(proc_set);
             }
@@ -247,9 +248,13 @@ impl TreeSlotSet {
     }
 
     pub fn count_leaves_and_nodes(&self) -> (usize, usize) {
-        self.tree.root().unwrap().traverse_level_order().fold((0, 0), |(leaves, nodes), node| match node.data().is_leaf {
-            true => (leaves + 1, nodes + 1),
-            false => (leaves, nodes + 1),
-        })
+        self.tree
+            .root()
+            .unwrap()
+            .traverse_level_order()
+            .fold((0, 0), |(leaves, nodes), node| match node.data().is_leaf {
+                true => (leaves + 1, nodes + 1),
+                false => (leaves, nodes + 1),
+            })
     }
 }

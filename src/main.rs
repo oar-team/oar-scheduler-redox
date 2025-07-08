@@ -2,11 +2,11 @@ use crate::benchmarker::{BenchmarkTarget, WaitingJobsSampleType};
 use crate::grapher::graph_benchmark_result;
 use log::LevelFilter;
 
+mod benchmarker;
+mod grapher;
 mod models;
 mod platform;
 mod scheduler;
-mod benchmarker;
-mod grapher;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
@@ -18,5 +18,4 @@ async fn main() {
 
     let results = target.benchmark_batch(averaging, res_count, 0, 1000, 100).await;
     graph_benchmark_result("2_filtered".to_string(), target, results);
-
 }

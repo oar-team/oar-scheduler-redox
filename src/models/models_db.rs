@@ -3,69 +3,69 @@ use crate::models::models::ProcSet;
 #[derive(Debug, Clone)]
 pub enum JobTypeEnum {
     Interactive,
-    Passive
+    Passive,
 }
 
 #[derive(Debug, Clone)]
 pub enum JobStateEnum {
-    Waiting, // the job is waiting OAR scheduler decision.
-    Hold, // user or administrator wants to hold the job (oarhold command). So it will not be scheduled by the system.
-    toLaunch, // the OAR scheduler has attributed some nodes to the job. So it will be launched.
-    toError, // something wrong occurred and the job is going into the error state.
+    Waiting,          // the job is waiting OAR scheduler decision.
+    Hold,             // user or administrator wants to hold the job (oarhold command). So it will not be scheduled by the system.
+    toLaunch,         // the OAR scheduler has attributed some nodes to the job. So it will be launched.
+    toError,          // something wrong occurred and the job is going into the error state.
     toAckReservation, // the OAR scheduler must say “YES” or “NO” to the waiting oarsub command because it requested a reservation.
-    Launching, //  OAR has launched the job and will execute the user command on the first node.
-    Running, // the user command is executing on the first node.
+    Launching,        //  OAR has launched the job and will execute the user command on the first node.
+    Running,          // the user command is executing on the first node.
     Suspended, // the job was in Running state and there was a request (oarhold with “-r” option) to suspend this job. In this state other jobs can be scheduled on the same resources (these resources has the “suspended_jobs” field to “YES”).
     Resuming,
-    Finishing, // the user command has terminated and OAR is doing work internally
+    Finishing,  // the user command has terminated and OAR is doing work internally
     Terminated, // the job has terminated normally
-    Error, // a problem has occurred
+    Error,      // a problem has occurred
 }
 
 #[derive(Debug, Clone)]
 pub enum JobReservationEnum {
-    None, // the job is not a reservation.
+    None,       // the job is not a reservation.
     toSchedule, // the job is a reservation and must be approved by the scheduler.
-    Scheduled // the job is a reservation and is scheduled by OAR.
+    Scheduled,  // the job is a reservation and is scheduled by OAR.
 }
 
 #[derive(Debug, Clone)]
 pub enum JobSuspendedEnum {
     Yes,
-    No
+    No,
 }
 
 #[derive(Debug, Clone)]
 pub enum JobAccountedEnum {
     Yes,
-    No
+    No,
 }
 
 // Job model with moldable and resource information
 #[derive(Debug, Clone)]
 pub struct Job {
-    pub id: u32, // job identifier
-    pub array_id: i32, // array identifier
-    pub array_index: i32, // index of the job in the array
+    pub id: u32,                         // job identifier
+    pub array_id: i32,                   // array identifier
+    pub array_index: i32,                // index of the job in the array
     pub initial_request: Option<String>, // oarsub initial arguments
-    pub name: Option<String>, // name given by the user
-    pub env: Option<String>, // name of the cpuset directory used for this job on each nodes
-    pub type_: JobTypeEnum, // specify if the user wants to launch a program or get an interactive shell
-    pub info_type: Option<String>, // some informations about oarsub command
-    pub state: JobStateEnum, // job state
+    pub name: Option<String>,            // name given by the user
+    pub env: Option<String>,             // name of the cpuset directory used for this job on each nodes
+    pub type_: JobTypeEnum,              // specify if the user wants to launch a program or get an interactive shell
+    pub info_type: Option<String>,       // some informations about oarsub command
+    pub state: JobStateEnum,             // job state
     pub reservation: JobReservationEnum, // specify if the job is a reservation and the state of this one
-    pub message: String, // readable information message for the user
-    pub user: String, // user name
-    pub command: Option<String>, // program to run
+    pub message: String,                 // readable information message for the user
+    pub user: String,                    // user name
+    pub command: Option<String>,         // program to run
     pub queue_name: String,
-    pub properties: Option<String>, // properties that assigned nodes must match
+    pub properties: Option<String>,  // properties that assigned nodes must match
     pub launching_directory: String, // path of the directory where to launch the user process
     pub submission_time: i64,
     pub start_time: i64,
     pub stop_time: i64,
     pub file_id: Option<i32>,
-    pub accounted: JobAccountedEnum, // specify if the job was considered by the accounting mechanism or not
-    pub notify: Option<String>, // gives the way to notify the user about the job (mail or script )
+    pub accounted: JobAccountedEnum,        // specify if the job was considered by the accounting mechanism or not
+    pub notify: Option<String>,             // gives the way to notify the user about the job (mail or script )
     pub assigned_moldable_job: Option<i32>, //
     pub checkpoint: i32,
     pub checkpoint_signal: i32,
@@ -306,12 +306,36 @@ impl Job {
         Self::new(id, 0, 0, walltime, JobStateEnum::Waiting, JobReservationEnum::None, res_set)
     }
     pub fn new_reserved(id: u32, start_time: i64, end_time: i64, walltime: i64, res_set: ProcSet) -> Job {
-        Self::new(id, start_time, end_time, walltime, JobStateEnum::toLaunch, JobReservationEnum::Scheduled, res_set)
+        Self::new(
+            id,
+            start_time,
+            end_time,
+            walltime,
+            JobStateEnum::toLaunch,
+            JobReservationEnum::Scheduled,
+            res_set,
+        )
     }
     pub fn new_scheduled(id: u32, start_time: i64, end_time: i64, walltime: i64, res_set: ProcSet) -> Job {
-        Self::new(id, start_time, end_time, walltime, JobStateEnum::toLaunch, JobReservationEnum::None, res_set)
+        Self::new(
+            id,
+            start_time,
+            end_time,
+            walltime,
+            JobStateEnum::toLaunch,
+            JobReservationEnum::None,
+            res_set,
+        )
     }
-    pub fn new(id: u32, start_time: i64, end_time: i64, walltime: i64, state: JobStateEnum, reservation: JobReservationEnum, res_set: ProcSet) -> Job {
+    pub fn new(
+        id: u32,
+        start_time: i64,
+        end_time: i64,
+        walltime: i64,
+        state: JobStateEnum,
+        reservation: JobReservationEnum,
+        res_set: ProcSet,
+    ) -> Job {
         Job {
             id,
             array_id: 0,

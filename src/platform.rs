@@ -54,7 +54,6 @@ impl PlatformTrait for PlatformTest {
     }
 }
 
-
 #[derive(Clone)]
 pub struct ResourceSet {
     pub default_intervals: ProcSet,

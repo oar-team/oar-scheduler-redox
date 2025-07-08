@@ -1,5 +1,5 @@
-use crate::models::models::{Moldable, ScheduledJobData};
 use crate::models::models::ProcSet;
+use crate::models::models::{Moldable, ScheduledJobData};
 use crate::scheduler::tree_slotset::TreeSlotSet;
 
 #[test]

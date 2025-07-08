@@ -1,6 +1,6 @@
 use crate::models::models::ProcSet;
 use crate::models::models::{Moldable, ProcSetCoresOp, ScheduledJobData};
-use log::debug;
+use log::{debug, info};
 use prettytable::{format, row, Table};
 use slab_tree::*;
 
@@ -242,5 +242,12 @@ impl TreeSlotSet {
             FitState::None => return (1, None),
         }
         (1, None)
+    }
+
+    pub fn count_leaves_and_nodes(&self) -> (usize, usize) {
+        self.tree.root().unwrap().traverse_level_order().fold((0, 0), |(leaves, nodes), node| match node.data().is_leaf {
+            true => (leaves + 1, nodes + 1),
+            false => (leaves, nodes + 1),
+        })
     }
 }

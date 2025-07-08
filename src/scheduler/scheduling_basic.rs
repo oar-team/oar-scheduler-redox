@@ -7,12 +7,12 @@ use std::cmp::max;
 use std::collections::HashMap;
 
 /// Schedule loop with support for jobs container - can be recursive
-pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {
+pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>, cache_enabled: bool) {
     waiting_jobs.into_iter().for_each(|job| {
         let slot_set_name = "default".to_string();
 
         let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
-        assign_resources_mld_job_split_slots(slot_set, job);
+        assign_resources_mld_job_split_slots(slot_set, job, cache_enabled);
     });
 }
 
@@ -23,7 +23,7 @@ pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: 
 /// This function has two side effects.
 ///   - Assign the results directly to the `job` (such as start_time, resources, etc.)
 ///   - Split the slot_set to reflect the new allocation
-pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Job) {
+pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Job, cache_enabled: bool) {
     let mut chosen_slot_id_left = None;
     let mut chosen_begin = None;
     let mut chosen_end = None;
@@ -46,10 +46,12 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
     });
 
     if let Some(chosen_moldable_index) = chosen_moldable_index {
-        slot_set.insert_cache_entry(
-            job.moldables.get(chosen_moldable_index).unwrap().get_cache_key(),
-            chosen_slot_id_left.unwrap(),
-        );
+        if cache_enabled {
+            slot_set.insert_cache_entry(
+                job.moldables.get(chosen_moldable_index).unwrap().get_cache_key(),
+                chosen_slot_id_left.unwrap(),
+            );
+        }
         let scheduled_data = ScheduledJobData::new(
             chosen_begin.unwrap(),
             chosen_end.unwrap(),

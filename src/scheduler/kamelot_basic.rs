@@ -5,7 +5,7 @@ use crate::scheduler::slot::SlotSet;
 use std::collections::HashMap;
 
 
-pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) {
+pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>, cache_enabled: bool) -> usize {
     let now = platform.get_now();
     let max_time = platform.get_max_time();
 
@@ -36,10 +36,13 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) {
 
         // Scheduling
         let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);
-        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs);
+        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs, cache_enabled);
 
         // Save assignments
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();
         platform.set_scheduled_jobs(scheduled_jobs);
+
+        return slot_sets.get("default").unwrap().slot_count();
     }
+    0
 }

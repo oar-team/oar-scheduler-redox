@@ -1,5 +1,5 @@
-use crate::models::models::{Job, ScheduledJobData};
 use crate::models::models::ProcSet;
+use crate::models::models::ScheduledJobData;
 use crate::scheduler::slot::{Slot, SlotSet};
 use std::collections::HashMap;
 

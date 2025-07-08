@@ -423,6 +423,10 @@ impl SlotSet {
     pub fn end(&self) -> i64 {
         self.end
     }
+
+    pub fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
 }
 
 #[derive(Clone)]

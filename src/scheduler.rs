@@ -5,3 +5,4 @@ pub mod scheduling_tree;
 pub mod slot;
 mod tests;
 pub mod tree_slotset;
+pub mod hierarchy;

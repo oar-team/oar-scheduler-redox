@@ -1,5 +1,6 @@
 use crate::models::models::Job;
 use crate::models::models::ProcSet;
+use crate::scheduler::hierarchy::Hierarchy;
 
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;
@@ -58,12 +59,27 @@ impl PlatformTrait for PlatformTest {
 pub struct ResourceSet {
     pub default_intervals: ProcSet,
     pub available_upto: Vec<(i64, ProcSet)>,
+    pub hierarchy: Hierarchy,
 }
 impl Default for ResourceSet {
     fn default() -> ResourceSet {
         ResourceSet {
             default_intervals: ProcSet::from_iter([0..=99]),
             available_upto: vec![(150, ProcSet::from_iter([0..=49]))],
+            hierarchy: Hierarchy::new()
+                .add_partition("switch".into(), Box::new([ProcSet::from_iter([0..=49]), ProcSet::from_iter([50..=99])]))
+                .add_partition(
+                    "node".into(),
+                    Box::new([
+                        ProcSet::from_iter([0..=16]),
+                        ProcSet::from_iter([17..=33]),
+                        ProcSet::from_iter([34..=49]),
+                        ProcSet::from_iter([50..=66]),
+                        ProcSet::from_iter([67..=83]),
+                        ProcSet::from_iter([84..=99]),
+                    ]),
+                )
+                .add_partition("core".into(), (0..=99).map(|x| ProcSet::from_iter([x..=x])).collect::<Box<[ProcSet]>>()),
         }
     }
 }

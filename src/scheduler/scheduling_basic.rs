@@ -1,18 +1,18 @@
 use crate::models::models::ProcSet;
-use crate::models::models::ProcSetCoresOp;
 use crate::models::models::{Job, Moldable, ScheduledJobData};
 use crate::scheduler::slot::SlotSet;
 use log::{debug, info};
 use std::cmp::max;
 use std::collections::HashMap;
+use crate::scheduler::hierarchy::Hierarchy;
 
 /// Schedule loop with support for jobs container - can be recursive
-pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>, cache_enabled: bool) {
+pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>, hierarchy: &Hierarchy, cache_enabled: bool) {
     waiting_jobs.into_iter().for_each(|job| {
         let slot_set_name = "default".to_string();
 
         let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
-        assign_resources_mld_job_split_slots(slot_set, job, cache_enabled);
+        assign_resources_mld_job_split_slots(slot_set, job, hierarchy, cache_enabled);
     });
 }
 
@@ -23,7 +23,7 @@ pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: 
 /// This function has two side effects.
 ///   - Assign the results directly to the `job` (such as start_time, resources, etc.)
 ///   - Split the slot_set to reflect the new allocation
-pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Job, cache_enabled: bool) {
+pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Job, hierarchy: &Hierarchy, cache_enabled: bool) {
     let mut chosen_slot_id_left = None;
     let mut chosen_begin = None;
     let mut chosen_end = None;
@@ -31,7 +31,7 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
     let mut chosen_proc_set = None;
 
     job.moldables.iter().enumerate().for_each(|(i, moldable)| {
-        if let Some((slot_id_left, _slot_id_right, proc_set)) = find_first_suitable_contiguous_slots(slot_set, moldable) {
+        if let Some((slot_id_left, _slot_id_right, proc_set)) = find_first_suitable_contiguous_slots(slot_set, moldable, hierarchy) {
             let begin = slot_set.get_slot(slot_id_left).unwrap().begin();
             let end = begin + max(0, moldable.walltime - 1);
 
@@ -66,7 +66,7 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
     }
 }
 
-pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Moldable) -> Option<(i32, i32, ProcSet)> {
+pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Moldable, hierarchy: &Hierarchy) -> Option<(i32, i32, ProcSet)> {
     let mut iter = slot_set.iter();
     if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
         iter = iter.start_at(cache_first_slot);
@@ -74,9 +74,10 @@ pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Molda
     let mut count = 0;
     let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
         count += 1;
-        let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id()) & &moldable.filter_proc_set;
-        available_resources
-            .sub_proc_set_with_cores(moldable.core_count)
+
+        let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id());
+
+        hierarchy.request(&available_resources, &moldable.requests)
             .map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))
     });
     debug!("Found slots for moldable visiting {} slots", count);

@@ -35,7 +35,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, 
 
         // Scheduling
         let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);
-        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs, cache_enabled);
+        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs, &resource_set.hierarchy, cache_enabled);
 
         // Save assignments
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();

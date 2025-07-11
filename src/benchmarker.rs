@@ -1,5 +1,6 @@
 use crate::models::models::{Job, Moldable, ProcSet};
 use crate::platform::{PlatformTest, ResourceSet};
+use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use crate::scheduler::{kamelot_basic, kamelot_tree};
 use log::info;
 use plotters::data::Quartiles;
@@ -215,6 +216,23 @@ impl BenchmarkTarget {
                 let resource_set = ResourceSet {
                     default_intervals: ProcSet::from_iter([1..=res_count_clone]),
                     available_upto: vec![],
+                    hierarchy: Hierarchy::new()
+                        .add_partition(
+                            "switch".into(),
+                            (1..=5)
+                                .map(|i| ProcSet::from_iter([(1 + res_count_clone * (i - 1) / 5)..=(res_count_clone * i / 5)]))
+                                .collect::<Box<[ProcSet]>>(),
+                        )
+                        .add_partition(
+                            "node".into(),
+                            (1..=40)
+                                .map(|i| ProcSet::from_iter([(1 + res_count_clone * (i - 1) / 40)..=(res_count_clone * i / 40)]))
+                                .collect::<Box<[ProcSet]>>(),
+                        )
+                        .add_partition(
+                            "core".into(),
+                            (1..=res_count_clone).map(|i| ProcSet::from_iter([i..=i])).collect::<Box<[ProcSet]>>(),
+                        ),
                 };
 
                 let waiting_jobs = get_sample_waiting_jobs(res_count_clone, jobs_count, sample_type);
@@ -287,7 +305,11 @@ fn gen_random_jobs(
         let res_size = max(core_count, rand::random_range((res_min / res_step)..=(res_max / res_step)) * res_step);
         let res_start = rand::random_range(1..=((res_all_max - res_size) / res_step)) * res_step;
         let filter_proc_set = ProcSet::from_iter([res_start..=(res_start + res_size)]);
-        jobs.push(Job::new(i as u32, vec![Moldable::new(walltime, core_count, filter_proc_set)]));
+        let moldable = Moldable::new(
+            walltime,
+            HierarchyRequests::from_requests(vec![HierarchyRequest::new(ProcSet::from_iter([0..=10_000]), vec![("core".into(), core_count)])]),
+        );
+        jobs.push(Job::new(i as u32, vec![moldable]));
     }
     jobs
 }

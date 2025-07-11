@@ -1,5 +1,6 @@
 use crate::models::models::ProcSet;
 use crate::models::models::{Moldable, ProcSetCoresOp, ScheduledJobData};
+use crate::scheduler::hierarchy::Hierarchy;
 use log::debug;
 use prettytable::{format, row, Table};
 use slab_tree::*;
@@ -93,29 +94,28 @@ impl TreeNode {
     /// Return [`FitState::None`] if the moldable cannot fit in this node or its children.
     /// Return [`FitState::MaybeChildren`] if the moldable might fit in the children. The children can then be traversed to find a smaller fitting node.
     /// Return [`FitState::Fit(proc_set)`] if the moldable fits in this node, and the `proc_set` is the resources that can be claimed for the moldable.
-    pub fn fit_state(&self, moldable: &Moldable) -> FitState {
+    pub fn fit_state(&self, moldable: &Moldable, hierarchy: &Hierarchy) -> FitState {
         if moldable.walltime <= self.slot.duration() {
             // Needs to fit without considering the MaybeChildren option because is_leaf or because no children will be large enough for the walltime.
             if self.is_leaf || moldable.walltime == self.slot.duration() {
-                return self.fit_moldable_otherwise(moldable, FitState::None);
+                return hierarchy
+                    .request(&self.slot.proc_set, &moldable.requests)
+                    .map(|proc_set| FitState::Fit(proc_set))
+                    .unwrap_or(FitState::None);
             }
             // Check that it might fit on children
-            let union_filtered_proc_set = &self.proc_set_union & &moldable.filter_proc_set;
-            if union_filtered_proc_set.core_count() >= moldable.core_count {
-                return self.fit_moldable_otherwise(moldable, FitState::MaybeChildren);
-            }
+            return hierarchy
+                .request(&self.proc_set_union, &moldable.requests)
+                .map(|_| {
+                    // Fits on the union: either it fits the intersection, or return MaybeChildren
+                    hierarchy
+                        .request(&self.slot.proc_set, &moldable.requests)
+                        .map(|proc_set| FitState::Fit(proc_set))
+                        .unwrap_or(FitState::MaybeChildren)
+                })
+                .unwrap_or(FitState::None); // Do not fit the union
         }
         FitState::None
-    }
-    /// Helper function to check if the moldable fits in the current node (in the intersection of the proc_set of its children).
-    /// If it fits, returns [`FitState::Fit(proc_set)`] with the resources that can be claimed for the moldable, otherwise returns `otherwise`.
-    fn fit_moldable_otherwise(&self, moldable: &Moldable, otherwise: FitState) -> FitState {
-        let intersection_filtered_proc_set = &self.slot.proc_set & &moldable.filter_proc_set;
-        if let Some(proc_set) = intersection_filtered_proc_set.sub_proc_set_with_cores(moldable.core_count) {
-            FitState::Fit(proc_set)
-        } else {
-            otherwise
-        }
     }
 }
 
@@ -251,18 +251,18 @@ impl TreeSlotSet {
     /// The returned node is bigger than the moldable walltime and may not be a leaf.
     /// The job can be scheduled starting at the beginning of the node, and resources can be subtracted using [`TreeSlotSet::claim_node_for_scheduled_job`].
     /// If no node can fit the moldable, returns `None`.
-    pub fn find_node_for_moldable(&self, moldable: &Moldable) -> Option<(&TreeNode, ProcSet)> {
-        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable);
+    pub fn find_node_for_moldable(&self, moldable: &Moldable, hierarchy: &Hierarchy) -> Option<(&TreeNode, ProcSet)> {
+        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, hierarchy);
         debug!("Found node for moldable iterating over {} nodes", count);
         node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set))
     }
     /// Helper recursive function to find a node for moldable, see [`TreeSlotSet::find_node_for_moldable`].
-    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable) -> (usize, Option<(NodeId, ProcSet)>) {
-        match node.data().fit_state(moldable) {
+    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable, hierarchy: &Hierarchy) -> (usize, Option<(NodeId, ProcSet)>) {
+        match node.data().fit_state(moldable, hierarchy) {
             FitState::Fit(proc_set) => return (1, Some((node.node_id(), proc_set))),
             FitState::MaybeChildren => {
                 for child in node.children() {
-                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable);
+                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable, hierarchy);
                     if let Some(child) = child {
                         return (1 + count, Some(child));
                     }

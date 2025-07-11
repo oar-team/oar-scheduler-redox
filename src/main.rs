@@ -12,10 +12,10 @@ mod scheduler;
 async fn main() {
     env_logger::Builder::new().filter(None, LevelFilter::Info).init();
 
-    let averaging = 30;
+    let averaging = 1;
     let res_count = 10_000;
     let target = BenchmarkTarget::Basic(WaitingJobsSampleType::NormalMoreIdenticalDurations, true);
 
-    let results = target.benchmark_batch(averaging, res_count, 0, 1000, 100).await;
-    graph_benchmark_result("2_filtered".to_string(), target, results);
+    let results = target.benchmark_batch(averaging, res_count, 500, 500, 100).await;
+    graph_benchmark_result("3_hierarchy".to_string(), target, results);
 }

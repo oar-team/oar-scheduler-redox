@@ -1,4 +1,5 @@
 use range_set_blaze::RangeSetBlaze;
+use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 
 pub type ProcSet = RangeSetBlaze<u32>;
 
@@ -21,8 +22,7 @@ pub struct ScheduledJobData {
 #[derive(Debug, Clone)]
 pub struct Moldable {
     pub walltime: i64,
-    pub core_count: u32,
-    pub filter_proc_set: ProcSet,
+    pub requests: HierarchyRequests
 }
 
 impl Job {
@@ -58,15 +58,14 @@ impl ScheduledJobData {
 }
 
 impl Moldable {
-    pub fn new(walltime: i64, core_count: u32, filter_proc_set: ProcSet) -> Moldable {
+    pub fn new(walltime: i64, requests: HierarchyRequests) -> Moldable {
         Moldable {
             walltime,
-            core_count,
-            filter_proc_set,
+            requests
         }
     }
     pub fn get_cache_key(&self) -> String {
-        format!("{}-{}-{}", self.walltime, self.core_count, self.filter_proc_set.to_string())
+        format!("{}-{}", self.walltime, self.requests.get_cache_key())
     }
 }
 

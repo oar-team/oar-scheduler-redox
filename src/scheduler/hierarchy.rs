@@ -1,9 +1,32 @@
 use crate::models::models::ProcSet;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HierarchyRequests(Box<[HierarchyRequest]>);
+impl HierarchyRequests {
+    pub fn from_requests(requests: Vec<HierarchyRequest>) -> Self {
+        HierarchyRequests(requests.into_boxed_slice())
+    }
+    pub fn get_cache_key(&self) -> String {
+        self.0.iter()
+            .map(|req| format!("{}-{}", req.filter, req.level_nbs.iter().map(|(name, count)| format!("{}:{}", name, count)).collect::<Vec<_>>().join(",")))
+            .collect::<Vec<_>>()
+            .join(";")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyRequest {
     pub filter: ProcSet,
     pub level_nbs: Box<[(Box<str>, u32)]> // Level name, number of resources requested at that level
+}
+impl HierarchyRequest {
+    pub fn new(filter: ProcSet, level_nbs: Vec<(Box<str>, u32)>) -> Self {
+        HierarchyRequest {
+            filter,
+            level_nbs: level_nbs.into_boxed_slice(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,13 +43,10 @@ impl Hierarchy {
 }
 
 impl Hierarchy {
-    pub fn request(&self, available_proc_set: &ProcSet, request: &Box<[HierarchyRequest]>) -> ProcSet {
-        request.into_iter().fold(ProcSet::new(), |acc, req| {
-            if let Some(partition) = self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs) {
-                acc | partition
-            } else {
-                acc
-            }
+    pub fn request(&self, available_proc_set: &ProcSet, request: &HierarchyRequests) -> Option<ProcSet> {
+        request.0.iter().try_fold(ProcSet::new(), |acc, req| {
+            self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs)
+                .map(|partition| partition | acc)
         })
     }
     pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {

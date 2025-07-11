@@ -1,59 +1,56 @@
 use crate::models::models::ProcSet;
-use std::borrow::Cow;
+use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Hierarchy {
-    Node(Vec<(ProcSet, Hierarchy)>),
-    Leaf(Vec<ProcSet>),
+pub struct HierarchyRequest {
+    pub filter: ProcSet,
+    pub level_nbs: Box<[(Box<str>, u32)]> // Level name, number of resources requested at that level
 }
 
-fn test() {
-    let test = Hierarchy::Node(vec![
-        (
-            ProcSet::from_iter([1..=16]),
-            Hierarchy::Leaf(vec![ProcSet::from_iter([1..=8]), ProcSet::from_iter([9..=16])]),
-        ),
-        (
-            ProcSet::from_iter([17..=32]),
-            Hierarchy::Leaf(vec![
-                ProcSet::from_iter([17..=20]),
-                ProcSet::from_iter([21..=24]),
-                ProcSet::from_iter([25..=32]),
-            ]),
-        ),
-    ]);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hierarchy(HashMap<Box<str>, Box<[ProcSet]>>); // Level name, partitions of that level
+
+impl Hierarchy {
+    pub fn new() -> Self {
+        Hierarchy(HashMap::new())
+    }
+    pub fn add_partition(mut self, level: Box<str>, partitions: Box<[ProcSet]>) -> Self {
+        self.0.insert(level, partitions);
+        self
+    }
 }
 
 impl Hierarchy {
-    pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[u32]) -> Option<ProcSet> {
-        let proc_sets = match self {
-            Hierarchy::Node(children) => children
-                .iter()
-                .filter_map(|(proc_set, hierarchy)| {
-                    if level_requests.len() < 2 {
-                        if proc_set.is_subset(&available_proc_set) {
-                            return Some(Cow::Borrowed(proc_set));
-                        } else {
-                            return None;
-                        }
+    pub fn request(&self, available_proc_set: &ProcSet, request: &Box<[HierarchyRequest]>) -> ProcSet {
+        request.into_iter().fold(ProcSet::new(), |acc, req| {
+            if let Some(partition) = self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs) {
+                acc | partition
+            } else {
+                acc
+            }
+        })
+    }
+    pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {
+        let (name, request) = &level_requests[0];
+        if let Some(partitions) = self.0.get(name) {
+            let (proc_sets, count) = partitions.iter()
+                .filter_map(|proc_set| {
+                    if level_requests.len() > 1 {
+                        self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])
+                    }else if proc_set.is_subset(&available_proc_set) {
+                        Some(proc_set.clone())
+                    }else {
+                        None
                     }
-                    hierarchy
-                        .find_resource_hierarchies_scattered(&available_proc_set, &level_requests[1..level_requests.len()])
-                        .map(|proc_set| Cow::Owned(proc_set))
                 })
-                .take(level_requests[0] as usize)
-                .collect::<Vec<_>>(),
-            Hierarchy::Leaf(proc_sets) => proc_sets
-                .iter()
-                .filter(|proc_set| proc_set.is_subset(&available_proc_set))
-                .take(level_requests[0] as usize)
-                .map(|proc_set| Cow::Borrowed(proc_set))
-                .collect::<Vec<_>>(),
-        };
-        if proc_sets.len() < level_requests[0] as usize {
-            None
+                .take(*request as usize)
+                .fold((ProcSet::new(), 0), |(acc, count), proc_set| (acc | proc_set, count + 1));
+
+            if count < *request {
+                return None;
+            }
+            Some(proc_sets)
         } else {
-            Some(proc_sets.iter().fold(ProcSet::new(), |acc, proc_set| acc | proc_set.as_ref()))
+            None
         }
     }
 }

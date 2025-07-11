@@ -2,11 +2,13 @@ use crate::models::models::{Job, Moldable, ProcSet};
 use crate::platform::{PlatformTest, ResourceSet};
 use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use crate::scheduler::{kamelot_basic, kamelot_tree};
-use log::info;
+use log::{debug, info};
+use plotters::coord::ranged1d::NoDefaultFormatting;
 use plotters::data::Quartiles;
 use std::cmp::max;
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
@@ -216,22 +218,18 @@ impl BenchmarkTarget {
                 let resource_set = ResourceSet {
                     default_intervals: ProcSet::from_iter([1..=res_count_clone]),
                     available_upto: vec![],
-                    hierarchy: Hierarchy::new()
+                    hierarchy: Hierarchy::new("cores".into())
                         .add_partition(
-                            "switch".into(),
+                            "switches".into(),
                             (1..=5)
                                 .map(|i| ProcSet::from_iter([(1 + res_count_clone * (i - 1) / 5)..=(res_count_clone * i / 5)]))
                                 .collect::<Box<[ProcSet]>>(),
                         )
                         .add_partition(
-                            "node".into(),
+                            "nodes".into(),
                             (1..=40)
                                 .map(|i| ProcSet::from_iter([(1 + res_count_clone * (i - 1) / 40)..=(res_count_clone * i / 40)]))
                                 .collect::<Box<[ProcSet]>>(),
-                        )
-                        .add_partition(
-                            "core".into(),
-                            (1..=res_count_clone).map(|i| ProcSet::from_iter([i..=i])).collect::<Box<[ProcSet]>>(),
                         ),
                 };
 
@@ -264,55 +262,110 @@ impl BenchmarkTarget {
 
 fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType) -> Vec<Job> {
     let mut waiting_jobs: Vec<Job> = vec![];
-    match sample_type {
-        WaitingJobsSampleType::Normal => {
-            waiting_jobs.append(gen_random_jobs(1_000_000, jobs_count / 3, 10, 60, 1, 1, 11, 2, 64, 128, 16, res_count).as_mut());
-            waiting_jobs.append(gen_random_jobs(2_000_000, jobs_count / 3, 30, 60 * 3, 5, 1, 201, 5, 128, 256, 32, res_count).as_mut());
-            waiting_jobs.append(gen_random_jobs(3_000_000, jobs_count / 3, 60, 60 * 12, 15, 10, 500, 10, 256, 512, 64, res_count).as_mut());
+    let mut jobs = match sample_type {
+        WaitingJobsSampleType::Normal => RandomJobGenerator {
+            count: jobs_count,
+            walltime_min: 10,
+            walltime_max: 60 * 24,
+            walltime_i_ratio: 0.1,
+            core_min: 1,
+            core_max: 1000,
+            core_i_ratio: 0.1,
+            node_hierarchy_ratio: 0.5,
+            node_size: 250,
+            filter_min: 1,
+            filter_max: res_count,
+            filter_min_size: 1000,
+            filter_i_ratio: 0.1,
+            total_res: res_count,
         }
+        .generate_jobs(),
+        WaitingJobsSampleType::HighCacheHits => RandomJobGenerator {
+            count: jobs_count,
+            walltime_min: 1,
+            walltime_max: 24 * 10,
+            walltime_i_ratio: 0.1,
+            core_min: 1,
+            core_max: 10,
+            core_i_ratio: 0.1,
+            node_hierarchy_ratio: 0.01,
+            node_size: 250,
+            filter_min: 1,
+            filter_max: res_count,
+            filter_min_size: res_count,
+            filter_i_ratio: 0.1,
+            total_res: res_count,
+        }
+        .generate_jobs(),
         WaitingJobsSampleType::NormalMoreIdenticalDurations => {
-            waiting_jobs.append(gen_random_jobs(1_000_000, jobs_count / 3, 10, 60, 5, 1, 11, 2, 0, 128, 16, res_count).as_mut());
-            waiting_jobs.append(gen_random_jobs(2_000_000, jobs_count / 3, 30, 60 * 3, 10, 10, 200, 10, 128, 1024, 32, res_count).as_mut());
-            waiting_jobs.append(gen_random_jobs(3_000_000, jobs_count / 3, 60, 60 * 12, 20, 20, 500, 20, 256, 1024, 64, res_count).as_mut());
+            vec![]
         }
-        WaitingJobsSampleType::HighCacheHits => {
-            waiting_jobs.append(gen_random_jobs(1_000_000, jobs_count / 3, 10, 60, 1, 1, 11, 2, 64, 128, 64, res_count).as_mut());
-            waiting_jobs.append(gen_random_jobs(2_000_000, jobs_count / 3, 30, 60 * 3, 10, 1, 11, 2, 128, 256, 128, res_count).as_mut());
-            waiting_jobs.append(gen_random_jobs(3_000_000, jobs_count / 3, 60, 60 * 12, 120, 1, 11, 2, 256, 512, 256, res_count).as_mut());
-        }
-    }
+    };
+    waiting_jobs.append(&mut jobs);
     waiting_jobs
 }
-fn gen_random_jobs(
-    offset: usize,
+struct RandomJobGenerator {
     count: usize,
-    duration_min: i64,
-    duration_max: i64,
-    duration_step: i64,
+    walltime_min: u32,
+    walltime_max: u32,
+    walltime_i_ratio: f32,
     core_min: u32,
     core_max: u32,
-    core_step: u32,
-    res_min: u32,
-    res_max: u32,
-    res_step: u32,
-    res_all_max: u32,
-) -> Vec<Job> {
-    let mut jobs: Vec<Job> = vec![];
-    for i in offset..(offset + count) {
-        let walltime = rand::random_range((duration_min / duration_step)..=(duration_max / duration_step)) * duration_step;
-        let core_count = rand::random_range((core_min / core_step)..=(core_max / core_step)) * core_step;
-
-        let res_size = max(core_count, rand::random_range((res_min / res_step)..=(res_max / res_step)) * res_step);
-        let res_start = rand::random_range(1..=((res_all_max - res_size) / res_step)) * res_step;
-        let filter_proc_set = ProcSet::from_iter([res_start..=(res_start + res_size)]);
-        let moldable = Moldable::new(
-            walltime,
-            HierarchyRequests::from_requests(vec![HierarchyRequest::new(ProcSet::from_iter([0..=10_000]), vec![("core".into(), core_count)])]),
-        );
-        jobs.push(Job::new(i as u32, vec![moldable]));
-    }
-    jobs
+    core_i_ratio: f32,
+    node_hierarchy_ratio: f64,
+    node_size: u32,
+    filter_min: u32,
+    filter_max: u32,
+    filter_min_size: u32,
+    filter_i_ratio: f32,
+    total_res: u32,
 }
+impl RandomJobGenerator {
+    fn generate_jobs(&self) -> Vec<Job> {
+        let mut jobs: Vec<Job> = Vec::with_capacity(self.count);
+        for i in 0..self.count {
+            let walltime = self.generate_in_range_with_i_ratio(self.walltime_min, self.walltime_max, self.walltime_i_ratio) as i64;
+            let core_count = self.generate_in_range_with_i_ratio(self.core_min, self.core_max, self.core_i_ratio);
+            let filter = self.generate_range_in_range_with_i_ratio(self.filter_min, self.filter_max, self.filter_min_size, self.total_res, self.filter_i_ratio);
+
+            let request = if rand::random_bool(self.node_hierarchy_ratio) {
+                let node_count = self.generate_in_range_with_i_ratio(
+                    1 + (core_count / self.node_size).min(self.total_res / self.node_size),
+                    (1 + (core_count / self.node_size) * 10).min(self.total_res / self.node_size),
+                    self.core_i_ratio,
+                );
+
+                HierarchyRequest::new(
+                    ProcSet::from_iter(filter),
+                    vec![("nodes".into(), node_count), ("cores".into(), core_count / node_count)],
+                )
+            } else {
+                HierarchyRequest::new(ProcSet::from_iter(filter), vec![("cores".into(), core_count)])
+            };
+
+            let moldable = Moldable::new(walltime, HierarchyRequests::from_requests(vec![request]));
+            jobs.push(Job::new(i as u32, vec![moldable]));
+        }
+        jobs
+    }
+    fn generate_in_range_with_i_ratio(&self, min: u32, max: u32, i_ratio: f32) -> u32 {
+        if min >= max {
+            return min;
+        }
+        let value = rand::random_range(min..=max);
+        value
+    }
+    fn generate_range_in_range_with_i_ratio(&self, min: u32, max: u32, size_min: u32, size_max: u32, i_ratio: f32) -> RangeInclusive<u32> {
+        let size = self.generate_in_range_with_i_ratio(size_min, size_max, i_ratio.sqrt());
+        if min >= (max-size) {
+            return (max - size_min)..=max;
+        }
+
+        let start = rand::random_range(min..=(max - size));
+        start..=(start + size - 1)
+    }
+}
+
 fn count_cache_hits(waiting_jobs: &Vec<Job>) -> usize {
     let mut cache = HashSet::new();
     let mut cache_hits = 0;

@@ -3,10 +3,9 @@ use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests
 use crate::scheduler::tree_slotset::TreeSlotSet;
 
 fn get_hierarchy() -> Hierarchy {
-    Hierarchy::new()
-        .add_partition("switch".into(), Box::from([ProcSet::from_iter(1..=16), ProcSet::from_iter(17..=32)]))
-        .add_partition("node".into(), Box::from([ProcSet::from_iter(1..=16), ProcSet::from_iter(16..=32)]))
-        .add_partition("core".into(), (1..=32).map(|i| ProcSet::from_iter(i..=i)).collect::<Box<[ProcSet]>>())
+    Hierarchy::new("cores".into())
+        .add_partition("switches".into(), Box::from([ProcSet::from_iter(1..=16), ProcSet::from_iter(17..=32)]))
+        .add_partition("nodes".into(), Box::from([ProcSet::from_iter(1..=16), ProcSet::from_iter(16..=32)]))
 }
 
 #[test]
@@ -16,10 +15,10 @@ pub fn test_claim_node_for_moldable_1() {
 
     let h = get_hierarchy();
     let req1 = HierarchyRequests::from_requests(vec![
-        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("core".into(), 5)])
+        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);
     let req2 = HierarchyRequests::from_requests(vec![
-        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("core".into(), 6)])
+        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 6)])
     ]);
 
     let m1 = Moldable::new(10, req1);
@@ -45,10 +44,10 @@ pub fn test_claim_node_for_moldable_2() {
 
     let h = get_hierarchy();
     let req1 = HierarchyRequests::from_requests(vec![
-        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("core".into(), 5)])
+        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);
     let req2 = HierarchyRequests::from_requests(vec![
-        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("core".into(), 5)])
+        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);
 
     let m1 = Moldable::new(10, req1);
@@ -74,10 +73,10 @@ pub fn test_claim_node_for_moldable_3() {
 
     let h = get_hierarchy();
     let req1 = HierarchyRequests::from_requests(vec![
-        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("core".into(), 5)])
+        HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);
     let req2 = HierarchyRequests::from_requests(vec![
-        HierarchyRequest::new(ProcSet::from_iter([1..=8]), vec![("core".into(), 5)])
+        HierarchyRequest::new(ProcSet::from_iter([1..=8]), vec![("cores".into(), 5)])
     ]);
 
     let m1 = Moldable::new(10, req1);

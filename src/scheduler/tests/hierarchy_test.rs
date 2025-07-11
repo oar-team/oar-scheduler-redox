@@ -14,7 +14,7 @@ fn procset(range: RangeInclusive<u32>) -> ProcSet {
 #[test]
 fn test_find_resource_hierarchies_scattered1() {
     // Single level hierarchy
-    let h = Hierarchy::new().add_partition("switch".into(), procsets([1..=16, 17..=32].into()));
+    let h = Hierarchy::new("".into()).add_partition("switch".into(), procsets([1..=16, 17..=32].into()));
     let available = procset(1..=32);
     let result = h.find_resource_hierarchies_scattered(&available, &[("switch".into(), 2)]);
     assert_eq!(result, Some(procset(1..=32)));
@@ -23,7 +23,7 @@ fn test_find_resource_hierarchies_scattered1() {
 #[test]
 fn test_find_resource_hierarchies_scattered2() {
     // Two level hierarchy
-    let h = Hierarchy::new()
+    let h = Hierarchy::new("".into())
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()));
 
@@ -35,7 +35,7 @@ fn test_find_resource_hierarchies_scattered2() {
 #[test]
 fn test_find_resource_hierarchies_scattered3() {
     // Two level hierarchy with partial availability
-    let h = Hierarchy::new()
+    let h = Hierarchy::new("".into())
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()));
 
@@ -47,7 +47,7 @@ fn test_find_resource_hierarchies_scattered3() {
 #[test]
 fn test_find_resource_hierarchies_scattered4() {
     // Three level hierarchy
-    let h = Hierarchy::new()
+    let h = Hierarchy::new("".into())
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()))
         .add_partition(
@@ -61,7 +61,7 @@ fn test_find_resource_hierarchies_scattered4() {
 
 #[test]
 fn test_find_resource_hierarchies_scattered5() {
-    let h = Hierarchy::new()
+    let h = Hierarchy::new("".into())
         .add_partition("switch".into(), procsets([1..=32, 33..=64].into()))
         .add_partition("node".into(), procsets([1..=16, 17..=32, 33..=49, 50..=64].into()))
         .add_partition(
@@ -107,7 +107,7 @@ fn test_find_resource_hierarchies_scattered5() {
 
 #[test]
 fn test_find_resource_hierarchies_scattered6() {
-    let h = Hierarchy::new()
+    let h = Hierarchy::new("".into())
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()))
         .add_partition("cores".into(), procsets([1..=4, 5..=8, 9..=12, 13..=16, 17..=20, 21..=24, 25..=28, 29..=32].into()));

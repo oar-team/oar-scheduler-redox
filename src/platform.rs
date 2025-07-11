@@ -66,10 +66,10 @@ impl Default for ResourceSet {
         ResourceSet {
             default_intervals: ProcSet::from_iter([0..=99]),
             available_upto: vec![(150, ProcSet::from_iter([0..=49]))],
-            hierarchy: Hierarchy::new()
-                .add_partition("switch".into(), Box::new([ProcSet::from_iter([0..=49]), ProcSet::from_iter([50..=99])]))
+            hierarchy: Hierarchy::new("cores".into())
+                .add_partition("switches".into(), Box::new([ProcSet::from_iter([0..=49]), ProcSet::from_iter([50..=99])]))
                 .add_partition(
-                    "node".into(),
+                    "nodes".into(),
                     Box::new([
                         ProcSet::from_iter([0..=16]),
                         ProcSet::from_iter([17..=33]),
@@ -78,8 +78,7 @@ impl Default for ResourceSet {
                         ProcSet::from_iter([67..=83]),
                         ProcSet::from_iter([84..=99]),
                     ]),
-                )
-                .add_partition("core".into(), (0..=99).map(|x| ProcSet::from_iter([x..=x])).collect::<Box<[ProcSet]>>()),
+                ),
         }
     }
 }

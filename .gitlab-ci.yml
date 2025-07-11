@@ -1,0 +1,22 @@
+image: docker:latest
+
+include:
+  - template: Code-Quality.gitlab-ci.yml
+  - template: Secret-Detection.gitlab-ci.yml
+
+stages:
+  - test
+
+test:
+  stage: test
+  image: rustlang/rust:latest
+  script:
+    - cargo build --verbose
+    - cargo test --verbose
+    - cargo tarpaulin --out Xml --cobertura --ignore-tests
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: cobertura.xml
+

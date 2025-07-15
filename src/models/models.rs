@@ -1,11 +1,15 @@
+use crate::scheduler::hierarchy::HierarchyRequests;
 use range_set_blaze::RangeSetBlaze;
-use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 
 pub type ProcSet = RangeSetBlaze<u32>;
 
 #[derive(Debug, Clone)]
 pub struct Job {
     pub id: u32,
+    pub user: String,
+    pub project: String,
+    pub queue: String,
+    pub types: Vec<String>,
     pub moldables: Vec<Moldable>,
     pub scheduled_data: Option<ScheduledJobData>,
 }
@@ -22,21 +26,29 @@ pub struct ScheduledJobData {
 #[derive(Debug, Clone)]
 pub struct Moldable {
     pub walltime: i64,
-    pub requests: HierarchyRequests
+    pub requests: HierarchyRequests,
 }
 
 impl Job {
-    pub fn new(id: u32, moldable: Vec<Moldable>) -> Job {
+    pub fn new(id: u32, user: String, project: String, queue: String, types: Vec<String>, moldable: Vec<Moldable>) -> Job {
         Job {
             id,
+            user,
+            project,
+            queue,
+            types,
             moldables: moldable,
             scheduled_data: None,
         }
     }
     #[allow(dead_code)]
-    pub fn new_scheduled(id: u32, moldable: Vec<Moldable>, scheduled_data: ScheduledJobData) -> Job {
+    pub fn new_scheduled(id: u32, user: String, project: String, queue: String, types: Vec<String>, moldable: Vec<Moldable>, scheduled_data: ScheduledJobData) -> Job {
         Job {
             id,
+            user,
+            project,
+            queue,
+            types,
             moldables: moldable,
             scheduled_data: Some(scheduled_data),
         }
@@ -55,14 +67,14 @@ impl ScheduledJobData {
             moldable_index,
         }
     }
+    pub fn count_resources(&self) -> u32 {
+        self.proc_set.len() as u32
+    }
 }
 
 impl Moldable {
     pub fn new(walltime: i64, requests: HierarchyRequests) -> Moldable {
-        Moldable {
-            walltime,
-            requests
-        }
+        Moldable { walltime, requests }
     }
     pub fn get_cache_key(&self) -> String {
         format!("{}-{}", self.walltime, self.requests.get_cache_key())

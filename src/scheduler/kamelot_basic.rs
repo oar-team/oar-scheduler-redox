@@ -11,7 +11,8 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, 
     let mut waiting_jobs = platform.get_waiting_jobs().clone();
 
     if waiting_jobs.len() > 0 {
-        let resource_set = platform.get_resource_set();
+        let resource_set = &platform.get_platform_config().resource_set;
+
         let mut initial_slot_set = SlotSet::from_proc_set(resource_set.default_intervals.clone(), now, max_time);
 
         // Resource availability (available_upto field) is integrated through pseudo jobs

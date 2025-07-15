@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
+use range_set_blaze::ValueRef;
+use crate::scheduler::quotas::QuotasConfig;
 
 #[derive(Clone)]
 pub struct BenchmarkResult {
@@ -67,12 +69,12 @@ impl From<Vec<u32>> for BenchmarkMeasurementStatistics {
         value.sort();
         let mean = value.iter().sum::<u32>() / value.len() as u32;
         BenchmarkMeasurementStatistics {
-            min: value.get(0).unwrap().to_owned(),
-            max: value.get(value.len() - 1).unwrap().to_owned(),
+            min: *ValueRef::to_owned(&value.get(0).unwrap()),
+            max: ValueRef::to_owned(value.get(value.len() - 1).unwrap()),
             mean,
-            q1: value.iter().nth(value.len() / 4).unwrap().to_owned(),
-            q2: value.iter().nth(value.len() / 2).unwrap().to_owned(),
-            q3: value.iter().nth(value.len() * 3 / 4).unwrap().to_owned(),
+            q1: ValueRef::to_owned(value.iter().nth(value.len() / 4).unwrap()),
+            q2: ValueRef::to_owned(value.iter().nth(value.len() / 2).unwrap()),
+            q3: ValueRef::to_owned(value.iter().nth(value.len() * 3 / 4).unwrap()),
             std_dev: (value.iter().map(|x| ((*x as i32 - mean as i32) as f64).powi(2)).sum::<f64>() / value.len() as f64) as u32,
             quartiles: Quartiles::new(&value),
         }
@@ -236,7 +238,7 @@ impl BenchmarkTarget {
                 let waiting_jobs = get_sample_waiting_jobs(res_count_clone, jobs_count, sample_type);
                 let cache_hits = count_cache_hits(&waiting_jobs);
 
-                let mut platform = PlatformTest::new(resource_set, vec![], waiting_jobs);
+                let mut platform = PlatformTest::new(resource_set, QuotasConfig::default(), vec![], waiting_jobs);
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, (slot_count, nodes_count)) = measure_time(|| match target {
@@ -344,7 +346,7 @@ impl RandomJobGenerator {
             };
 
             let moldable = Moldable::new(walltime, HierarchyRequests::from_requests(vec![request]));
-            jobs.push(Job::new(i as u32, vec![moldable]));
+            jobs.push(Job::new(i as u32, "user".to_string(), "project".to_string(), "queue".to_string(), vec!["types".to_string()], vec![moldable]));
         }
         jobs
     }

@@ -1,12 +1,14 @@
+use std::rc::Rc;
 use crate::models::models::Job;
 use crate::models::models::ProcSet;
 use crate::scheduler::hierarchy::Hierarchy;
+use crate::scheduler::quotas::QuotasConfig;
 
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;
     fn get_max_time(&self) -> i64;
 
-    fn get_resource_set(&self) -> &ResourceSet;
+    fn get_platform_config(&self) -> &Rc<PlatformConfig>;
 
     fn get_scheduled_jobs(&self) -> &Vec<Job>;
     fn get_waiting_jobs(&self) -> &Vec<Job>;
@@ -14,16 +16,19 @@ pub trait PlatformTrait {
     fn set_scheduled_jobs(&mut self, jobs: Vec<Job>);
 }
 
-#[derive(Clone)]
 pub struct PlatformTest {
-    resource_set: ResourceSet,
+    platform_config: Rc<PlatformConfig>,
     scheduled_jobs: Vec<Job>,
     waiting_jobs: Vec<Job>,
 }
 impl PlatformTest {
-    pub fn new(resource_set: ResourceSet, scheduled_jobs: Vec<Job>, waiting_jobs: Vec<Job>) -> PlatformTest {
+    pub fn new(resource_set: ResourceSet, quotas_config: QuotasConfig, scheduled_jobs: Vec<Job>, waiting_jobs: Vec<Job>) -> PlatformTest {
         PlatformTest {
-            resource_set,
+            platform_config: Rc::new(PlatformConfig {
+                hour_size: 60, // As we are using minute resolution for tests
+                resource_set,
+                quotas_config,
+            }),
             scheduled_jobs,
             waiting_jobs,
         }
@@ -38,8 +43,8 @@ impl PlatformTrait for PlatformTest {
         1_000_000
     }
 
-    fn get_resource_set(&self) -> &ResourceSet {
-        &self.resource_set
+    fn get_platform_config(&self) -> &Rc<PlatformConfig> {
+        &self.platform_config
     }
 
     fn get_scheduled_jobs(&self) -> &Vec<Job> {
@@ -55,7 +60,6 @@ impl PlatformTrait for PlatformTest {
     }
 }
 
-#[derive(Clone)]
 pub struct ResourceSet {
     pub default_intervals: ProcSet,
     pub available_upto: Vec<(i64, ProcSet)>,
@@ -81,4 +85,10 @@ impl Default for ResourceSet {
                 ),
         }
     }
+}
+
+pub struct PlatformConfig {
+    pub hour_size: i64, // Size of an hour in units of time (e.g., 3600 for second resolution)
+    pub resource_set: ResourceSet,
+    pub quotas_config: QuotasConfig,
 }

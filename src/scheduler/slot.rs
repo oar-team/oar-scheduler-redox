@@ -2,12 +2,16 @@ use crate::models::models::ProcSet;
 use crate::models::models::{Moldable, ScheduledJobData};
 use prettytable::{format, row, Table};
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
 use std::iter::Iterator;
+use std::rc::Rc;
+use crate::platform::{PlatformConfig};
+use crate::scheduler::quotas::Quotas;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
 /// A slot can have a previous and a next slot, allowing to build a doubly linked list.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Slot {
     id: i32,
     prev: Option<i32>,
@@ -15,14 +19,28 @@ pub struct Slot {
     proc_set: ProcSet,
     begin: i64,
     end: i64,
+   // quotas_rules_id: u32,
+    quotas: Quotas,
+    platform_config: Rc<PlatformConfig>,
     // Stores the intervals that might be taken, but available to be shared with the user and the job.
     // HashMap<user_name or *, HashMap<job name or *, ProcSet>>
     // time_shared_proc_set: HashMap<String, HashMap<String, ProcSet>>,
     // placeholder_proc_set: HashMap<String, ProcSet>,
 }
+impl Debug for Slot {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Including all fields except quotas and platform_config for brevity
+        write!(
+            f,
+            "Slot {{ id: {}, prev: {:?}, next: {:?}, begin: {}, end: {}, proc_set: {} }}",
+            self.id, self.prev, self.next, self.begin, self.end, self.proc_set
+        )
+    }
+}
 
 impl Slot {
-    pub fn new(id: i32, prev: Option<i32>, next: Option<i32>, proc_set: ProcSet, begin: i64, end: i64) -> Slot {
+    pub fn new(platform_config: Rc<PlatformConfig>, id: i32, prev: Option<i32>, next: Option<i32>, proc_set: ProcSet, begin: i64, end: i64) -> Slot {
+
         Slot {
             id,
             prev,
@@ -30,6 +48,8 @@ impl Slot {
             proc_set,
             begin,
             end,
+            quotas: Quotas::new(platform_config.clone(), None),
+            platform_config,
             //time_shared_proc_set: HashMap::new(),
             //placeholder_proc_set: HashMap::new(),
         }
@@ -136,8 +156,8 @@ impl SlotSet {
         }
     }
     /// Create a `SlotSet` with a single slot that covers the entire range from `begin` to `end` with the given `ProcSet`.
-    pub fn from_proc_set(proc_set: ProcSet, begin: i64, end: i64) -> SlotSet {
-        let slot = Slot::new(1, None, None, proc_set, begin, end);
+    pub fn from_proc_set(platform_config: Rc<PlatformConfig>, proc_set: ProcSet, begin: i64, end: i64) -> SlotSet {
+        let slot = Slot::new(platform_config, 1, None, None, proc_set, begin, end);
         SlotSet::from_slot(slot)
     }
 
@@ -288,7 +308,7 @@ impl SlotSet {
         // Create new slot
         let new_slot_id = self.next_id;
         let new_slot = if before {
-            let new_slot = Slot::new(new_slot_id, slot.prev, Some(slot.id), slot.proc_set.clone(), slot.begin, new_begin - 1);
+            let new_slot = Slot::new(Rc::clone(self.platform_config), new_slot_id, slot.prev, Some(slot.id), slot.proc_set.clone(), slot.begin, new_begin - 1);
             // Update original slot
             slot.begin = new_begin;
             slot.prev = Some(new_slot_id);

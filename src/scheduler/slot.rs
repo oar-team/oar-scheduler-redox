@@ -17,7 +17,7 @@ pub struct Slot {
     end: i64,
     // Stores the intervals that might be taken, but available to be shared with the user and the job.
     // HashMap<user_name or *, HashMap<job name or *, ProcSet>>
-    //time_shared_proc_set: HashMap<String, HashMap<String, ProcSet>>,
+    // time_shared_proc_set: HashMap<String, HashMap<String, ProcSet>>,
     // placeholder_proc_set: HashMap<String, ProcSet>,
 }
 

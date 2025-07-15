@@ -34,7 +34,6 @@ impl HierarchyRequest {
 pub struct Hierarchy{
     partitions: HashMap<Box<str>, Box<[ProcSet]>>, // Level name, partitions of that level
     unit_partition: Box<str>, // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
-
 }
 
 impl Hierarchy {

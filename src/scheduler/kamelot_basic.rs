@@ -3,6 +3,7 @@ use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling_basic::schedule_jobs_ct;
 use crate::scheduler::slot::SlotSet;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, cache_enabled: bool) -> usize {
     let now = platform.get_now();
@@ -11,12 +12,10 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, 
     let mut waiting_jobs = platform.get_waiting_jobs().clone();
 
     if waiting_jobs.len() > 0 {
-        let resource_set = &platform.get_platform_config().resource_set;
-
-        let mut initial_slot_set = SlotSet::from_proc_set(resource_set.default_intervals.clone(), now, max_time);
+        let mut initial_slot_set = SlotSet::from_platform(Rc::clone(platform.get_platform_config()), now, max_time);
 
         // Resource availability (available_upto field) is integrated through pseudo jobs
-        let mut pseudo_jobs = resource_set
+        let mut pseudo_jobs = platform.get_platform_config().resource_set
             .available_upto
             .iter()
             .filter(|(time, _)| time < &max_time)
@@ -36,7 +35,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, 
 
         // Scheduling
         let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);
-        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs, &resource_set.hierarchy, cache_enabled);
+        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs, cache_enabled);
 
         // Save assignments
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();

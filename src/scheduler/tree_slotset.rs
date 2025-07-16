@@ -1,22 +1,38 @@
 use crate::models::models::ProcSet;
-use crate::models::models::{Moldable, ProcSetCoresOp, ScheduledJobData};
-use crate::scheduler::hierarchy::Hierarchy;
+use crate::models::models::{Moldable, ScheduledJobData};
+use crate::platform::PlatformConfig;
+use crate::scheduler::quotas::Quotas;
 use log::debug;
 use prettytable::{format, row, Table};
 use slab_tree::*;
+use std::fmt::{Debug, Formatter};
+use std::rc::Rc;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TreeSlot {
     begin: i64,
     end: i64,
     proc_set: ProcSet,
+    quotas: Quotas,
+    platform_config: Rc<PlatformConfig>,
+}
+impl Debug for TreeSlot {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TreeSlot {{ begin: {}, end: {}, proc_set: {} }}", self.begin, self.end, self.proc_set)
+    }
 }
 
 impl TreeSlot {
-    pub fn new(begin: i64, end: i64, proc_set: ProcSet) -> TreeSlot {
-        TreeSlot { begin, end, proc_set }
+    pub fn new(platform_config: Rc<PlatformConfig>, begin: i64, end: i64, proc_set: ProcSet) -> TreeSlot {
+        TreeSlot {
+            begin,
+            end,
+            proc_set,
+            quotas: Quotas::new(Rc::clone(&platform_config), None),
+            platform_config,
+        }
     }
     pub fn duration(&self) -> i64 {
         self.end - self.begin + 1
@@ -94,7 +110,8 @@ impl TreeNode {
     /// Return [`FitState::None`] if the moldable cannot fit in this node or its children.
     /// Return [`FitState::MaybeChildren`] if the moldable might fit in the children. The children can then be traversed to find a smaller fitting node.
     /// Return [`FitState::Fit(proc_set)`] if the moldable fits in this node, and the `proc_set` is the resources that can be claimed for the moldable.
-    pub fn fit_state(&self, moldable: &Moldable, hierarchy: &Hierarchy) -> FitState {
+    pub fn fit_state(&self, moldable: &Moldable) -> FitState {
+        let hierarchy = &self.slot.platform_config.resource_set.hierarchy;
         if moldable.walltime <= self.slot.duration() {
             // Needs to fit without considering the MaybeChildren option because is_leaf or because no children will be large enough for the walltime.
             if self.is_leaf || moldable.walltime == self.slot.duration() {
@@ -107,7 +124,7 @@ impl TreeNode {
             return hierarchy
                 .request(&self.proc_set_union, &moldable.requests)
                 .map(|_| {
-                    // Fits on the union: either it fits the intersection, or return MaybeChildren
+                    // Fits on the union: either it fits the intersection or it returns MaybeChildren
                     hierarchy
                         .request(&self.slot.proc_set, &moldable.requests)
                         .map(|proc_set| FitState::Fit(proc_set))
@@ -121,9 +138,14 @@ impl TreeNode {
 
 /// A SlotSet is a collection of Slots ordered by time.
 /// It is a tree of TreeNode, each node being either a leaf or a node with two children.
-#[derive(Debug)]
 pub struct TreeSlotSet {
     tree: Tree<TreeNode>,
+    platform_config: Rc<PlatformConfig>,
+}
+impl Debug for TreeSlotSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TreeSlotSet {{ tree: {:?} }}", self.tree)
+    }
 }
 impl TreeSlotSet {
     /// Convert the tree structure to a table for display
@@ -175,15 +197,16 @@ impl TreeSlotSet {
     }
 
     /// Builds a new TreeSlotSet with a single slot and a single root-leaf node.
-    pub fn from_slot(slot: TreeSlot) -> TreeSlotSet {
+    pub fn from_slot(platform_config: Rc<PlatformConfig>, slot: TreeSlot) -> TreeSlotSet {
         let mut tree = TreeBuilder::new().with_root(TreeNode::new_leaf(slot)).build();
         let root_id = tree.root_id().unwrap();
         tree.root_mut().unwrap().data().set_node_id(root_id);
-        TreeSlotSet { tree }
+        TreeSlotSet { tree, platform_config }
     }
-    /// Builds a new TreeSlotSet with a single slot and a single root-leaf node.
-    pub fn from_proc_set(proc_set: ProcSet, begin: i64, end: i64) -> TreeSlotSet {
-        Self::from_slot(TreeSlot::new(begin, end, proc_set))
+    /// Builds a new TreeSlotSet with a single slot and a single root-leaf node, with the proc set `platform_config.resource_set.default_intervals`.
+    pub fn from_platform_config(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> TreeSlotSet {
+        let proc_set = platform_config.resource_set.default_intervals.clone();
+        Self::from_slot(Rc::clone(&platform_config), TreeSlot::new(platform_config, begin, end, proc_set))
     }
 
     /// Subtract resources used by `job` to the node `node_id`.
@@ -218,8 +241,18 @@ impl TreeSlotSet {
             if tree_node.slot().end >= split_before {
                 // Split the node into two new children
                 tree_node.is_leaf = false;
-                let left_child = TreeNode::new_leaf(TreeSlot::new(tree_node.begin(), split_before - 1, tree_node.proc_set().clone()));
-                let right_child = TreeNode::new_leaf(TreeSlot::new(split_before, tree_node.end(), original_proc_set));
+                let left_child = TreeNode::new_leaf(TreeSlot::new(
+                    Rc::clone(&tree_node.slot.platform_config),
+                    tree_node.begin(),
+                    split_before - 1,
+                    tree_node.proc_set().clone(),
+                ));
+                let right_child = TreeNode::new_leaf(TreeSlot::new(
+                    Rc::clone(&tree_node.slot.platform_config),
+                    split_before,
+                    tree_node.end(),
+                    original_proc_set,
+                ));
                 node.append(left_child);
                 node.append(right_child);
                 let left_child_id = node.first_child().unwrap().node_id();
@@ -251,18 +284,18 @@ impl TreeSlotSet {
     /// The returned node is bigger than the moldable walltime and may not be a leaf.
     /// The job can be scheduled starting at the beginning of the node, and resources can be subtracted using [`TreeSlotSet::claim_node_for_scheduled_job`].
     /// If no node can fit the moldable, returns `None`.
-    pub fn find_node_for_moldable(&self, moldable: &Moldable, hierarchy: &Hierarchy) -> Option<(&TreeNode, ProcSet)> {
-        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, hierarchy);
+    pub fn find_node_for_moldable(&self, moldable: &Moldable) -> Option<(&TreeNode, ProcSet)> {
+        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable);
         debug!("Found node for moldable iterating over {} nodes", count);
         node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set))
     }
     /// Helper recursive function to find a node for moldable, see [`TreeSlotSet::find_node_for_moldable`].
-    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable, hierarchy: &Hierarchy) -> (usize, Option<(NodeId, ProcSet)>) {
-        match node.data().fit_state(moldable, hierarchy) {
+    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable) -> (usize, Option<(NodeId, ProcSet)>) {
+        match node.data().fit_state(moldable) {
             FitState::Fit(proc_set) => return (1, Some((node.node_id(), proc_set))),
             FitState::MaybeChildren => {
                 for child in node.children() {
-                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable, hierarchy);
+                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable);
                     if let Some(child) = child {
                         return (1 + count, Some(child));
                     }

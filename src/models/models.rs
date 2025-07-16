@@ -88,7 +88,7 @@ pub trait ProcSetCoresOp {
 impl ProcSetCoresOp for ProcSet {
     /// Tries to claim a subset of the `ProcSet` with the specified number of cores.
     /// Will not substract cores to the slots. This function will only try to find a fitting subset of cores
-    /// If successful, return a new `ProcSet` that represents the claimed cores.
+    /// If successful, return a new `ProcSet` that represents the selected available cores.
     /// Returns `None` if there are not enough cores available.
     fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet> {
         let available_cores = self.core_count();

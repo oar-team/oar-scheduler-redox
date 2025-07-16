@@ -1,12 +1,12 @@
 use crate::models::models::ProcSet;
 use crate::models::models::{Moldable, ScheduledJobData};
+use crate::platform::PlatformConfig;
+use crate::scheduler::quotas::Quotas;
 use prettytable::{format, row, Table};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::iter::Iterator;
 use std::rc::Rc;
-use crate::platform::{PlatformConfig};
-use crate::scheduler::quotas::Quotas;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -88,7 +88,7 @@ impl Slot {
 /// A SlotSet is a collection of Slots ordered by time.
 /// It is a doubly linked list of Slots with O(1) access by id through a HashMap.
 /// A SlotSet cannot be empty.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SlotSet {
     #[allow(dead_code)]
     begin: i64, // beginning of the SlotSet (begin of the first slot)
@@ -99,12 +99,22 @@ pub struct SlotSet {
     next_id: i32,  // next available id
     slots: HashMap<i32, Slot>,
     cache: HashMap<String, i32>, // Stores a slot id for a given moldable cache key, allowing to start again at this slot if multiple moldable have the same cache key, i.e., are identical.
+    platform_config: Rc<PlatformConfig>,
+}
+impl Debug for SlotSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SlotSet {{ begin: {}, end: {}, first_id: {}, last_id: {}, next_id: {}, slots_count: {} }}",
+            self.begin, self.end, self.first_id, self.last_id, self.next_id, self.slots.len()
+        )
+    }
 }
 
 impl SlotSet {
     /// Create a SlotSet from a HashMap of Slots. Slots must form a doubly linked list.
     #[allow(dead_code)]
-    pub fn from_map(slots: HashMap<i32, Slot>, first_slot_id: i32) -> SlotSet {
+    pub fn from_map(platform_config: Rc<PlatformConfig>, slots: HashMap<i32, Slot>, first_slot_id: i32) -> SlotSet {
         // Find the first slot
         let first_slot = slots
             .get(&first_slot_id)
@@ -141,10 +151,11 @@ impl SlotSet {
             next_id,
             slots,
             cache: HashMap::new(),
+            platform_config,
         }
     }
     /// Create a `SlotSet` with a single slot.
-    pub fn from_slot(slot: Slot) -> SlotSet {
+    pub fn from_slot(platform_config: Rc<PlatformConfig>, slot: Slot) -> SlotSet {
         SlotSet {
             begin: slot.begin,
             end: slot.end,
@@ -153,12 +164,18 @@ impl SlotSet {
             next_id: slot.id + 1,
             slots: HashMap::from([(slot.id, slot)]),
             cache: HashMap::new(),
+            platform_config,
         }
     }
-    /// Create a `SlotSet` with a single slot that covers the entire range from `begin` to `end` with the given `ProcSet`.
-    pub fn from_proc_set(platform_config: Rc<PlatformConfig>, proc_set: ProcSet, begin: i64, end: i64) -> SlotSet {
-        let slot = Slot::new(platform_config, 1, None, None, proc_set, begin, end);
-        SlotSet::from_slot(slot)
+    /// Create a `SlotSet` with a single slot that covers the entire range from `begin` to `end` with a `ProcSet = platform_config.resource_set.default_intervals`.
+    pub fn from_platform(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> SlotSet {
+        let proc_set = platform_config.resource_set.default_intervals.clone();
+        let slot = Slot::new(Rc::clone(&platform_config), 1, None, None, proc_set, begin, end);
+        SlotSet::from_slot(platform_config, slot)
+    }
+
+    pub fn get_platform_config(&self) -> &Rc<PlatformConfig> {
+        &self.platform_config
     }
 
     /// Builds a `Table` for displaying the slots in a human-readable format.
@@ -308,7 +325,7 @@ impl SlotSet {
         // Create new slot
         let new_slot_id = self.next_id;
         let new_slot = if before {
-            let new_slot = Slot::new(Rc::clone(self.platform_config), new_slot_id, slot.prev, Some(slot.id), slot.proc_set.clone(), slot.begin, new_begin - 1);
+            let new_slot = Slot::new(Rc::clone(&self.platform_config), new_slot_id, slot.prev, Some(slot.id), slot.proc_set.clone(), slot.begin, new_begin - 1);
             // Update original slot
             slot.begin = new_begin;
             slot.prev = Some(new_slot_id);
@@ -316,7 +333,7 @@ impl SlotSet {
             self.set_prev_slot_correct_next_id(&new_slot);
             new_slot
         } else {
-            let new_slot = Slot::new(new_slot_id, Some(slot.id), slot.next, slot.proc_set.clone(), new_begin, slot.end);
+            let new_slot = Slot::new(Rc::clone(&self.platform_config), new_slot_id, Some(slot.id), slot.next, slot.proc_set.clone(), new_begin, slot.end);
             // Update original slot
             slot.end = new_begin - 1;
             slot.next = Some(new_slot_id);
@@ -514,7 +531,7 @@ impl<'a> SlotIterator<'a> {
 }
 
 /// Iterates over Slots, finding each time a following slot with a width `slot2.end - slot1.begin >= width`.
-/// It is possible to iterate over a specific range of the linked list by using the [`SlotIterator`] methods like
+/// It is possible to iterate over a specific range in the linked list by using the [`SlotIterator`] methods like
 /// [`SlotIterator::between`], [`SlotIterator::start_at`], and [`SlotIterator::end_at`] before calling [`SlotIterator::with_width`] or [`SlotWidthIterator::from_iterator`].
 pub struct SlotWidthIterator<'a> {
     begin_iterator: SlotIterator<'a>,

@@ -1,6 +1,6 @@
 use crate::models::models::{ProcSet, ProcSetCoresOp};
-use std::collections::HashMap;
 use log::warn;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyRequests(Box<[HierarchyRequest]>);
@@ -33,22 +33,35 @@ impl HierarchyRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hierarchy{
     partitions: HashMap<Box<str>, Box<[ProcSet]>>, // Level name, partitions of that level
-    unit_partition: Box<str>, // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
+    unit_partition: Option<Box<str>>, // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
 }
 
 impl Hierarchy {
-    pub fn new(unit_partition: Box<str>) -> Self {
+    pub fn new() -> Self {
         Hierarchy {
             partitions: HashMap::new(),
-            unit_partition,
+            unit_partition: None,
         }
     }
-    pub fn add_partition(mut self, level: Box<str>, partitions: Box<[ProcSet]>) -> Self {
-        if level.as_ref() == self.unit_partition.as_ref() {
-            panic!("Cannot add a partition with the same name as the unit partition: {}", self.unit_partition);
+    pub fn add_partition(mut self, name: Box<str>, partitions: Box<[ProcSet]>) -> Self {
+        if self.has_partition(&name) {
+            panic!("A partition with the name {} already exists.", name);
         }
-        self.partitions.insert(level, partitions);
+        self.partitions.insert(name, partitions);
         self
+    }
+    pub fn add_unit_partition(mut self, name: Box<str>) -> Self {
+        if self.has_partition(&name) {
+            panic!("A partition with the name {} already exists.", name);
+        }
+        if self.unit_partition.is_some() {
+            panic!("A unit partition is already defined.");
+        }
+        self.unit_partition = Some(name);
+        self
+    }
+    pub fn has_partition(&self, name: &Box<str>) -> bool {
+        self.partitions.contains_key(name.as_ref()) || Some(name) == self.unit_partition.as_ref()
     }
 }
 
@@ -62,7 +75,7 @@ impl Hierarchy {
     pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {
         let (name, request) = &level_requests[0];
         // Optimization for core that should correspond to a single proc.
-        if name.as_ref() == self.unit_partition.as_ref() {
+        if let Some(_name) = self.unit_partition.as_ref() {
             return available_proc_set.sub_proc_set_with_cores(*request);
         }
 
@@ -71,7 +84,7 @@ impl Hierarchy {
                 .filter_map(|proc_set| {
                     if level_requests.len() > 1 {
                         // If next level is core, do not iterate over it and do the check directly. The core level should correspond to a single proc.
-                        if level_requests[1].0.as_ref() == self.unit_partition.as_ref() {
+                        if let Some(_name) = self.unit_partition.as_ref() {
                             proc_set.sub_proc_set_with_cores(level_requests[1].1)
                         } else {
                             self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])

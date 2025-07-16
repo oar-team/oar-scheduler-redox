@@ -1,6 +1,6 @@
 use crate::models::models::ProcSet;
-use std::ops::RangeInclusive;
 use crate::scheduler::hierarchy::Hierarchy;
+use std::ops::RangeInclusive;
 
 #[allow(dead_code)]
 fn procsets(ranges: Box<[RangeInclusive<u32>]>) -> Box<[ProcSet]> {
@@ -14,7 +14,7 @@ fn procset(range: RangeInclusive<u32>) -> ProcSet {
 #[test]
 fn test_find_resource_hierarchies_scattered1() {
     // Single level hierarchy
-    let h = Hierarchy::new("".into()).add_partition("switch".into(), procsets([1..=16, 17..=32].into()));
+    let h = Hierarchy::new().add_partition("switch".into(), procsets([1..=16, 17..=32].into()));
     let available = procset(1..=32);
     let result = h.find_resource_hierarchies_scattered(&available, &[("switch".into(), 2)]);
     assert_eq!(result, Some(procset(1..=32)));
@@ -23,7 +23,7 @@ fn test_find_resource_hierarchies_scattered1() {
 #[test]
 fn test_find_resource_hierarchies_scattered2() {
     // Two level hierarchy
-    let h = Hierarchy::new("".into())
+    let h = Hierarchy::new()
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()));
 
@@ -35,7 +35,7 @@ fn test_find_resource_hierarchies_scattered2() {
 #[test]
 fn test_find_resource_hierarchies_scattered3() {
     // Two level hierarchy with partial availability
-    let h = Hierarchy::new("".into())
+    let h = Hierarchy::new()
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()));
 
@@ -47,7 +47,7 @@ fn test_find_resource_hierarchies_scattered3() {
 #[test]
 fn test_find_resource_hierarchies_scattered4() {
     // Three level hierarchy
-    let h = Hierarchy::new("".into())
+    let h = Hierarchy::new()
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()))
         .add_partition(
@@ -61,7 +61,7 @@ fn test_find_resource_hierarchies_scattered4() {
 
 #[test]
 fn test_find_resource_hierarchies_scattered5() {
-    let h = Hierarchy::new("".into())
+    let h = Hierarchy::new()
         .add_partition("switch".into(), procsets([1..=32, 33..=64].into()))
         .add_partition("node".into(), procsets([1..=16, 17..=32, 33..=49, 50..=64].into()))
         .add_partition(
@@ -101,22 +101,28 @@ fn test_find_resource_hierarchies_scattered5() {
             ),
         );
 
-    let result = h.find_resource_hierarchies_scattered(&procset(1..=64), &[("switch".into(), 2), ("node".into(), 2), ("cpus".into(), 1), ("cores".into(), 1)]);
+    let result = h.find_resource_hierarchies_scattered(
+        &procset(1..=64),
+        &[("switch".into(), 2), ("node".into(), 2), ("cpus".into(), 1), ("cores".into(), 1)],
+    );
     assert_eq!(result, Some(procset(1..=2) | procset(17..=19) | procset(33..=34) | procset(50..=52)));
 }
 
 #[test]
 fn test_find_resource_hierarchies_scattered6() {
-    let h = Hierarchy::new("".into())
+    let h = Hierarchy::new()
         .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
         .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()))
-        .add_partition("cores".into(), procsets([1..=4, 5..=8, 9..=12, 13..=16, 17..=20, 21..=24, 25..=28, 29..=32].into()));
+        .add_partition(
+            "cpus".into(),
+            procsets([1..=4, 5..=8, 9..=12, 13..=16, 17..=20, 21..=24, 25..=28, 29..=32].into()),
+        );
 
     // Test with [2, 2, 1] levels
-    let result = h.find_resource_hierarchies_scattered(&procset(1..=32), &[("switch".into(), 2), ("node".into(), 2), ("cores".into(), 1)]);
+    let result = h.find_resource_hierarchies_scattered(&procset(1..=32), &[("switch".into(), 2), ("node".into(), 2), ("cpus".into(), 1)]);
     assert_eq!(result, Some(procset(1..=4) | procset(9..=12) | procset(17..=20) | procset(25..=28)));
 
     // Test with [1, 2, 1] levels
-    let result = h.find_resource_hierarchies_scattered(&procset(1..=32), &[("switch".into(), 1), ("node".into(), 2), ("cores".into(), 1)]);
+    let result = h.find_resource_hierarchies_scattered(&procset(1..=32), &[("switch".into(), 1), ("node".into(), 2), ("cpus".into(), 1)]);
     assert_eq!(result, Some(procset(1..=4) | procset(9..=12)));
 }

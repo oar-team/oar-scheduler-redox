@@ -1,17 +1,19 @@
+use crate::benchmark::platform_mock;
+use crate::benchmark::platform_mock::PlatformBenchMock;
 use crate::models::models::{Job, Moldable, ProcSet};
-use crate::platform::{PlatformTest, ResourceSet};
+use crate::platform::{PlatformConfig, ResourceSet};
 use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
+use crate::scheduler::quotas::QuotasConfig;
 use crate::scheduler::{kamelot_basic, kamelot_tree};
 use log::{debug, info};
 use plotters::coord::ranged1d::NoDefaultFormatting;
 use plotters::data::Quartiles;
+use range_set_blaze::ValueRef;
 use std::cmp::max;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
-use range_set_blaze::ValueRef;
-use crate::scheduler::quotas::QuotasConfig;
 
 #[derive(Clone)]
 pub struct BenchmarkResult {
@@ -217,28 +219,12 @@ impl BenchmarkTarget {
             let target = self.clone();
             let sample_type = self.sample_type();
             tokio::spawn(async move {
-                let resource_set = ResourceSet {
-                    default_intervals: ProcSet::from_iter([1..=res_count_clone]),
-                    available_upto: vec![],
-                    hierarchy: Hierarchy::new("cores".into())
-                        .add_partition(
-                            "switches".into(),
-                            (1..=5)
-                                .map(|i| ProcSet::from_iter([(1 + res_count_clone * (i - 1) / 5)..=(res_count_clone * i / 5)]))
-                                .collect::<Box<[ProcSet]>>(),
-                        )
-                        .add_partition(
-                            "nodes".into(),
-                            (1..=40)
-                                .map(|i| ProcSet::from_iter([(1 + res_count_clone * (i - 1) / 40)..=(res_count_clone * i / 40)]))
-                                .collect::<Box<[ProcSet]>>(),
-                        ),
-                };
 
                 let waiting_jobs = get_sample_waiting_jobs(res_count_clone, jobs_count, sample_type);
                 let cache_hits = count_cache_hits(&waiting_jobs);
 
-                let mut platform = PlatformTest::new(resource_set, QuotasConfig::default(), vec![], waiting_jobs);
+                let platform_config = platform_mock::generate_mock_platform_config(res_count_clone, 48, 4, 64);
+                let mut platform = PlatformBenchMock::new(platform_config, vec![], waiting_jobs);
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, (slot_count, nodes_count)) = measure_time(|| match target {

@@ -1,15 +1,19 @@
+use crate::benchmark::platform_mock::generate_mock_platform_config;
 use crate::models::models::ProcSet;
 use crate::models::models::ScheduledJobData;
 use crate::scheduler::slot::{Slot, SlotSet};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub fn get_test_slot_set() -> SlotSet {
-    let s1: Slot = Slot::new(1, None, Some(2), ProcSet::from_iter([1..=32]), 0, 9);
-    let s2: Slot = Slot::new(2, Some(1), Some(3), ProcSet::from_iter([1..=16, 28..=32]), 10, 19);
-    let s3: Slot = Slot::new(3, Some(2), None, ProcSet::from_iter([1..=8, 30..=32]), 20, 29);
+    let platform_config = Rc::new(generate_mock_platform_config(100, 48, 4, 64));
+
+    let s1: Slot = Slot::new(Rc::clone(&platform_config), 1, None, Some(2), ProcSet::from_iter([1..=32]), 0, 9);
+    let s2: Slot = Slot::new(Rc::clone(&platform_config), 2, Some(1), Some(3), ProcSet::from_iter([1..=16, 28..=32]), 10, 19);
+    let s3: Slot = Slot::new(Rc::clone(&platform_config), 3, Some(2), None, ProcSet::from_iter([1..=8, 30..=32]), 20, 29);
 
     let slots = HashMap::from([(1, s1), (2, s2), (3, s3)]);
-    SlotSet::from_map(slots, 1)
+    SlotSet::from_map(Rc::clone(&platform_config), slots, 1)
 }
 
 #[test]

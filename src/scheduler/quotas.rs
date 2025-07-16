@@ -51,15 +51,15 @@ impl Default for QuotasConfig {
 
 impl QuotasConfig {
     /// Creates a new QuotasConfig with the given parameters.
-    pub fn new(enabled: bool, calendar: Option<Calendar>, default_rules: QuotasMap, tracked_job_types: Box<[Box<str>]>) -> Rc<Self> {
+    pub fn new(enabled: bool, calendar: Option<Calendar>, default_rules: QuotasMap, tracked_job_types: Box<[Box<str>]>) -> Self {
         let default_rules_tree = Rc::new(QuotasTree::from(default_rules.clone()));
-        Rc::new(QuotasConfig {
+        QuotasConfig {
             enabled,
             calendar,
             default_rules: Rc::new(default_rules),
             default_rules_tree,
             tracked_job_types,
-        })
+        }
     }
 }
 
@@ -74,6 +74,13 @@ pub struct QuotasValue {
     resources_times: Option<i64>, // Resource time in use (nb_resources * walltime)
 }
 impl QuotasValue {
+    pub fn new(resources: Option<u32>, running_jobs: Option<u32>, resources_times: Option<i64>) -> Self {
+        QuotasValue {
+            resources,
+            running_jobs,
+            resources_times,
+        }
+    }
     /// Increments the values of `self` by the given amounts.
     /// Used by the counters to track the current usage of quotas.
     pub fn increment(&mut self, resources: u32, running_jobs: u32, resources_times: i64) {

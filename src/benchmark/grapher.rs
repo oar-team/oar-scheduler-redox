@@ -1,4 +1,4 @@
-use crate::benchmarker::{BenchmarkAverageResult, BenchmarkMeasurementStatistics, BenchmarkTarget};
+use crate::benchmark::benchmarker::{BenchmarkAverageResult, BenchmarkMeasurementStatistics, BenchmarkTarget};
 use plotters::backend::SVGBackend;
 use plotters::chart::{ChartBuilder, LabelAreaPosition, SeriesLabelPosition};
 use plotters::data::Quartiles;

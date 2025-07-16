@@ -47,11 +47,11 @@ impl PlatformBenchMock {
 
 
 
-pub fn generate_mock_platform_config(res_count: u32, switch_size: u32, node_size: u32, cpu_size: u32) -> PlatformConfig {
+pub fn generate_mock_platform_config(res_count: u32, switch_size: u32, node_size: u32, cpu_size: u32, quotas_enable: bool) -> PlatformConfig {
     PlatformConfig {
         hour_size: 60,
         resource_set: generate_mock_resource_set(res_count, switch_size, node_size, cpu_size),
-        quotas_config: Default::default(),
+        quotas_config: generate_mock_quotas_config(quotas_enable),
     }
 }
 

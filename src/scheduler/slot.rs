@@ -155,8 +155,9 @@ impl SlotSet {
         }
     }
     /// Create a `SlotSet` with a single slot.
-    pub fn from_slot(platform_config: Rc<PlatformConfig>, slot: Slot) -> SlotSet {
+    pub fn from_slot(slot: Slot) -> SlotSet {
         SlotSet {
+            platform_config: Rc::clone(&slot.platform_config),
             begin: slot.begin,
             end: slot.end,
             first_id: slot.id,
@@ -164,14 +165,13 @@ impl SlotSet {
             next_id: slot.id + 1,
             slots: HashMap::from([(slot.id, slot)]),
             cache: HashMap::new(),
-            platform_config,
         }
     }
     /// Create a `SlotSet` with a single slot that covers the entire range from `begin` to `end` with a `ProcSet = platform_config.resource_set.default_intervals`.
     pub fn from_platform(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> SlotSet {
         let proc_set = platform_config.resource_set.default_intervals.clone();
-        let slot = Slot::new(Rc::clone(&platform_config), 1, None, None, proc_set, begin, end);
-        SlotSet::from_slot(platform_config, slot)
+        let slot = Slot::new(platform_config, 1, None, None, proc_set, begin, end);
+        SlotSet::from_slot(slot)
     }
 
     pub fn get_platform_config(&self) -> &Rc<PlatformConfig> {

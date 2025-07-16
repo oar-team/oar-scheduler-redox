@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use crate::benchmark::platform_mock::generate_mock_platform_config;
 use crate::models::models::{Moldable, ProcSet, ScheduledJobData};
 use crate::platform::PlatformConfig;
@@ -5,15 +6,10 @@ use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests
 use crate::scheduler::tree_slotset::TreeSlotSet;
 use std::rc::Rc;
 
+#[allow(dead_code)]
 fn get_platform_config() -> Rc<PlatformConfig> {
-    Rc::new(generate_mock_platform_config(10, 10, 10, 10))
-}
-
-fn get_hierarchy() -> Hierarchy {
-    Hierarchy::new()
-        .add_partition("switches".into(), Box::from([ProcSet::from_iter(1..=16), ProcSet::from_iter(17..=32)]))
-        .add_partition("nodes".into(), Box::from([ProcSet::from_iter(1..=16), ProcSet::from_iter(16..=32)]))
-        .add_unit_partition("cores".into())
+    // HierarchyRequests in here are only made on cores, then we can keep a single switch, single node, and single CPU.
+    Rc::new(generate_mock_platform_config(10, 10, 10, 10, false))
 }
 
 #[test]
@@ -22,7 +18,6 @@ pub fn test_claim_node_for_moldable_1() {
     let mut ss = TreeSlotSet::from_platform_config(get_platform_config(), 0, 100);
     ss.to_table(true).printstd();
 
-    let h = get_hierarchy();
     let req1 = HierarchyRequests::from_requests(vec![
         HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);
@@ -51,7 +46,6 @@ pub fn test_claim_node_for_moldable_2() {
     let mut ss = TreeSlotSet::from_platform_config(get_platform_config(), 0, 100);
     ss.to_table(true).printstd();
 
-    let h = get_hierarchy();
     let req1 = HierarchyRequests::from_requests(vec![
         HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);
@@ -80,7 +74,6 @@ pub fn test_claim_node_for_moldable_3() {
     let mut ss = TreeSlotSet::from_platform_config(get_platform_config(), 0, 100);
     ss.to_table(true).printstd();
 
-    let h = get_hierarchy();
     let req1 = HierarchyRequests::from_requests(vec![
         HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);

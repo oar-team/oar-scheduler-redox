@@ -1,5 +1,7 @@
 use crate::models::models::Job;
 use crate::platform::PlatformConfig;
+use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -64,10 +66,10 @@ impl QuotasConfig {
 }
 
 /// key: (queue, project, job_type, user)
-type QuotasKey = (Box<str>, Box<str>, Box<str>, Box<str>);
+pub type QuotasKey = (Box<str>, Box<str>, Box<str>, Box<str>);
 
 /// Used to store the quotas maximum values for a certain rule, and to track a slot current quota usage
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct QuotasValue {
     resources: Option<u32>,       // Number of busy resources
     running_jobs: Option<u32>,    // Number of running jobs
@@ -146,6 +148,42 @@ impl QuotasValue {
         }
         None
     }
+    /// Converts an array of serde values integer Number or String to a QuotasValue.
+    /// Values "ALL" will be replaced by the `all_value` parameter, and values "x*ALL" will multiply the `all_value` by the float `x`.
+    /// Examples: `[100, "ALL", "0.5*ALL"]`, `["34.5", "ALL", "2*ALL"]` are valid inputs.
+    pub fn from_serde_values(values: &[Value], all_value: i64) -> QuotasValue {
+        let parsed = values
+            .iter()
+            .map(|v| match v {
+                Value::Number(n) => n
+                    .as_i64()
+                    .expect(format!("Invalid quotas value number: expected i64, got {}", n).as_str()),
+                Value::String(s) => {
+                    if s == "ALL" {
+                        all_value
+                    } else if s.ends_with("*ALL") {
+                        (s[..s.len() - 4].parse::<f64>().expect(
+                            format!(
+                                "Invalid quotas value number: excepted f64 multiplicator, got {}",
+                                s[..s.len() - 4].to_string()
+                            )
+                            .as_str(),
+                        ) * all_value as f64) as i64
+                    } else {
+                        s.parse::<i64>()
+                            .expect(format!("Invalid quotas value number: excepted i64, got {}", s).as_str())
+                    }
+                }
+                _ => 0,
+            })
+            .collect::<Vec<i64>>();
+
+        QuotasValue {
+            resources: Some(parsed[0] as u32),
+            running_jobs: Some(parsed[1] as u32),
+            resources_times: Some(parsed[2]),
+        }
+    }
 }
 impl Default for QuotasValue {
     fn default() -> Self {
@@ -159,7 +197,34 @@ impl Default for QuotasValue {
 
 /// Represent a set of Quotas limits or counters.
 /// Keys are tuples of (queue, project, job_type, user).
-type QuotasMap = HashMap<QuotasKey, QuotasValue>;
+pub type QuotasMap = HashMap<QuotasKey, QuotasValue>;
+
+/// Parses a JSON string representing quotas into a QuotasMap.
+/// The JSON must be a mapping between a string key (formatted as "queue,project,job_type,user" with names or "*" or "/")
+///     and an array of values (see `QuotasValue::from_serde_values`).
+pub fn quotas_map_from_json(json: &str, all_value: i64) -> QuotasMap {
+    let quotas = serde_json::from_str::<HashMap<String, Vec<Value>>>(json).expect("Invalid quotas JSON format");
+    quotas
+        .iter()
+        .map(|(key, value)| {
+            let key_parts: Vec<&str> = key.split(',').collect();
+            if key_parts.len() != 4 {
+                panic!(
+                    "Invalid quotas key format: expected 4 parts, got {} parts in {}",
+                    key_parts.len(),
+                    key.as_str()
+                );
+            }
+            let queue = key_parts[0].into();
+            let project = key_parts[1].into();
+            let job_type = key_parts[2].into();
+            let user = key_parts[3].into();
+
+            let quotas_value = QuotasValue::from_serde_values(value, all_value);
+            ((queue, project, job_type, user), quotas_value)
+        })
+        .collect()
+}
 
 /// Represent a set of Quotas limits or counters organized in a tree structure.
 /// The tree is a nested HashMap where each level corresponds to a Quota dimension (queue, project, job_type, user).

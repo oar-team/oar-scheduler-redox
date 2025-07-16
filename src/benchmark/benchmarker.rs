@@ -223,7 +223,7 @@ impl BenchmarkTarget {
                 let waiting_jobs = get_sample_waiting_jobs(res_count_clone, jobs_count, sample_type);
                 let cache_hits = count_cache_hits(&waiting_jobs);
 
-                let platform_config = platform_mock::generate_mock_platform_config(res_count_clone, 48, 4, 64);
+                let platform_config = platform_mock::generate_mock_platform_config(res_count_clone, 48, 4, 64, true);
                 let mut platform = PlatformBenchMock::new(platform_config, vec![], waiting_jobs);
                 let queues = vec!["default".to_string()];
 

@@ -75,7 +75,7 @@ impl Hierarchy {
     pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {
         let (name, request) = &level_requests[0];
         // Optimization for core that should correspond to a single proc.
-        if let Some(_name) = self.unit_partition.as_ref() {
+        if Some(name) == self.unit_partition.as_ref() {
             return available_proc_set.sub_proc_set_with_cores(*request);
         }
 
@@ -84,7 +84,7 @@ impl Hierarchy {
                 .filter_map(|proc_set| {
                     if level_requests.len() > 1 {
                         // If next level is core, do not iterate over it and do the check directly. The core level should correspond to a single proc.
-                        if let Some(_name) = self.unit_partition.as_ref() {
+                        if Some(name) == self.unit_partition.as_ref() {
                             proc_set.sub_proc_set_with_cores(level_requests[1].1)
                         } else {
                             self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])

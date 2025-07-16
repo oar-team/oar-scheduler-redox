@@ -1,6 +1,7 @@
 use crate::models::models::ProcSet;
-use crate::scheduler::hierarchy::Hierarchy;
+use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use std::ops::RangeInclusive;
+use crate::benchmark::platform_mock::generate_mock_platform_config;
 
 #[allow(dead_code)]
 fn procsets(ranges: Box<[RangeInclusive<u32>]>) -> Box<[ProcSet]> {
@@ -125,4 +126,28 @@ fn test_find_resource_hierarchies_scattered6() {
     // Test with [1, 2, 1] levels
     let result = h.find_resource_hierarchies_scattered(&procset(1..=32), &[("switch".into(), 1), ("node".into(), 2), ("cpus".into(), 1)]);
     assert_eq!(result, Some(procset(1..=4) | procset(9..=12)));
+}
+
+#[test]
+fn test_hierarchy_from_platform() {
+    let platform_config = generate_mock_platform_config(256, 8, 4, 8, true);
+    // 1 node = 32 cores.
+
+    let available = ProcSet::from_iter([1..=256]);
+
+    let req = HierarchyRequests::from_requests(vec![
+        HierarchyRequest::new(available.clone(), vec![("nodes".into(), 2)])
+    ]);
+
+    println!("requesting {:?}, hierarchy {:?}", req, platform_config.resource_set.hierarchy);
+
+    let proc_set = platform_config.resource_set.hierarchy.request(&available, &req);
+    let proc_set_2 = platform_config.resource_set.hierarchy.find_resource_hierarchies_scattered(&available, &[("nodes".into(), 2)]);
+
+    assert!(proc_set.is_some());
+    assert!(proc_set_2.is_some());
+    let proc_set = proc_set.unwrap();
+    let proc_set_2 = proc_set_2.unwrap();
+    assert_eq!(proc_set_2, ProcSet::from_iter([1..=64]));
+    assert_eq!(proc_set, ProcSet::from_iter([1..=64]));
 }

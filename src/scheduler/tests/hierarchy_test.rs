@@ -130,7 +130,7 @@ fn test_find_resource_hierarchies_scattered6() {
 
 #[test]
 fn test_hierarchy_from_platform() {
-    let platform_config = generate_mock_platform_config(256, 8, 4, 8, true);
+    let platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
     // 1 node = 32 cores.
 
     let available = ProcSet::from_iter([1..=256]);

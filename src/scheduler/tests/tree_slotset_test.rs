@@ -3,13 +3,13 @@ use crate::benchmark::platform_mock::generate_mock_platform_config;
 use crate::models::models::{Moldable, ProcSet, ScheduledJobData};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
-use crate::scheduler::tree_slotset::TreeSlotSet;
+use crate::scheduler::tree_slot::TreeSlotSet;
 use std::rc::Rc;
 
 #[allow(dead_code)]
 fn get_platform_config() -> Rc<PlatformConfig> {
     // HierarchyRequests in here are only made on cores, then we can keep a single switch, single node, and single CPU.
-    Rc::new(generate_mock_platform_config(10, 10, 10, 10, false))
+    Rc::new(generate_mock_platform_config(false, 10, 10, 10, 10, false))
 }
 
 #[test]

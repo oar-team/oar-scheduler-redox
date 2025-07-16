@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub fn get_test_slot_set() -> SlotSet {
-    let platform_config = Rc::new(generate_mock_platform_config(100, 48, 4, 64, false));
+    let platform_config = Rc::new(generate_mock_platform_config(false, 100, 48, 4, 64, false));
 
     let s1: Slot = Slot::new(Rc::clone(&platform_config), 1, None, Some(2), ProcSet::from_iter([1..=32]), 0, 9);
     let s2: Slot = Slot::new(Rc::clone(&platform_config), 2, Some(1), Some(3), ProcSet::from_iter([1..=16, 28..=32]), 10, 19);

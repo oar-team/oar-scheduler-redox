@@ -1,11 +1,11 @@
 use crate::models::models::{Job, ScheduledJobData};
 use crate::platform::PlatformTrait;
-use crate::scheduler::scheduling_basic::schedule_jobs_ct;
+use crate::scheduler::scheduling_basic::schedule_jobs;
 use crate::scheduler::slot::SlotSet;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, cache_enabled: bool) -> usize {
+pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> usize {
     let now = platform.get_now();
     let max_time = platform.get_max_time();
 
@@ -35,7 +35,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, 
 
         // Scheduling
         let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);
-        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs, cache_enabled);
+        schedule_jobs(&mut slot_sets, &mut waiting_jobs);
 
         // Save assignments
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();

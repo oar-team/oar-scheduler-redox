@@ -1,7 +1,7 @@
 use crate::models::models::Job;
 use crate::platform::PlatformTrait;
-use crate::scheduler::scheduling_tree::schedule_jobs_ct;
-use crate::scheduler::tree_slotset::TreeSlotSet;
+use crate::scheduler::scheduling_tree::schedule_jobs;
+use crate::scheduler::tree_slot::TreeSlotSet;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -31,7 +31,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) 
 
         // Scheduling
         let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);
-        schedule_jobs_ct(&mut slot_sets, &mut waiting_jobs);
+        schedule_jobs(&mut slot_sets, &mut waiting_jobs);
 
         // Save assignments
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();

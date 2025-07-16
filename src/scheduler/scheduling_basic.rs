@@ -6,12 +6,12 @@ use std::cmp::max;
 use std::collections::HashMap;
 
 /// Schedule loop with support for jobs container - can be recursive
-pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>, cache_enabled: bool) {
+pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {
     waiting_jobs.into_iter().for_each(|job| {
         let slot_set_name = "default".to_string();
 
         let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
-        assign_resources_mld_job_split_slots(slot_set, job, cache_enabled);
+        schedule_job(slot_set, job);
     });
 }
 
@@ -22,7 +22,7 @@ pub fn schedule_jobs_ct(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: 
 /// This function has two side effects.
 ///   - Assign the results directly to the `job` (such as start_time, resources, etc.)
 ///   - Split the slot_set to reflect the new allocation
-pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Job, cache_enabled: bool) {
+pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
     let mut chosen_slot_id_left = None;
     let mut chosen_begin = None;
     let mut chosen_end = None;
@@ -30,7 +30,7 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
     let mut chosen_proc_set = None;
 
     job.moldables.iter().enumerate().for_each(|(i, moldable)| {
-        if let Some((slot_id_left, _slot_id_right, proc_set)) = find_first_suitable_contiguous_slots(slot_set, moldable) {
+        if let Some((slot_id_left, _slot_id_right, proc_set)) = find_slots_for_moldable(slot_set, moldable) {
             let begin = slot_set.get_slot(slot_id_left).unwrap().begin();
             let end = begin + max(0, moldable.walltime - 1);
 
@@ -45,7 +45,7 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
     });
 
     if let Some(chosen_moldable_index) = chosen_moldable_index {
-        if cache_enabled {
+        if slot_set.get_platform_config().cache_enabled {
             slot_set.insert_cache_entry(
                 job.moldables.get(chosen_moldable_index).unwrap().get_cache_key(),
                 chosen_slot_id_left.unwrap(),
@@ -65,7 +65,7 @@ pub fn assign_resources_mld_job_split_slots(slot_set: &mut SlotSet, job: &mut Jo
     }
 }
 
-pub fn find_first_suitable_contiguous_slots(slot_set: &SlotSet, moldable: &Moldable) -> Option<(i32, i32, ProcSet)> {
+pub fn find_slots_for_moldable(slot_set: &SlotSet, moldable: &Moldable) -> Option<(i32, i32, ProcSet)> {
     let mut iter = slot_set.iter();
     if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
         iter = iter.start_at(cache_first_slot);

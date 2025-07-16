@@ -223,12 +223,13 @@ impl BenchmarkTarget {
                 let waiting_jobs = get_sample_waiting_jobs(res_count_clone, jobs_count, sample_type);
                 let cache_hits = count_cache_hits(&waiting_jobs);
 
-                let platform_config = platform_mock::generate_mock_platform_config(res_count_clone, 48, 4, 64, true);
+
+                let platform_config = platform_mock::generate_mock_platform_config(target.has_cache(), res_count_clone, 48, 4, 64, true);
                 let mut platform = PlatformBenchMock::new(platform_config, vec![], waiting_jobs);
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, (slot_count, nodes_count)) = measure_time(|| match target {
-                    BenchmarkTarget::Basic(_, cache) => (kamelot_basic::schedule_cycle(&mut platform, queues, cache), 0),
+                    BenchmarkTarget::Basic(_, _) => (kamelot_basic::schedule_cycle(&mut platform, queues), 0),
                     BenchmarkTarget::Tree(_) => kamelot_tree::schedule_cycle(&mut platform, queues),
                 });
                 BenchmarkResult::new(

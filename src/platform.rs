@@ -19,6 +19,7 @@ pub trait PlatformTrait {
 pub struct PlatformConfig {
     /// Size of an hour in units of time (e.g., 3600 for second resolution)
     pub hour_size: i64,
+    pub cache_enabled: bool, // Whether to use caching in scheduling algorithms, used in linked list algorithms only
     pub resource_set: ResourceSet,
     pub quotas_config: QuotasConfig,
 }

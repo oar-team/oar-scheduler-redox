@@ -14,7 +14,7 @@ use crate::scheduler::scheduling_basic;
 
 fn quotas_platform_config() -> Rc<PlatformConfig> {
     // Adjust as needed for your actual config
-    let platform_config = generate_mock_platform_config(256, 8, 4, 8, true);
+    let platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
     Rc::new(platform_config)
 }
 
@@ -63,7 +63,7 @@ fn test_quotas_one_job_no_rules() {
         vec![moldable],
     );
 
-    scheduling_basic::schedule_jobs_ct(&mut all_ss, &mut vec![job], false);
+    scheduling_basic::schedule_jobs(&mut all_ss, &mut vec![job]);
 
     let ss = all_ss.get("default").unwrap();
 
@@ -79,7 +79,7 @@ fn test_quotas_one_job_no_rules() {
 
 #[test]
 fn test_quotas_one_job_rule_nb_res_1() {
-    let mut platform_config = generate_mock_platform_config(256, 8, 4, 8, true);
+    let mut platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
     platform_config.quotas_config = QuotasConfig::new(
         true,
         None,
@@ -111,7 +111,7 @@ fn test_quotas_one_job_rule_nb_res_1() {
     );
 
     let mut jobs = vec![job];
-    scheduling_basic::schedule_jobs_ct(&mut all_ss, &mut jobs, false);
+    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
 
     // With quota of 1, job should not get any resources
     //assert!(jobs[0].scheduled_data.is_none()); Not implemented yet: quotas enforcement in scheduler
@@ -119,7 +119,7 @@ fn test_quotas_one_job_rule_nb_res_1() {
 
 #[test]
 fn test_quotas_one_job_rule_nb_res_2() {
-    let mut platform_config = generate_mock_platform_config(256, 8, 4, 8, true);
+    let mut platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
     platform_config.quotas_config = QuotasConfig::new(
         true,
         None,
@@ -151,7 +151,7 @@ fn test_quotas_one_job_rule_nb_res_2() {
     );
 
     let mut jobs = vec![job];
-    scheduling_basic::schedule_jobs_ct(&mut all_ss, &mut jobs, false);
+    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
 
     // With quota of 64, job should get scheduled on 64 cores
     let scheduled = &jobs[0].scheduled_data;

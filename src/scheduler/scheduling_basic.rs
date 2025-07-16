@@ -1,9 +1,10 @@
-use crate::models::models::ProcSet;
+use crate::models::models::{ProcSet, ProcSetCoresOp};
 use crate::models::models::{Job, Moldable, ScheduledJobData};
 use crate::scheduler::slot::SlotSet;
 use log::{debug, info};
 use std::cmp::max;
 use std::collections::HashMap;
+use crate::scheduler::quotas;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {
@@ -30,7 +31,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
     let mut chosen_proc_set = None;
 
     job.moldables.iter().enumerate().for_each(|(i, moldable)| {
-        if let Some((slot_id_left, _slot_id_right, proc_set)) = find_slots_for_moldable(slot_set, moldable) {
+        if let Some((slot_id_left, _slot_id_right, proc_set)) = find_slots_for_moldable(slot_set, job, moldable) {
             let begin = slot_set.get_slot(slot_id_left).unwrap().begin();
             let end = begin + max(0, moldable.walltime - 1);
 
@@ -45,27 +46,21 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
     });
 
     if let Some(chosen_moldable_index) = chosen_moldable_index {
-        if slot_set.get_platform_config().cache_enabled {
-            slot_set.insert_cache_entry(
-                job.moldables.get(chosen_moldable_index).unwrap().get_cache_key(),
-                chosen_slot_id_left.unwrap(),
-            );
-        }
-        let scheduled_data = ScheduledJobData::new(
+        job.scheduled_data = Some(ScheduledJobData::new(
             chosen_begin.unwrap(),
             chosen_end.unwrap(),
             chosen_proc_set.unwrap(),
             chosen_moldable_index,
-        );
-        slot_set.split_slots_for_job_and_update_resources(&scheduled_data, true, chosen_slot_id_left);
-        job.scheduled_data = Some(scheduled_data);
+        ));
+        slot_set.split_slots_for_job_and_update_resources(&job, true, true, chosen_slot_id_left);
     } else {
         info!("Warning: no node found for job {:?}", job);
         slot_set.to_table().printstd();
     }
 }
 
-pub fn find_slots_for_moldable(slot_set: &SlotSet, moldable: &Moldable) -> Option<(i32, i32, ProcSet)> {
+pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable) -> Option<(i32, i32, ProcSet)> {
+
     let mut iter = slot_set.iter();
     if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
         iter = iter.start_at(cache_first_slot);
@@ -76,10 +71,33 @@ pub fn find_slots_for_moldable(slot_set: &SlotSet, moldable: &Moldable) -> Optio
 
         let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id());
 
+        // Finding resources according to hierarchy request
         slot_set.get_platform_config().resource_set.hierarchy
             .request(&available_resources, &moldable.requests)
             .map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))
+            .and_then(|result| {
+                // Checking quotas
+                if slot_set.get_platform_config().quotas_config.enabled {
+                    let slots = slot_set.iter().between(left_slot.id(), right_slot.id()).collect::<Vec<_>>();
+                    if let Some((msg, rule, limit)) = quotas::check_slots_quotas(slots, job, moldable.walltime, result.2.core_count()) {
+                        info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
+                        return None; // Skip this slot if quotas check fails
+                    }
+                }
+                Some(result)
+            })
     });
+
+    // Insert cache entry
+    if slot_set.get_platform_config().cache_enabled {
+        if let Some((left_slot_id, _right_slot_id, _proc_set)) = &res {
+            slot_set.insert_cache_entry(
+                moldable.get_cache_key(),
+                *left_slot_id,
+            );
+        }
+    }
+
     debug!("Found slots for moldable visiting {} slots", count);
     res
 }

@@ -1,5 +1,5 @@
 use crate::benchmark::platform_mock::generate_mock_platform_config;
-use crate::models::models::ProcSet;
+use crate::models::models::{Job, ProcSet};
 use crate::models::models::ScheduledJobData;
 use crate::scheduler::slot::{Slot, SlotSet};
 use std::collections::HashMap;
@@ -152,8 +152,17 @@ pub fn test_iter_between_with_width() {
 #[test]
 pub fn test_split_slots() {
     let mut ss = get_test_slot_set();
-    let job = ScheduledJobData::new(5, 14, ProcSet::from_iter([4..=6]), 0);
-    ss.split_slots_for_job_and_update_resources(&job, true, None);
+    let scheduled_job_data = ScheduledJobData::new(5, 14, ProcSet::from_iter([4..=6]), 0);
+    let job = Job::new_scheduled(
+        1,
+        "user".to_string(),
+        "project".to_string(),
+        "queue".to_string(),
+        vec!["type1".to_string()],
+        vec![],
+        scheduled_job_data,
+    );
+    ss.split_slots_for_job_and_update_resources(&job, true, true, None);
 
     assert_eq!(ss.slot_at(4, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=32]));
     assert_eq!(ss.slot_at(5, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=3, 7..=32]));

@@ -30,7 +30,7 @@ impl TreeSlot {
             begin,
             end,
             proc_set,
-            quotas: Quotas::new(Rc::clone(&platform_config), None),
+            quotas: Quotas::new(Rc::clone(&platform_config)),
             platform_config,
         }
     }

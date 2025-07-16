@@ -56,6 +56,27 @@ impl Job {
     pub fn is_scheduled(&self) -> bool {
         self.scheduled_data.is_some()
     }
+    pub fn begin(&self) -> Option<i64> {
+        if let Some(data) = &self.scheduled_data {
+            Some(data.begin)
+        } else {
+            None
+        }
+    }
+    pub fn end(&self) -> Option<i64> {
+        if let Some(data) = &self.scheduled_data {
+            Some(data.end)
+        } else {
+            None
+        }
+    }
+    pub fn walltime(&self) -> Option<i64> {
+        if let Some(data) = &self.scheduled_data {
+            Some(data.end - data.begin + 1)
+        } else {
+            None
+        }
+    }
 }
 
 impl ScheduledJobData {

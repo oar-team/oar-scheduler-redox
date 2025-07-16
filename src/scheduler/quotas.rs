@@ -1,9 +1,12 @@
-use crate::models::models::Job;
+use crate::models::models::{Job, Moldable};
 use crate::platform::PlatformConfig;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::rc::Rc;
+use log::info;
+use crate::scheduler::slot::Slot;
 
 #[derive(Debug, Clone, Default)]
 pub struct Calendar {
@@ -32,22 +35,16 @@ pub struct Calendar {
 }
 #[derive(Debug, Clone)]
 pub struct QuotasConfig {
-    enabled: bool,
-    calendar: Option<Calendar>,
-    default_rules: Rc<QuotasMap>,
-    default_rules_tree: Rc<QuotasTree>,
-    tracked_job_types: Box<[Box<str>]>, // called job_types in python
+    pub enabled: bool,
+    pub calendar: Option<Calendar>,
+    pub default_rules_id: i32,
+    pub default_rules: Rc<QuotasMap>,
+    pub default_rules_tree: Rc<QuotasTree>,
+    pub tracked_job_types: Box<[Box<str>]>, // called job_types in python
 }
 impl Default for QuotasConfig {
     fn default() -> Self {
-        // TODO : real default value.
-        QuotasConfig {
-            enabled: false,
-            calendar: None,
-            default_rules: Rc::new(QuotasMap::default()),
-            default_rules_tree: Rc::new(QuotasTree::from(QuotasMap::default())),
-            tracked_job_types: Box::new([]),
-        }
+        QuotasConfig::new(true, None, Default::default(), Box::new([Box::from("*")]))
     }
 }
 
@@ -58,6 +55,7 @@ impl QuotasConfig {
         QuotasConfig {
             enabled,
             calendar,
+            default_rules_id: -1,
             default_rules: Rc::new(default_rules),
             default_rules_tree,
             tracked_job_types,
@@ -118,12 +116,12 @@ impl QuotasValue {
     }
     /// Checks if the values in `counts` exceed the limits from `self`.
     /// If any limit is exceeded, it returns a tuple with a description and the limit value.
-    pub fn check(&self, counts: &QuotasValue) -> Option<(&str, i64)> {
+    pub fn check(&self, counts: &QuotasValue) -> Option<(Box<str>, i64)> {
         if let Some(resources) = self.resources {
             if resources >= 0 {
                 if let Some(counted_resources) = counts.resources {
                     if counted_resources > resources {
-                        return Some(("resources exceeded", resources as i64));
+                        return Some(("Resources exceeded".into(), resources as i64));
                     }
                 }
             }
@@ -132,7 +130,7 @@ impl QuotasValue {
             if running_jobs >= 0 {
                 if let Some(counted_running_jobs) = counts.running_jobs {
                     if counted_running_jobs > running_jobs {
-                        return Some(("running jobs exceeded", running_jobs as i64));
+                        return Some(("Running jobs exceeded".into(), running_jobs as i64));
                     }
                 }
             }
@@ -141,7 +139,7 @@ impl QuotasValue {
             if resources_times >= 0 {
                 if let Some(counted_resources_times) = counts.resources_times {
                     if counted_resources_times > resources_times {
-                        return Some(("resources times exceeded", resources_times));
+                        return Some(("Resources times exceeded".into(), resources_times));
                     }
                 }
             }
@@ -291,64 +289,66 @@ impl<T> QuotasTreeNodeTrait for HashMap<Box<str>, T> {
 #[derive(Clone)]
 pub struct Quotas {
     counters: QuotasMap,
+    rules_id: i32, // Used to differentiate Quotas instances with different rules.
     rules: Rc<QuotasMap>,
     rules_tree: Rc<QuotasTree>,
     platform_config: Rc<PlatformConfig>,
 }
+impl Debug for Quotas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Quotas")
+            .field("counters", &self.counters)
+            .field("rules_id", &self.rules_id)
+            .field("rules", &self.rules)
+            .field("rules_tree", &self.rules_tree)
+            .finish()
+    }
+}
 impl Quotas {
     /// Creates a new Quotas instance with the given configuration and rules.
     /// As rules are also mostly common in Quotas instances, it is also a Rc.
-    pub fn new(platform_config: Rc<PlatformConfig>, rules: Option<Rc<QuotasMap>>) -> Quotas {
-        let rules = match rules {
-            Some(r) => (Rc::new(QuotasTree::from((*r).clone())), r),
-            None => (
-                Rc::clone(&platform_config.quotas_config.default_rules_tree),
-                Rc::clone(&platform_config.quotas_config.default_rules),
-            ),
-        };
+    pub fn new(platform_config: Rc<PlatformConfig>) -> Quotas {
         Quotas {
             counters: QuotasMap::default(),
-            rules: rules.1,
-            rules_tree: rules.0,
+            rules_id: platform_config.quotas_config.default_rules_id,
+            rules: Rc::clone(&platform_config.quotas_config.default_rules),
+            rules_tree: Rc::clone(&platform_config.quotas_config.default_rules_tree),
             platform_config,
         }
     }
 
-    /// Increment the Quotas counters for a scheduled job.
-    pub fn update_for_job(&mut self, job: &Job) {
-        if let Some(scheduled_data) = &job.scheduled_data {
-            let resources = scheduled_data.count_resources();
-            let running_jobs = 1;
-            let resources_times = (scheduled_data.end - scheduled_data.begin) * resources as i64;
+    /// Increment the Quotas counters for a job.
+    /// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
+    pub fn update_for_job(&mut self, job: &Job, walltime: i64, resource_count: u32) {
+        let resources = resource_count;
+        let running_jobs = 1;
+        let resources_times = walltime * resources as i64;
 
-            // Tracking only the types configured in QuotasConfig::job_types.
-            let matched_queues = ["*", &job.queue];
-            let matched_projects = ["*", &job.project];
-            let matched_job_types = self
-                .platform_config
-                .quotas_config
-                .tracked_job_types
-                .iter()
-                .filter(|t| &(***t) == "*" || job.types.contains(&t.to_string()))
-                .collect::<Box<[&Box<str>]>>();
-            let matched_users = ["*", &job.user];
+        let matched_queues = ["*", &job.queue];
+        let matched_projects = ["*", &job.project];
+        // Tracking only the types configured in QuotasConfig::job_types.
+        let matched_job_types = self
+            .platform_config
+            .quotas_config
+            .tracked_job_types
+            .iter()
+            .filter(|t| &(***t) == "*" || job.types.contains(&t.to_string()))
+            .collect::<Box<[&Box<str>]>>();
+        let matched_users = ["*", &job.user];
 
-            matched_queues.iter().for_each(|queue| {
-                matched_projects.iter().for_each(|project| {
-                    matched_job_types.iter().for_each(|job_type| {
-                        matched_users.iter().for_each(|user| {
-                            let value = self
-                                .counters
-                                .entry((queue.clone().into(), project.clone().into(), (*job_type).clone(), user.clone().into()))
-                                .or_default();
-                            value.increment(resources, running_jobs, resources_times);
-                        });
+        matched_queues.iter().for_each(|queue| {
+            matched_projects.iter().for_each(|project| {
+                matched_job_types.iter().for_each(|job_type| {
+                    matched_users.iter().for_each(|user| {
+                        let value = self
+                            .counters
+                            .entry((queue.clone().into(), project.clone().into(), (*job_type).clone(), user.clone().into()))
+                            .or_insert(QuotasValue::new(Some(0), Some(0), Some(0)));
+                        value.increment(resources, running_jobs, resources_times);
                     });
                 });
             });
-        } else {
-            panic!("Job must have scheduled data to update slot quotas counters.");
-        }
+        });
     }
 
     /// Combines the counters of `self` and `quotas` by taking the maximum for resources and running_jobs,
@@ -362,7 +362,7 @@ impl Quotas {
 
     /// Finds the rule key that should be applied to `job` (i.e., the QuotasMapKey).
     /// The rule is found by looking at `Quotas::rules_tree` with the following key priority: named > '/' > '*'
-    /// It returns the QuotasValue (the limits) and two keys, the first one being the same as the second one, but with the "/" replaced by the actual name.
+    /// It returns two keys, the first one being the same as the second one, but with the "/" replaced by the actual name, and the value QuotasValue (the limits).
     pub fn find_applicable_rule(&self, job: &Job) -> Option<(QuotasKey, QuotasKey, &QuotasValue)> {
         let key_queue = job.queue.as_str();
         let key_project = job.project.as_str();
@@ -415,9 +415,39 @@ impl Quotas {
     }
     /// Checks if the job is within the quotas limits.
     /// If not, return Some with a description, the exceeded rule key, and the exceeded limit value.
-    pub fn check(&self, job: &Job) -> Option<(&str, QuotasKey, i64)> {
+    pub fn check(&self, job: &Job) -> Option<(Box<str>, QuotasKey, i64)> {
         let (rule_key_counter, rule_key, rule_value) = self.find_applicable_rule(job)?;
         let counts = self.counters.get(&rule_key_counter)?;
         rule_value.check(counts).map(|(description, limit)| (description, rule_key, limit))
     }
+}
+
+
+/// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
+pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
+    let mut slots_quotas: HashMap<i32, Quotas> = HashMap::new();
+
+    // Combine all quotas in slot_quotas, grouped by rules_id.
+    for slot in slots {
+        info!("Combining quotas for slot {} (start {}): {:?}", slot.id(), slot.begin(), slot.quotas());
+        // TODO: splitting slot does not copy quotas counters.
+        let quotas = slot.quotas();
+        slots_quotas.entry(quotas.rules_id)
+            .and_modify(|q| q.combine(&quotas))
+            .or_insert(quotas.clone());
+    }
+
+    info!("Checking quotas for job {} with walltime {} and resource count {}", job.id, walltime, resource_count);
+    info!("Combined quotas for slots: {:?}", slots_quotas);
+
+    // Check each combined quotas against the job.
+    for (_, quotas) in slots_quotas.iter_mut() {
+        // Checking if after updating, it exceeds the rules.
+        quotas.update_for_job(job, walltime, resource_count);
+        let res = quotas.check(job);
+        if res.is_some() {
+            return res;
+        }
+    }
+    None
 }

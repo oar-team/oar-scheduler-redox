@@ -1,5 +1,5 @@
-use crate::models::models::ProcSet;
-use crate::models::models::{Moldable, ScheduledJobData};
+use crate::models::models::Moldable;
+use crate::models::models::{Job, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformConfig;
 use crate::scheduler::quotas::Quotas;
 use prettytable::{format, row, Table};
@@ -19,7 +19,6 @@ pub struct Slot {
     proc_set: ProcSet,
     begin: i64,
     end: i64,
-   // quotas_rules_id: u32,
     quotas: Quotas,
     platform_config: Rc<PlatformConfig>,
     // Stores the intervals that might be taken, but available to be shared with the user and the job.
@@ -40,7 +39,6 @@ impl Debug for Slot {
 
 impl Slot {
     pub fn new(platform_config: Rc<PlatformConfig>, id: i32, prev: Option<i32>, next: Option<i32>, proc_set: ProcSet, begin: i64, end: i64) -> Slot {
-
         Slot {
             id,
             prev,
@@ -48,7 +46,7 @@ impl Slot {
             proc_set,
             begin,
             end,
-            quotas: Quotas::new(platform_config.clone(), None),
+            quotas: Quotas::new(platform_config.clone()),
             platform_config,
             //time_shared_proc_set: HashMap::new(),
             //placeholder_proc_set: HashMap::new(),
@@ -76,11 +74,14 @@ impl Slot {
     pub fn end(&self) -> i64 {
         self.end
     }
+    pub fn quotas(&self) -> &Quotas {
+        &self.quotas
+    }
 
-    pub fn sub_resources(&mut self, proc_set: &ProcSet) {
+    pub fn sub_proc_set(&mut self, proc_set: &ProcSet) {
         self.proc_set = self.proc_set.clone() - proc_set;
     }
-    pub fn add_resources(&mut self, proc_set: &ProcSet) {
+    pub fn add_proc_set(&mut self, proc_set: &ProcSet) {
         self.proc_set = self.proc_set.clone() | proc_set;
     }
 }
@@ -106,7 +107,12 @@ impl Debug for SlotSet {
         write!(
             f,
             "SlotSet {{ begin: {}, end: {}, first_id: {}, last_id: {}, next_id: {}, slots_count: {} }}",
-            self.begin, self.end, self.first_id, self.last_id, self.next_id, self.slots.len()
+            self.begin,
+            self.end,
+            self.first_id,
+            self.last_id,
+            self.next_id,
+            self.slots.len()
         )
     }
 }
@@ -325,7 +331,15 @@ impl SlotSet {
         // Create new slot
         let new_slot_id = self.next_id;
         let new_slot = if before {
-            let new_slot = Slot::new(Rc::clone(&self.platform_config), new_slot_id, slot.prev, Some(slot.id), slot.proc_set.clone(), slot.begin, new_begin - 1);
+            let new_slot = Slot::new(
+                Rc::clone(&self.platform_config),
+                new_slot_id,
+                slot.prev,
+                Some(slot.id),
+                slot.proc_set.clone(),
+                slot.begin,
+                new_begin - 1,
+            );
             // Update original slot
             slot.begin = new_begin;
             slot.prev = Some(new_slot_id);
@@ -333,7 +347,15 @@ impl SlotSet {
             self.set_prev_slot_correct_next_id(&new_slot);
             new_slot
         } else {
-            let new_slot = Slot::new(Rc::clone(&self.platform_config), new_slot_id, Some(slot.id), slot.next, slot.proc_set.clone(), new_begin, slot.end);
+            let new_slot = Slot::new(
+                Rc::clone(&self.platform_config),
+                new_slot_id,
+                Some(slot.id),
+                slot.next,
+                slot.proc_set.clone(),
+                new_begin,
+                slot.end,
+            );
             // Update original slot
             slot.end = new_begin - 1;
             slot.next = Some(new_slot_id);
@@ -408,43 +430,55 @@ impl SlotSet {
         }
         (begin_slot_id, end_slot_id)
     }
+    /// See `SlotSet::split_slots_for_jobs_and_update_resources`.
     pub fn split_slots_for_job_and_update_resources(
         &mut self,
-        job: &ScheduledJobData,
+        job: &Job,
         sub_resources: bool,
+        do_update_quotas: bool,
         start_slot_id: Option<i32>,
     ) -> (i32, i32) {
-        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(job.begin, job.end, start_slot_id);
+        let scheduled_data = job
+            .scheduled_data
+            .as_ref()
+            .expect("Job must be scheduled to split slots and update resources for it");
+
+        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(scheduled_data.begin, scheduled_data.end, start_slot_id);
         self.iter()
             .between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
             .collect::<Vec<i32>>()
             .iter()
             .for_each(|slot_id| {
+                let slot = self.slots.get_mut(&slot_id).unwrap();
                 if sub_resources {
-                    self.slots.get_mut(&slot_id).unwrap().sub_resources(&job.proc_set);
+                    slot.sub_proc_set(&scheduled_data.proc_set);
+                    if self.platform_config.quotas_config.enabled {
+                        slot.quotas
+                            .update_for_job(job, scheduled_data.end - scheduled_data.begin + 1, scheduled_data.proc_set.core_count());
+                    }
                 } else {
-                    self.slots.get_mut(&slot_id).unwrap().add_resources(&job.proc_set);
+                    self.slots.get_mut(&slot_id).unwrap().add_proc_set(&scheduled_data.proc_set);
+                    // TODO: update quotas for the job. Anyway, adding is never used?
                 }
             });
         (begin_slot_id, end_slot_id)
     }
 
     /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
-    /// Used to insert the previously scheduled jobs in the slots or container jobs.
-    /// If start_slot_id is not None, it will be used to find faster the slots of the job by not looping through all the slots.
-    /// Returns the first and last slot ids in which the job can be scheduled.
-    #[allow(dead_code)]
-    pub fn split_slots_for_jobs(&mut self, jobs: &Vec<ScheduledJobData>, mut start_slot_id: Option<i32>) {
+    /// Also subtracts slot resources, and increment quotas counters for the jobs.
+    /// If `sub_resources` is true, the resources are subtracted from the slots, otherwise they are added.
+    /// If `do_update_quotas` is true, the quotas are also updated for the jobs.
+    /// Pseudo jobs (for proc_set availability) should sub resources with `do_update_quotas` set to `false`.
+    pub fn split_slots_for_jobs_and_update_resources(
+        &mut self,
+        jobs: &Vec<&Job>,
+        sub_resources: bool,
+        do_update_quotas: bool,
+        mut start_slot_id: Option<i32>,
+    ) {
         for job in jobs {
-            let (begin_slot_id, _end_slot_id) = self.split_slots_for_range(job.begin, job.end, start_slot_id);
-            start_slot_id = Some(begin_slot_id);
-        }
-    }
-    /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
-    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<ScheduledJobData>, sub_resources: bool, mut start_slot_id: Option<i32>) {
-        for job in jobs {
-            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, sub_resources, start_slot_id);
+            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, sub_resources, do_update_quotas, start_slot_id);
             start_slot_id = Some(begin_slot_id);
         }
     }

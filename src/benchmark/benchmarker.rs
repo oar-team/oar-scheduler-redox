@@ -1,15 +1,11 @@
 use crate::benchmark::platform_mock;
 use crate::benchmark::platform_mock::PlatformBenchMock;
 use crate::models::models::{Job, Moldable, ProcSet};
-use crate::platform::{PlatformConfig, ResourceSet};
-use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
-use crate::scheduler::quotas::QuotasConfig;
+use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::{kamelot_basic, kamelot_tree};
-use log::{debug, info};
-use plotters::coord::ranged1d::NoDefaultFormatting;
+use log::info;
 use plotters::data::Quartiles;
 use range_set_blaze::ValueRef;
-use std::cmp::max;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;

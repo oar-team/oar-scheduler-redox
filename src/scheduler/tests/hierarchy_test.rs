@@ -1,7 +1,7 @@
+use crate::benchmark::platform_mock::generate_mock_platform_config;
 use crate::models::models::ProcSet;
 use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use std::ops::RangeInclusive;
-use crate::benchmark::platform_mock::generate_mock_platform_config;
 
 #[allow(dead_code)]
 fn procsets(ranges: Box<[RangeInclusive<u32>]>) -> Box<[ProcSet]> {

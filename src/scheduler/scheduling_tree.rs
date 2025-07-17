@@ -1,5 +1,4 @@
 use crate::models::models::{Job, ScheduledJobData};
-use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::tree_slot::TreeSlotSet;
 use log::{debug, info};
 use std::cmp::max;

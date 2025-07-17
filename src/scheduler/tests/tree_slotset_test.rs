@@ -2,7 +2,7 @@
 use crate::benchmark::platform_mock::generate_mock_platform_config;
 use crate::models::models::{Moldable, ProcSet, ScheduledJobData};
 use crate::platform::PlatformConfig;
-use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
+use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::tree_slot::TreeSlotSet;
 use std::rc::Rc;
 

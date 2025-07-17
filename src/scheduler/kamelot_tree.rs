@@ -12,7 +12,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) 
     let mut waiting_jobs = platform.get_waiting_jobs().clone();
 
     if waiting_jobs.len() > 0 {
-        let mut initial_slot_set = TreeSlotSet::from_platform_config(Rc::clone(platform.get_platform_config()), now, max_time);
+        let initial_slot_set = TreeSlotSet::from_platform_config(Rc::clone(platform.get_platform_config()), now, max_time);
 
         // Not supported for now
         /*// Resource availability (available_upto field) is integrated through pseudo job

@@ -298,10 +298,10 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
 
     // Job 1: user toto, requests 2 nodes (should be denied, only 1 proc allowed)
     let moldable_j1 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
-    let mut j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec![], vec![moldable_j1]);
+    let j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec![], vec![moldable_j1]);
     // Job 2: user tutu, requests 2 nodes (should succeed, unlimited for others)
     let moldable_j2 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
-    let mut j2 = Job::new(2, "tutu".into(), "".into(), "default".into(), vec![], vec![moldable_j2]);
+    let j2 = Job::new(2, "tutu".into(), "".into(), "default".into(), vec![], vec![moldable_j2]);
     let mut jobs = vec![j1, j2];
     scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
@@ -334,9 +334,9 @@ fn test_quotas_two_jobs_job_type_proc() {
 
     // Both jobs have job_type "yop", request 1 node each, walltime 50
     let moldable_j1 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
-    let mut j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j1]);
+    let j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j1]);
     let moldable_j2 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
-    let mut j2 = Job::new(2, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j2]);
+    let j2 = Job::new(2, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j2]);
     let mut jobs = vec![j1, j2];
     scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];

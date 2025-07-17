@@ -1,13 +1,13 @@
-use crate::models::models::{Job, Moldable};
+use crate::models::models::Job;
 use crate::platform::PlatformConfig;
+use crate::scheduler::slot::Slot;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
-use log::info;
-use crate::scheduler::slot::Slot;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct Calendar {
     config: String,
@@ -33,6 +33,7 @@ pub struct Calendar {
     quotas_ids2rules: HashMap<u32, String>,
     nb_quotas_rules: u32,
 }
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct QuotasConfig {
     pub enabled: bool,
@@ -118,29 +119,23 @@ impl QuotasValue {
     /// If any limit is exceeded, it returns a tuple with a description and the limit value.
     pub fn check(&self, counts: &QuotasValue) -> Option<(Box<str>, i64)> {
         if let Some(resources) = self.resources {
-            if resources >= 0 {
-                if let Some(counted_resources) = counts.resources {
-                    if counted_resources > resources {
-                        return Some(("Resources exceeded".into(), resources as i64));
-                    }
+            if let Some(counted_resources) = counts.resources {
+                if counted_resources > resources {
+                    return Some(("Resources exceeded".into(), resources as i64));
                 }
             }
         }
         if let Some(running_jobs) = self.running_jobs {
-            if running_jobs >= 0 {
-                if let Some(counted_running_jobs) = counts.running_jobs {
-                    if counted_running_jobs > running_jobs {
-                        return Some(("Running jobs exceeded".into(), running_jobs as i64));
-                    }
+            if let Some(counted_running_jobs) = counts.running_jobs {
+                if counted_running_jobs > running_jobs {
+                    return Some(("Running jobs exceeded".into(), running_jobs as i64));
                 }
             }
         }
         if let Some(resources_times) = self.resources_times {
-            if resources_times >= 0 {
-                if let Some(counted_resources_times) = counts.resources_times {
-                    if counted_resources_times > resources_times {
-                        return Some(("Resources times exceeded".into(), resources_times));
-                    }
+            if let Some(counted_resources_times) = counts.resources_times {
+                if counted_resources_times > resources_times {
+                    return Some(("Resources times exceeded".into(), resources_times));
                 }
             }
         }
@@ -149,6 +144,7 @@ impl QuotasValue {
     /// Converts an array of serde values integer Number or String to a QuotasValue.
     /// Values "ALL" will be replaced by the `all_value` parameter, and values "x*ALL" will multiply the `all_value` by the float `x`.
     /// Examples: `[100, "ALL", "0.5*ALL"]`, `["34.5", "ALL", "2*ALL"]` are valid inputs.
+    #[allow(dead_code)]
     pub fn from_serde_values(values: &[Value], all_value: i64) -> QuotasValue {
         let parsed = values
             .iter()
@@ -198,8 +194,9 @@ impl Default for QuotasValue {
 pub type QuotasMap = HashMap<QuotasKey, QuotasValue>;
 
 /// Parses a JSON string representing quotas into a QuotasMap.
-/// The JSON must be a mapping between a string key (formatted as "queue,project,job_type,user" with names or "*" or "/")
+/// The JSON must be a mapping between a string key (formatted as `queue,project,job_type,user` with names or `*` or `/`)
 ///     and an array of values (see `QuotasValue::from_serde_values`).
+#[allow(dead_code)]
 pub fn quotas_map_from_json(json: &str, all_value: i64) -> QuotasMap {
     let quotas = serde_json::from_str::<HashMap<String, Vec<Value>>>(json).expect("Invalid quotas JSON format");
     quotas
@@ -304,6 +301,13 @@ impl Debug for Quotas {
             .finish()
     }
 }
+/// Quotas count the resources, running jobs, and resource times for jobs with a certain queue, project, job_type and user.
+/// Counters are stored in a HashMap with keys being tuples of (queue, project, job_type, user) which might be the match all character "\*", and values being `QuotasValue`.
+/// When a job is scheduled, all relevant counters are incremented, i.e., counters (*, *, *, *), (queue, *, *, *), (queue, project, *, *), ...
+/// Quotas also stores a set of rules with the same data structure (and a copy of it in a tree data structure), but with limits instead of counters, and the support for a "for each" rule with a "/" key.
+/// The "/" key allows defining a rule applicable to all queues, projects, job types, or users, but with separate counters for each one.
+/// One can check if the counters for a job exceed the limits defined in the rules by calling `Quotas::check`.
+/// Checking if a job’s counters exceed the limits finds the rule that is the most specific for the job, i.e., the one with the least number of wildcards, and checks the counters of that rule key.
 impl Quotas {
     /// Creates a new Quotas instance with the given configuration and rules.
     /// As rules are also mostly common in Quotas instances, it is also a Rc.
@@ -356,9 +360,7 @@ impl Quotas {
     /// Used to combine slot quotas and make checks against larger time windows.
     pub fn combine(&mut self, quotas: &Quotas) {
         for (key, value) in &quotas.counters {
-            self.counters.entry(key.clone())
-                .and_modify(|v| v.combine(value))
-                .or_insert(value.clone());
+            self.counters.entry(key.clone()).and_modify(|v| v.combine(value)).or_insert(value.clone());
         }
     }
 
@@ -415,7 +417,9 @@ impl Quotas {
         }
         None
     }
-    /// Checks if the job is within the quotas limits.
+    /// Checks if the quotas counters for the job `job` exceeds the limits.
+    /// WARNING: This function assumes that the counters have already been updated with `Quotas::update_for_job`.
+    ///     This function does not update the counters and only checks if the counters for the job exceed the limits defined in the rules.
     /// If not, return Some with a description, the exceeded rule key, and the exceeded limit value.
     pub fn check(&self, job: &Job) -> Option<(Box<str>, QuotasKey, i64)> {
         let (rule_key_counter, rule_key, rule_value) = self.find_applicable_rule(job)?;
@@ -424,34 +428,27 @@ impl Quotas {
     }
 }
 
-
 /// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
 pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     let mut slots_quotas: HashMap<i32, Quotas> = HashMap::new();
 
     // Combine all quotas in slot_quotas, grouped by rules_id.
     for slot in slots {
-        println!("  Combining quotas for slot {} (start {}): {:?}", slot.id(), slot.begin(), slot.quotas());
         let quotas = slot.quotas();
-        slots_quotas.entry(quotas.rules_id)
+        slots_quotas
+            .entry(quotas.rules_id)
             .and_modify(|q| q.combine(&quotas))
             .or_insert(quotas.clone());
     }
 
-    println!("Checking quotas for job {} with walltime {} and resource count {}", job.id, walltime, resource_count);
-    println!("Combined quotas for slots: {:?}", slots_quotas);
-
     // Check each combined quotas against the job.
     for (_, quotas) in slots_quotas.iter_mut() {
         // Checking if after updating, it exceeds the rules.
-        quotas.update_for_job(job, walltime, resource_count);
-        println!("Updated quotas for job {}: {:?}", job.id, quotas.counters);
+        quotas.update_for_job(job, walltime, resource_count); // Doing it on a clone of quotas to avoid modifying the original.
         let res = quotas.check(job);
         if res.is_some() {
-            println!("Quotas check failed for job {}: {:?}", job.id, res);
             return res;
         }
     }
-    println!("Quotas passed for job {}", job.id);
     None
 }

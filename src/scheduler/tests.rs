@@ -6,3 +6,5 @@ pub mod tree_slotset_test;
 pub mod hierarchy_test;
 #[cfg(test)]
 mod quotas_test;
+#[cfg(test)]
+mod quotas_tree_test;

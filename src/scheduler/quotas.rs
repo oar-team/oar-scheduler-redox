@@ -323,7 +323,7 @@ impl Quotas {
 
     /// Increment the Quotas counters for a job.
     /// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
-    pub fn update_for_job(&mut self, job: &Job, walltime: i64, resource_count: u32) {
+    pub fn increment_for_job(&mut self, job: &Job, walltime: i64, resource_count: u32) {
         let resources = resource_count;
         let running_jobs = 1;
         let resources_times = walltime * resources as i64;
@@ -431,7 +431,6 @@ impl Quotas {
 /// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
 pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     let mut slots_quotas: HashMap<i32, Quotas> = HashMap::new();
-
     // Combine all quotas in slot_quotas, grouped by rules_id.
     for slot in slots {
         let quotas = slot.quotas();
@@ -440,11 +439,15 @@ pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resou
             .and_modify(|q| q.combine(&quotas))
             .or_insert(quotas.clone());
     }
+    check_quotas(slots_quotas, job, walltime, resource_count)
 
+}
+/// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
+pub fn check_quotas<'s>(mut slots_quotas: HashMap<i32, Quotas>, job: &Job, walltime: i64, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     // Check each combined quotas against the job.
     for (_, quotas) in slots_quotas.iter_mut() {
         // Checking if after updating, it exceeds the rules.
-        quotas.update_for_job(job, walltime, resource_count); // Doing it on a clone of quotas to avoid modifying the original.
+        quotas.increment_for_job(job, walltime, resource_count); // Doing it on a clone of quotas to avoid modifying the original.
         let res = quotas.check(job);
         if res.is_some() {
             return res;

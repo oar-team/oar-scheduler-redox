@@ -189,7 +189,7 @@ impl SlotSet {
         }
     }
     /// Create a `SlotSet` with a single slot that covers the entire range from `begin` to `end` with a `ProcSet = platform_config.resource_set.default_intervals`.
-    pub fn from_platform(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> SlotSet {
+    pub fn from_platform_config(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> SlotSet {
         let proc_set = platform_config.resource_set.default_intervals.clone();
         let slot = Slot::new(platform_config, 1, None, None, begin, end, proc_set, None);
         SlotSet::from_slot(slot)
@@ -454,7 +454,7 @@ impl SlotSet {
                     slot.sub_proc_set(&scheduled_data.proc_set);
                     if self.platform_config.quotas_config.enabled && do_update_quotas {
                         slot.quotas
-                            .update_for_job(job, scheduled_data.end - scheduled_data.begin + 1, scheduled_data.proc_set.core_count());
+                            .increment_for_job(job, scheduled_data.end - scheduled_data.begin + 1, scheduled_data.proc_set.core_count());
                     }
                 } else {
                     self.slots.get_mut(&slot_id).unwrap().add_proc_set(&scheduled_data.proc_set);

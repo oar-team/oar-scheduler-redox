@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 use crate::benchmark::platform_mock::generate_mock_platform_config;
-use crate::models::models::{Moldable, ProcSet, ScheduledJobData};
+use crate::models::models::{Job, Moldable, ProcSet, ScheduledJobData};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::tree_slot::TreeSlotSet;
@@ -25,19 +25,30 @@ pub fn test_claim_node_for_moldable_1() {
         HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 6)])
     ]);
 
+    // Fake job, not used anyway since quotas are disabled.
+    let mut job = Job::new(
+        0,
+        "test_job".to_string(),
+        "test_job".to_string(),
+        "test_job".to_string(),
+        vec![],
+        vec![],
+    );
     let m1 = Moldable::new(10, req1);
     let m2 = Moldable::new(10, req2);
 
-    let (node1, ps1) = ss.find_node_for_moldable(&m1).unwrap();
+    let (node1, ps1) = ss.find_node_for_moldable(&m1, &job).unwrap();
     assert_eq!(node1.begin(), 0);
     assert_eq!(node1.end(), 100);
-    ss.claim_node_for_scheduled_job(node1.node_id(), &ScheduledJobData::new(0, 9, ps1, 0));
+    job.scheduled_data = Some(ScheduledJobData::new(0, 9, ps1.clone(), 0));
+    ss.claim_node_for_scheduled_job(node1.node_id(), &job);
     ss.to_table(true).printstd();
 
-    let (node2, ps2) = ss.find_node_for_moldable(&m2).unwrap();
+    let (node2, ps2) = ss.find_node_for_moldable(&m2, &job).unwrap();
     assert_eq!(node2.begin(), 10);
     assert_eq!(node2.end(), 100);
-    ss.claim_node_for_scheduled_job(node2.node_id(), &ScheduledJobData::new(10, 19, ps2, 0));
+    job.scheduled_data = Some(ScheduledJobData::new(10, 19, ps2.clone(), 0));
+    ss.claim_node_for_scheduled_job(node2.node_id(), &job);
     ss.to_table(true).printstd();
 }
 
@@ -53,19 +64,30 @@ pub fn test_claim_node_for_moldable_2() {
         HierarchyRequest::new(ProcSet::from_iter([1..=10]), vec![("cores".into(), 5)])
     ]);
 
+    // Fake job, not used anyway since quotas are disabled.
+    let mut job = Job::new(
+        0,
+        "test_job".to_string(),
+        "test_job".to_string(),
+        "test_job".to_string(),
+        vec![],
+        vec![],
+    );
     let m1 = Moldable::new(10, req1);
     let m2 = Moldable::new(10, req2);
 
-    let (node1, ps1) = ss.find_node_for_moldable(&m1).unwrap();
+    let (node1, ps1) = ss.find_node_for_moldable(&m1, &job).unwrap();
     assert_eq!(node1.begin(), 0);
     assert_eq!(node1.end(), 100);
-    ss.claim_node_for_scheduled_job(node1.node_id(), &ScheduledJobData::new(0, 9, ps1, 0));
+    job.scheduled_data = Some(ScheduledJobData::new(0, 9, ps1.clone(), 0));
+    ss.claim_node_for_scheduled_job(node1.node_id(), &job);
     ss.to_table(true).printstd();
 
-    let (node2, ps2) = ss.find_node_for_moldable(&m2).unwrap();
+    let (node2, ps2) = ss.find_node_for_moldable(&m2, &job).unwrap();
     assert_eq!(node2.begin(), 0);
     assert_eq!(node2.end(), 100);
-    ss.claim_node_for_scheduled_job(node2.node_id(), &ScheduledJobData::new(10, 19, ps2, 0));
+    job.scheduled_data = Some(ScheduledJobData::new(10, 19, ps2.clone(), 0));
+    ss.claim_node_for_scheduled_job(node2.node_id(), &job);
     ss.to_table(true).printstd();
 }
 
@@ -80,19 +102,29 @@ pub fn test_claim_node_for_moldable_3() {
     let req2 = HierarchyRequests::from_requests(vec![
         HierarchyRequest::new(ProcSet::from_iter([1..=8]), vec![("cores".into(), 5)])
     ]);
-
+    // Fake job, not used anyway since quotas are disabled.
+    let mut job = Job::new(
+        0,
+        "test_job".to_string(),
+        "test_job".to_string(),
+        "test_job".to_string(),
+        vec![],
+        vec![],
+    );
     let m1 = Moldable::new(10, req1);
     let m2 = Moldable::new(10, req2);
 
-    let (node1, ps1) = ss.find_node_for_moldable(&m1).unwrap();
+    let (node1, ps1) = ss.find_node_for_moldable(&m1, &job).unwrap();
     assert_eq!(node1.begin(), 0);
     assert_eq!(node1.end(), 100);
-    ss.claim_node_for_scheduled_job(node1.node_id(), &ScheduledJobData::new(0, 9, ps1, 0));
+    job.scheduled_data = Some(ScheduledJobData::new(0, 9, ps1.clone(), 0));
+    ss.claim_node_for_scheduled_job(node1.node_id(), &job);
     ss.to_table(true).printstd();
 
-    let (node2, ps2) = ss.find_node_for_moldable(&m2).unwrap();
+    let (node2, ps2) = ss.find_node_for_moldable(&m2, &job).unwrap();
     assert_eq!(node2.begin(), 10);
     assert_eq!(node2.end(), 100);
-    ss.claim_node_for_scheduled_job(node2.node_id(), &ScheduledJobData::new(10, 19, ps2, 0));
+    job.scheduled_data = Some(ScheduledJobData::new(10, 19, ps2.clone(), 0));
+    ss.claim_node_for_scheduled_job(node2.node_id(), &job);
     ss.to_table(true).printstd();
 }

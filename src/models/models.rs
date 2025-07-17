@@ -77,6 +77,13 @@ impl Job {
             None
         }
     }
+    pub fn resource_count(&self) -> Option<u32> {
+        if let Some(data) = &self.scheduled_data {
+            Some(data.proc_set.core_count())
+        } else {
+            None
+        }
+    }
 }
 
 impl ScheduledJobData {

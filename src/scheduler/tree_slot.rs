@@ -1,12 +1,15 @@
-use crate::models::models::ProcSet;
+use crate::models::models::{Job, ProcSet, ProcSetCoresOp};
 use crate::models::models::{Moldable, ScheduledJobData};
 use crate::platform::PlatformConfig;
-use crate::scheduler::quotas::Quotas;
-use log::debug;
+use crate::scheduler::quotas;
+use crate::scheduler::quotas::{check_quotas, Quotas};
+use log::{debug, info};
 use prettytable::{format, row, Table};
 use slab_tree::*;
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
+use std::str::EncodeUtf16;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -25,21 +28,26 @@ impl Debug for TreeSlot {
 }
 
 impl TreeSlot {
-    pub fn new(platform_config: Rc<PlatformConfig>, begin: i64, end: i64, proc_set: ProcSet) -> TreeSlot {
+    pub fn new(platform_config: Rc<PlatformConfig>, begin: i64, end: i64, proc_set: ProcSet, quotas: Option<Quotas>) -> TreeSlot {
         TreeSlot {
             begin,
             end,
             proc_set,
-            quotas: Quotas::new(Rc::clone(&platform_config)),
+            quotas: quotas.unwrap_or(Quotas::new(Rc::clone(&platform_config))),
             platform_config,
         }
     }
     pub fn duration(&self) -> i64 {
         self.end - self.begin + 1
     }
-    /// Subtracts the slot’s available resources by the given `proc_set`.
-    pub fn sub_resources(&mut self, proc_set: &ProcSet) {
-        self.proc_set = &self.proc_set - proc_set;
+    pub fn begin(&self) -> i64 {
+        self.begin
+    }
+    pub fn end(&self) -> i64 {
+        self.end
+    }
+    pub fn proc_set(&self) -> &ProcSet {
+        &self.proc_set
     }
 }
 
@@ -53,6 +61,7 @@ pub struct TreeNode {
     node_id: Option<NodeId>, // Nodes are never deleted, then it is safe to store the node_id in each node
     is_leaf: bool,
     proc_set_union: ProcSet,
+    quotas_union: Quotas,
 }
 pub enum FitState {
     None,
@@ -67,9 +76,28 @@ impl TreeNode {
     pub fn new_leaf(slot: TreeSlot) -> TreeNode {
         TreeNode {
             proc_set_union: slot.proc_set.clone(),
+            quotas_union: slot.quotas.clone(),
             slot,
             node_id: None,
             is_leaf: true,
+        }
+    }
+
+    /// Duplicates the current node, creating a new `TreeNode` with the same slot and properties,
+    /// but setting `is_leaf` to true, and setting its unions equals to the intersection of its parent node.
+    pub fn duplicate_for_leaf(&self, begin: i64, end: i64) -> TreeNode {
+        TreeNode {
+            slot: TreeSlot::new(
+                Rc::clone(&self.slot.platform_config),
+                begin,
+                end,
+                self.slot.proc_set.clone(),
+                Some(self.slot.quotas.clone()),
+            ),
+            node_id: None, // Node ID will be set right after the node is added to the tree
+            is_leaf: true,
+            proc_set_union: self.slot.proc_set.clone(),
+            quotas_union: self.slot.quotas.clone(),
         }
     }
 
@@ -99,40 +127,75 @@ impl TreeNode {
     pub fn duration(&self) -> i64 {
         self.slot.duration()
     }
+    pub fn platform_config(&self) -> &PlatformConfig {
+        &self.slot.platform_config
+    }
     pub fn sub_resources(&mut self, proc_set: &ProcSet) {
-        self.slot.sub_resources(proc_set);
+        self.slot.proc_set = &self.slot.proc_set - proc_set;
     }
     pub fn sub_union_resources(&mut self, proc_set: &ProcSet) {
         self.proc_set_union = &self.proc_set_union - proc_set;
+    }
+    /// Increment the intersection quotas of this node for a scheduled job. Automatically ignores the request if they are not enabled.
+    pub fn increment_quotas(&mut self, job: &Job) {
+        if !self.slot.platform_config.quotas_config.enabled {
+            return;
+        }
+        self.slot
+            .quotas
+            .increment_for_job(job, job.walltime().unwrap(), job.resource_count().unwrap());
+    }
+    /// Increment the union quotas of this node for a scheduled job. Automatically ignores the request if they are not enabled.
+    pub fn increment_union_quotas(&mut self, job: &Job) {
+        if !self.slot.platform_config.quotas_config.enabled {
+            return;
+        }
+        self.quotas_union
+            .increment_for_job(job, job.walltime().unwrap(), job.resource_count().unwrap());
     }
 
     /// Returns how could a moldable fit in this node and its children.
     /// Return [`FitState::None`] if the moldable cannot fit in this node or its children.
     /// Return [`FitState::MaybeChildren`] if the moldable might fit in the children. The children can then be traversed to find a smaller fitting node.
     /// Return [`FitState::Fit(proc_set)`] if the moldable fits in this node, and the `proc_set` is the resources that can be claimed for the moldable.
-    pub fn fit_state(&self, moldable: &Moldable) -> FitState {
+    pub fn fit_state(&self, moldable: &Moldable, job: &Job, walltime: i64) -> FitState {
         let hierarchy = &self.slot.platform_config.resource_set.hierarchy;
         if moldable.walltime <= self.slot.duration() {
             // Needs to fit without considering the MaybeChildren option because is_leaf or because no children will be large enough for the walltime.
             if self.is_leaf || moldable.walltime == self.slot.duration() {
-                return hierarchy
-                    .request(&self.slot.proc_set, &moldable.requests)
-                    .map(|proc_set| FitState::Fit(proc_set))
-                    .unwrap_or(FitState::None);
+                return self.fit_state_in_intersection(&moldable, job, walltime, FitState::None);
             }
             // Check that it might fit on children
             return hierarchy
                 .request(&self.proc_set_union, &moldable.requests)
+                // TODO: check union quotas. This is not required, it might increase the traversed nodes, but a benchmark is required to check if checking quotas on union is worth it.
                 .map(|_| {
                     // Fits on the union: either it fits the intersection or it returns MaybeChildren
-                    hierarchy
-                        .request(&self.slot.proc_set, &moldable.requests)
-                        .map(|proc_set| FitState::Fit(proc_set))
-                        .unwrap_or(FitState::MaybeChildren)
+                    self.fit_state_in_intersection(&moldable, job, walltime, FitState::MaybeChildren)
                 })
                 .unwrap_or(FitState::None); // Do not fit the union
         }
         FitState::None
+    }
+
+    /// Utility function for `TreeNode::fit_state`.
+    /// Checks the fit state of a job in the intersection of the proc_set and the moldable requests.
+    fn fit_state_in_intersection(&self, moldable: &Moldable, job: &Job, walltime: i64, no_fit_state: FitState) -> FitState {
+        self.slot.platform_config.resource_set.hierarchy
+            .request(&self.slot.proc_set, &moldable.requests)
+            .and_then(|proc_set| {
+                // Checking quotas
+                if self.platform_config().quotas_config.enabled {
+                    // TODO: To support temporal quotas, the unions and intersections should be a HashMap<rules_id, Quotas>
+                    let res = check_quotas(HashMap::from([(-1, self.slot.quotas.clone())]), job, walltime, proc_set.core_count());
+                    if let Some((msg, rule, limit)) = res {
+                        info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
+                        return None;
+                    }
+                }
+                Some(FitState::Fit(proc_set))
+            })
+            .unwrap_or(no_fit_state)
     }
 }
 
@@ -197,7 +260,8 @@ impl TreeSlotSet {
     }
 
     /// Builds a new TreeSlotSet with a single slot and a single root-leaf node.
-    pub fn from_slot(platform_config: Rc<PlatformConfig>, slot: TreeSlot) -> TreeSlotSet {
+    pub fn from_slot(slot: TreeSlot) -> TreeSlotSet {
+        let platform_config = Rc::clone(&slot.platform_config);
         let mut tree = TreeBuilder::new().with_root(TreeNode::new_leaf(slot)).build();
         let root_id = tree.root_id().unwrap();
         tree.root_mut().unwrap().data().set_node_id(root_id);
@@ -206,21 +270,22 @@ impl TreeSlotSet {
     /// Builds a new TreeSlotSet with a single slot and a single root-leaf node, with the proc set `platform_config.resource_set.default_intervals`.
     pub fn from_platform_config(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> TreeSlotSet {
         let proc_set = platform_config.resource_set.default_intervals.clone();
-        Self::from_slot(Rc::clone(&platform_config), TreeSlot::new(platform_config, begin, end, proc_set))
+        Self::from_slot(TreeSlot::new(platform_config, begin, end, proc_set, None))
     }
 
-    /// Subtract resources used by `job` to the node `node_id`.
+    /// Subtract resources used by `job` to the node `node_id`. `job` must be scheduled.
     /// Will traverse the node children, and may split a leaf node containing the ending of the scheduled job.
     /// The scheduled job should fit in the node `node_id` and its beginning should be equal to the beginning of the node `node_id`.
-    pub fn claim_node_for_scheduled_job(&mut self, node_id: NodeId, job: &ScheduledJobData) {
+    pub fn claim_node_for_scheduled_job(&mut self, node_id: NodeId, job: &Job) {
+        let scheduled_data = job.scheduled_data.as_ref().expect("Job must be scheduled to claim resources");
         let mut node = self.tree.get_mut(node_id).unwrap();
 
         let tree_node = node.data().clone();
-        Self::claim_node_for_scheduled_job_rec(node, &job.proc_set, job.end + 1);
+        Self::claim_node_for_scheduled_job_rec(node, &job, scheduled_data.end + 1);
         debug!(
             "Placing moldable of length {} (ps: {}) on node {}-{} ps: {}, psu: {}",
-            job.end - job.begin + 1,
-            job.proc_set,
+            scheduled_data.end - scheduled_data.begin + 1,
+            scheduled_data.proc_set,
             tree_node.begin(),
             tree_node.end(),
             tree_node.proc_set(),
@@ -231,28 +296,20 @@ impl TreeSlotSet {
         }
     }
     /// Helper recursive function to claim resources for a scheduled job, see [`TreeSlotSet::claim_node_for_scheduled_job`].
-    fn claim_node_for_scheduled_job_rec(mut node: NodeMut<TreeNode>, proc_set: &ProcSet, split_before: i64) {
+    fn claim_node_for_scheduled_job_rec(mut node: NodeMut<TreeNode>, job: &Job, split_before: i64) {
+        let scheduled_data = job.scheduled_data.as_ref().expect("Job must be scheduled to claim resources");
         let last_child_end = node.last_child().map(|mut child| child.data().end());
         let tree_node = node.data();
-        let original_proc_set = tree_node.slot().proc_set.clone();
-        tree_node.sub_resources(proc_set);
 
         if tree_node.is_leaf {
             if tree_node.slot().end >= split_before {
-                // Split the node into two new children
+                // Split the node creating its two children
                 tree_node.is_leaf = false;
-                let left_child = TreeNode::new_leaf(TreeSlot::new(
-                    Rc::clone(&tree_node.slot.platform_config),
-                    tree_node.begin(),
-                    split_before - 1,
-                    tree_node.proc_set().clone(),
-                ));
-                let right_child = TreeNode::new_leaf(TreeSlot::new(
-                    Rc::clone(&tree_node.slot.platform_config),
-                    split_before,
-                    tree_node.end(),
-                    original_proc_set,
-                ));
+                let right_child = tree_node.duplicate_for_leaf(split_before, tree_node.end());
+                tree_node.sub_resources(&scheduled_data.proc_set);
+                tree_node.increment_quotas(&job);
+                let left_child = tree_node.duplicate_for_leaf(tree_node.begin(), split_before - 1);
+
                 node.append(left_child);
                 node.append(right_child);
                 let left_child_id = node.first_child().unwrap().node_id();
@@ -262,19 +319,26 @@ impl TreeSlotSet {
                 // The union is unchanged
             } else {
                 // Taking the full leaf
+                tree_node.sub_resources(&scheduled_data.proc_set);
+                tree_node.increment_quotas(&job);
                 tree_node.proc_set_union = tree_node.proc_set().clone();
+                tree_node.quotas_union = tree_node.slot().quotas.clone();
             }
         } else {
-            // The union loses the proc_set only if all children are taken by the moldable
+            tree_node.sub_resources(&scheduled_data.proc_set);
+            tree_node.increment_quotas(&job);
+
+            // The union loses the proc_set/increments the quotas only if all children are taken by the moldable
             if last_child_end.unwrap() < split_before - 1 {
-                tree_node.sub_union_resources(proc_set);
+                tree_node.sub_union_resources(&scheduled_data.proc_set);
+                tree_node.increment_union_quotas(&job);
             }
 
-            Self::claim_node_for_scheduled_job_rec(node.first_child().unwrap(), proc_set, split_before);
+            Self::claim_node_for_scheduled_job_rec(node.first_child().unwrap(), &job, split_before);
 
             let mut last_child = node.last_child().unwrap();
             if last_child.data().begin() < split_before {
-                Self::claim_node_for_scheduled_job_rec(last_child, proc_set, split_before);
+                Self::claim_node_for_scheduled_job_rec(last_child, &job, split_before);
             }
         }
     }
@@ -284,18 +348,19 @@ impl TreeSlotSet {
     /// The returned node is bigger than the moldable walltime and may not be a leaf.
     /// The job can be scheduled starting at the beginning of the node, and resources can be subtracted using [`TreeSlotSet::claim_node_for_scheduled_job`].
     /// If no node can fit the moldable, returns `None`.
-    pub fn find_node_for_moldable(&self, moldable: &Moldable) -> Option<(&TreeNode, ProcSet)> {
-        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable);
+    pub fn find_node_for_moldable(&self, moldable: &Moldable, job: &Job) -> Option<(&TreeNode, ProcSet)> {
+        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, job);
         debug!("Found node for moldable iterating over {} nodes", count);
         node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set))
     }
     /// Helper recursive function to find a node for moldable, see [`TreeSlotSet::find_node_for_moldable`].
-    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable) -> (usize, Option<(NodeId, ProcSet)>) {
-        match node.data().fit_state(moldable) {
+    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable, job: &Job) -> (usize, Option<(NodeId, ProcSet)>) {
+
+        match node.data().fit_state(moldable, job, moldable.walltime) {
             FitState::Fit(proc_set) => return (1, Some((node.node_id(), proc_set))),
             FitState::MaybeChildren => {
                 for child in node.children() {
-                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable);
+                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable, job);
                     if let Some(child) = child {
                         return (1 + count, Some(child));
                     }
@@ -316,5 +381,14 @@ impl TreeSlotSet {
                 true => (leaves + 1, nodes + 1),
                 false => (leaves, nodes + 1),
             })
+    }
+
+    pub fn leaf_slot_at(&self, time: i64) -> Option<&TreeSlot> {
+        self.tree
+            .root()
+            .unwrap()
+            .traverse_level_order()
+            .find(|node| node.data().is_leaf && node.data().begin() <= time && node.data().end() >= time)
+            .map(|node| &node.data().slot)
     }
 }

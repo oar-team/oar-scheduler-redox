@@ -189,7 +189,7 @@ impl TreeNode {
                     // TODO: To support temporal quotas, the unions and intersections should be a HashMap<rules_id, Quotas>
                     let res = check_quotas(HashMap::from([(-1, self.slot.quotas.clone())]), job, walltime, proc_set.core_count());
                     if let Some((msg, rule, limit)) = res {
-                        info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
+                        //info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
                         return None;
                     }
                 }

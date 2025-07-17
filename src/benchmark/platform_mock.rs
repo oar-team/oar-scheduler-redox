@@ -4,6 +4,7 @@ use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::{QuotasConfig, QuotasValue};
 use std::collections::HashMap;
 use std::rc::Rc;
+use log::info;
 
 /// In mocking, the time unit is the minute.
 pub struct PlatformBenchMock {
@@ -84,21 +85,23 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
         i = next_i;
     }
 
+    let hierarchy = Hierarchy::new()
+        .add_partition("switches".into(), switches.into_boxed_slice())
+        .add_partition("nodes".into(), nodes.into_boxed_slice())
+        .add_partition("cpus".into(), cpus.into_boxed_slice())
+        .add_unit_partition("cores".into());
+
     ResourceSet {
         default_intervals: ProcSet::from_iter([1..=res_count]),
         available_upto: vec![], // All resources available until max_time
-        hierarchy: Hierarchy::new()
-            .add_partition("switches".into(), switches.into_boxed_slice())
-            .add_partition("nodes".into(), nodes.into_boxed_slice())
-            .add_partition("cpus".into(), cpus.into_boxed_slice())
-            .add_unit_partition("cores".into()),
+        hierarchy,
     }
 }
 pub fn generate_mock_quotas_config(enabled: bool) -> QuotasConfig {
 
     let default_rules = HashMap::from([
-        (("default".into(), "".into(), "".into(), "".into()), QuotasValue::new(Some(100), None, None)),
+        (("*".into(), "*".into(), "besteffort".into(), "*".into()), QuotasValue::new(None, Some(100), None)),
     ]);
 
-    QuotasConfig::new(enabled, None, default_rules, Box::new(["*".into()]))
+    QuotasConfig::new(enabled, None, default_rules, Box::new(["*".into(), "besteffort".into()]))
 }

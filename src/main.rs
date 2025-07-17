@@ -13,8 +13,8 @@ async fn main() {
 
     let averaging = 10;
     let res_count = 10_000;
-    let target = BenchmarkTarget::Basic(WaitingJobsSampleType::HighCacheHits, false);
+    let target = BenchmarkTarget::Tree(WaitingJobsSampleType::Besteffort);
 
-    let results = target.benchmark_batch(averaging, res_count, 0, 500, 100).await;
+    let results = target.benchmark_batch(averaging, res_count, 0, 5000, 500).await;
     graph_benchmark_result("4_quotas".to_string(), target, results);
 }

@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use log::info;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
@@ -45,7 +46,7 @@ pub struct QuotasConfig {
 }
 impl Default for QuotasConfig {
     fn default() -> Self {
-        QuotasConfig::new(true, None, Default::default(), Box::new([Box::from("*")]))
+        QuotasConfig::new(true, None, Default::default(), Box::new(["*".into()]))
     }
 }
 
@@ -370,13 +371,7 @@ impl Quotas {
     pub fn find_applicable_rule(&self, job: &Job) -> Option<(QuotasKey, QuotasKey, &QuotasValue)> {
         let key_queue = job.queue.as_str();
         let key_project = job.project.as_str();
-        let key_job_types = job
-            .types
-            .iter()
-            .cloned()
-            .map(|t| t.into_boxed_str())
-            .chain(self.platform_config.quotas_config.tracked_job_types.iter().cloned())
-            .collect::<Box<[Box<str>]>>();
+        let key_job_type = job.types.get(0).map(|s| s.clone().into_boxed_str()).unwrap_or("*".into()); // TODO: document that only the first job type is used for quotas
         let key_user = job.user.as_str();
 
         let mut rule_key = None;
@@ -386,14 +381,11 @@ impl Quotas {
             let map = self.rules_tree.0.get(&key_queue).unwrap();
             if let Some(key_project) = map.first_valid_key(key_project) {
                 let map = map.get(&key_project).unwrap();
-                for key_job_type in key_job_types {
-                    if let Some(key_job_type) = map.first_valid_key(key_job_type.as_ref()) {
-                        let map = map.get(&key_job_type).unwrap();
-                        if let Some(key_user) = map.first_valid_key(key_user) {
-                            rule_value = map.get(&key_user);
-                            rule_key = Some((key_queue, key_project, key_job_type, key_user));
-                        }
-                        break;
+                if let Some(key_job_type) = map.first_valid_key(key_job_type.as_ref()) {
+                    let map = map.get(&key_job_type).unwrap();
+                    if let Some(key_user) = map.first_valid_key(key_user) {
+                        rule_value = map.get(&key_user);
+                        rule_key = Some((key_queue, key_project, key_job_type, key_user));
                     }
                 }
             }

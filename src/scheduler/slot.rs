@@ -38,7 +38,7 @@ impl Debug for Slot {
 }
 
 impl Slot {
-    pub fn new(platform_config: Rc<PlatformConfig>, id: i32, prev: Option<i32>, next: Option<i32>, proc_set: ProcSet, begin: i64, end: i64) -> Slot {
+    pub fn new(platform_config: Rc<PlatformConfig>, id: i32, prev: Option<i32>, next: Option<i32>, begin: i64, end: i64, proc_set: ProcSet, quotas: Option<Quotas>) -> Slot {
         Slot {
             id,
             prev,
@@ -46,7 +46,7 @@ impl Slot {
             proc_set,
             begin,
             end,
-            quotas: Quotas::new(platform_config.clone()),
+            quotas: quotas.unwrap_or(Quotas::new(platform_config.clone())),
             platform_config,
             //time_shared_proc_set: HashMap::new(),
             //placeholder_proc_set: HashMap::new(),
@@ -83,6 +83,21 @@ impl Slot {
     }
     pub fn add_proc_set(&mut self, proc_set: &ProcSet) {
         self.proc_set = self.proc_set.clone() | proc_set;
+    }
+
+    /// Creates a new slot with the attributes specified as parameters,
+    /// and with the same proc_set and quotas as the slot `self`.
+    pub fn duplicate(&self, id: i32, prev: Option<i32>, next: Option<i32>, begin: i64, end: i64) -> Slot {
+        Slot::new(
+            Rc::clone(&self.platform_config),
+            id,
+            prev,
+            next,
+            begin,
+            end,
+            self.proc_set.clone(),
+            Some(self.quotas.clone()),
+        )
     }
 }
 
@@ -176,7 +191,7 @@ impl SlotSet {
     /// Create a `SlotSet` with a single slot that covers the entire range from `begin` to `end` with a `ProcSet = platform_config.resource_set.default_intervals`.
     pub fn from_platform(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> SlotSet {
         let proc_set = platform_config.resource_set.default_intervals.clone();
-        let slot = Slot::new(platform_config, 1, None, None, proc_set, begin, end);
+        let slot = Slot::new(platform_config, 1, None, None, begin, end, proc_set, None);
         SlotSet::from_slot(slot)
     }
 
@@ -331,15 +346,7 @@ impl SlotSet {
         // Create new slot
         let new_slot_id = self.next_id;
         let new_slot = if before {
-            let new_slot = Slot::new(
-                Rc::clone(&self.platform_config),
-                new_slot_id,
-                slot.prev,
-                Some(slot.id),
-                slot.proc_set.clone(),
-                slot.begin,
-                new_begin - 1,
-            );
+            let new_slot = slot.duplicate(new_slot_id, slot.prev, Some(slot.id), slot.begin, new_begin - 1);
             // Update original slot
             slot.begin = new_begin;
             slot.prev = Some(new_slot_id);
@@ -347,15 +354,7 @@ impl SlotSet {
             self.set_prev_slot_correct_next_id(&new_slot);
             new_slot
         } else {
-            let new_slot = Slot::new(
-                Rc::clone(&self.platform_config),
-                new_slot_id,
-                Some(slot.id),
-                slot.next,
-                slot.proc_set.clone(),
-                new_begin,
-                slot.end,
-            );
+            let new_slot = slot.duplicate(new_slot_id, Some(slot.id), slot.next, new_begin, slot.end);
             // Update original slot
             slot.end = new_begin - 1;
             slot.next = Some(new_slot_id);
@@ -453,7 +452,7 @@ impl SlotSet {
                 let slot = self.slots.get_mut(&slot_id).unwrap();
                 if sub_resources {
                     slot.sub_proc_set(&scheduled_data.proc_set);
-                    if self.platform_config.quotas_config.enabled {
+                    if self.platform_config.quotas_config.enabled && do_update_quotas {
                         slot.quotas
                             .update_for_job(job, scheduled_data.end - scheduled_data.begin + 1, scheduled_data.proc_set.core_count());
                     }
@@ -467,7 +466,7 @@ impl SlotSet {
 
     /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
     /// Also subtracts slot resources, and increment quotas counters for the jobs.
-    /// If `sub_resources` is true, the resources are subtracted from the slots, otherwise they are added.
+    /// If `sub_resources` is true, the resources are subtracted from the slots. Otherwise, they are added.
     /// If `do_update_quotas` is true, the quotas are also updated for the jobs.
     /// Pseudo jobs (for proc_set availability) should sub resources with `do_update_quotas` set to `false`.
     pub fn split_slots_for_jobs_and_update_resources(

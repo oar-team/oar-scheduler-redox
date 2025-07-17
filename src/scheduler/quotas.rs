@@ -342,7 +342,7 @@ impl Quotas {
                     matched_users.iter().for_each(|user| {
                         let value = self
                             .counters
-                            .entry((queue.clone().into(), project.clone().into(), (*job_type).clone(), user.clone().into()))
+                            .entry(((*queue).into(), (*project).into(), (*job_type).clone(), (*user).into()))
                             .or_insert(QuotasValue::new(Some(0), Some(0), Some(0)));
                         value.increment(resources, running_jobs, resources_times);
                     });
@@ -356,7 +356,9 @@ impl Quotas {
     /// Used to combine slot quotas and make checks against larger time windows.
     pub fn combine(&mut self, quotas: &Quotas) {
         for (key, value) in &quotas.counters {
-            self.counters.entry(key.clone()).and_modify(|v| v.combine(value));
+            self.counters.entry(key.clone())
+                .and_modify(|v| v.combine(value))
+                .or_insert(value.clone());
         }
     }
 
@@ -429,25 +431,27 @@ pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resou
 
     // Combine all quotas in slot_quotas, grouped by rules_id.
     for slot in slots {
-        info!("Combining quotas for slot {} (start {}): {:?}", slot.id(), slot.begin(), slot.quotas());
-        // TODO: splitting slot does not copy quotas counters.
+        println!("  Combining quotas for slot {} (start {}): {:?}", slot.id(), slot.begin(), slot.quotas());
         let quotas = slot.quotas();
         slots_quotas.entry(quotas.rules_id)
             .and_modify(|q| q.combine(&quotas))
             .or_insert(quotas.clone());
     }
 
-    info!("Checking quotas for job {} with walltime {} and resource count {}", job.id, walltime, resource_count);
-    info!("Combined quotas for slots: {:?}", slots_quotas);
+    println!("Checking quotas for job {} with walltime {} and resource count {}", job.id, walltime, resource_count);
+    println!("Combined quotas for slots: {:?}", slots_quotas);
 
     // Check each combined quotas against the job.
     for (_, quotas) in slots_quotas.iter_mut() {
         // Checking if after updating, it exceeds the rules.
         quotas.update_for_job(job, walltime, resource_count);
+        println!("Updated quotas for job {}: {:?}", job.id, quotas.counters);
         let res = quotas.check(job);
         if res.is_some() {
+            println!("Quotas check failed for job {}: {:?}", job.id, res);
             return res;
         }
     }
+    println!("Quotas passed for job {}", job.id);
     None
 }

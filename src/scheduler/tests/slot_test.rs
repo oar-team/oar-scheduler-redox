@@ -8,9 +8,9 @@ use std::rc::Rc;
 pub fn get_test_slot_set() -> SlotSet {
     let platform_config = Rc::new(generate_mock_platform_config(false, 100, 48, 4, 64, false));
 
-    let s1: Slot = Slot::new(Rc::clone(&platform_config), 1, None, Some(2), ProcSet::from_iter([1..=32]), 0, 9);
-    let s2: Slot = Slot::new(Rc::clone(&platform_config), 2, Some(1), Some(3), ProcSet::from_iter([1..=16, 28..=32]), 10, 19);
-    let s3: Slot = Slot::new(Rc::clone(&platform_config), 3, Some(2), None, ProcSet::from_iter([1..=8, 30..=32]), 20, 29);
+    let s1: Slot = Slot::new(Rc::clone(&platform_config), 1, None, Some(2), 0, 9, ProcSet::from_iter([1..=32]), None);
+    let s2: Slot = Slot::new(Rc::clone(&platform_config), 2, Some(1), Some(3), 10, 19, ProcSet::from_iter([1..=16, 28..=32]), None);
+    let s3: Slot = Slot::new(Rc::clone(&platform_config), 3, Some(2), None, 20, 29, ProcSet::from_iter([1..=8, 30..=32]), None);
 
     let slots = HashMap::from([(1, s1), (2, s2), (3, s3)]);
     SlotSet::from_map(Rc::clone(&platform_config), slots, 1)

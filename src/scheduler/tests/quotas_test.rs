@@ -11,7 +11,6 @@ use crate::scheduler::scheduling_basic;
 use crate::scheduler::slot::{Slot, SlotSet};
 use std::collections::HashMap;
 use std::rc::Rc;
-use log::LevelFilter;
 
 fn quotas_platform_config() -> Rc<PlatformConfig> {
     // Adjust as needed for your actual config
@@ -44,7 +43,7 @@ fn test_quotas_one_job_no_rules() {
     let platform_config = quotas_platform_config();
 
     let available = platform_config.resource_set.default_intervals.clone();
-    let slot = Slot::new(Rc::clone(&platform_config), 1, None, None, available.clone(), 0, 1000);
+    let slot = Slot::new(Rc::clone(&platform_config), 1, None, None, 0, 1000, available.clone(), None);
     let ss = SlotSet::from_slot(slot);
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
@@ -155,7 +154,6 @@ fn test_quotas_one_job_rule_nb_res_2() {
 
 #[test]
 fn test_quotas_four_jobs_rule_1() {
-    env_logger::Builder::new().filter(None, LevelFilter::Info).init();
     // Quotas: 16 procs max, except project "yop" (max 1 running job)
     let mut platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
     platform_config.quotas_config = QuotasConfig::new(
@@ -224,7 +222,6 @@ fn test_quotas_four_jobs_rule_1() {
 
 #[test]
 fn test_quotas_three_jobs_rule_1() {
-    env_logger::Builder::new().filter(None, LevelFilter::Info).init();
     // Quotas: 8 procs max
     let mut platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
     platform_config.quotas_config = QuotasConfig::new(
@@ -255,12 +252,12 @@ fn test_quotas_three_jobs_rule_1() {
     // Now schedule two more jobs
     let moldable_j2 = Moldable::new(
         200,
-        HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 1)])]),
+        HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
     let j2 = Job::new(2, "toto".into(), "".into(), "default".into(), vec![], vec![moldable_j2]);
     let moldable_j3 = Moldable::new(
         100,
-        HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 1)])]),
+        HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
     let j3 = Job::new(3, "lulu".into(), "yop".into(), "default".into(), vec![], vec![moldable_j3]);
     let mut jobs_new = vec![j2, j3];
@@ -280,28 +277,75 @@ fn test_quotas_three_jobs_rule_1() {
 
 #[test]
 fn test_quotas_two_job_rules_nb_res_quotas_file() {
-    /*
-    Python:
-    ...
-    Quotas.enable(config)
-    ...
-    schedule_id_jobs_ct(all_ss, {1: j1, 2: j2}, hy, [1, 2], 20)
-    assert j1.res_set == ProcSet()
-    assert j2.res_set == ProcSet(*[(1, 16)])
-    */
-    // Not yet implemented: quotas file config and enforcement
+    // Match python: quotas for toto (1 proc), john (150 procs), others unlimited
+    let quotas_config = QuotasConfig::new(
+        true,
+        None,
+        HashMap::from([
+            (("*".into(), "*".into(), "*".into(), "toto".into()), QuotasValue::new(Some(1), None, None)),
+            (("*".into(), "*".into(), "*".into(), "john".into()), QuotasValue::new(Some(150), None, None)),
+        ]),
+        Box::new(["*".into()]),
+    );
+    let mut platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
+    platform_config.quotas_config = quotas_config;
+    let res = platform_config.resource_set.default_intervals.clone();
+    let platform_config = Rc::new(platform_config);
+
+    // SlotSet with a single slot [0,100] with all procs
+    let ss = SlotSet::from_platform(Rc::clone(&platform_config), 0, 100);
+    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+
+    // Job 1: user toto, requests 2 nodes (should be denied, only 1 proc allowed)
+    let moldable_j1 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
+    let mut j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec![], vec![moldable_j1]);
+    // Job 2: user tutu, requests 2 nodes (should succeed, unlimited for others)
+    let moldable_j2 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
+    let mut j2 = Job::new(2, "tutu".into(), "".into(), "default".into(), vec![], vec![moldable_j2]);
+    let mut jobs = vec![j1, j2];
+    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
+    let j1 = &jobs[0];
+    let j2 = &jobs[1];
+    // Check results
+    assert!(j1.scheduled_data.is_none(), "j1 should not be scheduled due to quotas");
+    assert!(j2.scheduled_data.is_some(), "j2 should be scheduled");
+    let sched2 = j2.scheduled_data.as_ref().unwrap();
+    assert_eq!(sched2.proc_set, ProcSet::from_iter(1..=16));
 }
 
 #[test]
 fn test_quotas_two_jobs_job_type_proc() {
-    /*
-    Python:
-    ...
-    Quotas.enable(config)
-    ...
-    schedule_id_jobs_ct(all_ss, {1: j1, 2: j2}, hy, [1, 2], 20)
-    assert j1.start_time == 0
-    assert j2.start_time == 50
-    */
-    // Not yet implemented: quotas job type enforcement
+    // Match python: quotas for job_type yop (max 1 running job), tracked job_types ["yop"]
+    let quotas_config = QuotasConfig::new(
+        true,
+        None,
+        HashMap::from([
+            (("*".into(), "*".into(), "yop".into(), "*".into()), QuotasValue::new(None, Some(1), None)),
+        ]),
+        Box::new(["yop".into()]),
+    );
+    let mut platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
+    platform_config.quotas_config = quotas_config;
+    let res = platform_config.resource_set.default_intervals.clone();
+    let platform_config = Rc::new(platform_config);
+    // SlotSet with a single slot [0,100] with all procs
+    let ss = SlotSet::from_platform(Rc::clone(&platform_config), 0, 100);
+    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+
+    // Both jobs have job_type "yop", request 1 node each, walltime 50
+    let moldable_j1 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
+    let mut j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j1]);
+    let moldable_j2 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
+    let mut j2 = Job::new(2, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j2]);
+    let mut jobs = vec![j1, j2];
+    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
+    let j1 = &jobs[0];
+    let j2 = &jobs[1];
+    // Check results
+    assert!(j1.scheduled_data.is_some(), "j1 should be scheduled");
+    assert!(j2.scheduled_data.is_some(), "j2 should be scheduled");
+    let sched1 = j1.scheduled_data.as_ref().unwrap();
+    let sched2 = j2.scheduled_data.as_ref().unwrap();
+    assert_eq!(sched1.begin, 0);
+    assert_eq!(sched2.begin, 50);
 }

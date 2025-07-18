@@ -12,6 +12,7 @@ pub struct Job {
     pub types: Vec<String>,
     pub moldables: Vec<Moldable>,
     pub scheduled_data: Option<ScheduledJobData>,
+    pub quotas_hit_count: u32, // Used for benchmarking the quotas hit count
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +40,7 @@ impl Job {
             types,
             moldables: moldable,
             scheduled_data: None,
+            quotas_hit_count: 0
         }
     }
     #[allow(dead_code)]
@@ -51,6 +53,7 @@ impl Job {
             types,
             moldables: moldable,
             scheduled_data: Some(scheduled_data),
+            quotas_hit_count: 0
         }
     }
     pub fn is_scheduled(&self) -> bool {

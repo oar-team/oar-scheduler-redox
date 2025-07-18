@@ -37,14 +37,14 @@ pub fn test_claim_node_for_moldable_1() {
     let m1 = Moldable::new(10, req1);
     let m2 = Moldable::new(10, req2);
 
-    let (node1, ps1) = ss.find_node_for_moldable(&m1, &job).unwrap();
+    let (node1, ps1, _) = ss.find_node_for_moldable(&m1, &job).unwrap();
     assert_eq!(node1.begin(), 0);
     assert_eq!(node1.end(), 100);
     job.scheduled_data = Some(ScheduledJobData::new(0, 9, ps1.clone(), 0));
     ss.claim_node_for_scheduled_job(node1.node_id(), &job);
     ss.to_table(true).printstd();
 
-    let (node2, ps2) = ss.find_node_for_moldable(&m2, &job).unwrap();
+    let (node2, ps2, _) = ss.find_node_for_moldable(&m2, &job).unwrap();
     assert_eq!(node2.begin(), 10);
     assert_eq!(node2.end(), 100);
     job.scheduled_data = Some(ScheduledJobData::new(10, 19, ps2.clone(), 0));
@@ -76,14 +76,14 @@ pub fn test_claim_node_for_moldable_2() {
     let m1 = Moldable::new(10, req1);
     let m2 = Moldable::new(10, req2);
 
-    let (node1, ps1) = ss.find_node_for_moldable(&m1, &job).unwrap();
+    let (node1, ps1, _) = ss.find_node_for_moldable(&m1, &job).unwrap();
     assert_eq!(node1.begin(), 0);
     assert_eq!(node1.end(), 100);
     job.scheduled_data = Some(ScheduledJobData::new(0, 9, ps1.clone(), 0));
     ss.claim_node_for_scheduled_job(node1.node_id(), &job);
     ss.to_table(true).printstd();
 
-    let (node2, ps2) = ss.find_node_for_moldable(&m2, &job).unwrap();
+    let (node2, ps2, _) = ss.find_node_for_moldable(&m2, &job).unwrap();
     assert_eq!(node2.begin(), 0);
     assert_eq!(node2.end(), 100);
     job.scheduled_data = Some(ScheduledJobData::new(10, 19, ps2.clone(), 0));
@@ -114,14 +114,14 @@ pub fn test_claim_node_for_moldable_3() {
     let m1 = Moldable::new(10, req1);
     let m2 = Moldable::new(10, req2);
 
-    let (node1, ps1) = ss.find_node_for_moldable(&m1, &job).unwrap();
+    let (node1, ps1, _) = ss.find_node_for_moldable(&m1, &job).unwrap();
     assert_eq!(node1.begin(), 0);
     assert_eq!(node1.end(), 100);
     job.scheduled_data = Some(ScheduledJobData::new(0, 9, ps1.clone(), 0));
     ss.claim_node_for_scheduled_job(node1.node_id(), &job);
     ss.to_table(true).printstd();
 
-    let (node2, ps2) = ss.find_node_for_moldable(&m2, &job).unwrap();
+    let (node2, ps2, _) = ss.find_node_for_moldable(&m2, &job).unwrap();
     assert_eq!(node2.begin(), 10);
     assert_eq!(node2.end(), 100);
     job.scheduled_data = Some(ScheduledJobData::new(10, 19, ps2.clone(), 0));

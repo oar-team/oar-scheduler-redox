@@ -11,7 +11,7 @@ mod benchmark;
 async fn main() {
     env_logger::Builder::new().filter(None, LevelFilter::Info).init();
 
-    let averaging = 10;
+    let averaging = 20;
     let res_count = 10_000;
     let target = BenchmarkTarget::Tree(WaitingJobsSampleType::Besteffort);
 

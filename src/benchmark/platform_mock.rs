@@ -53,7 +53,7 @@ pub fn generate_mock_platform_config(cache_enabled: bool, res_count: u32, switch
         hour_size: 60,
         cache_enabled,
         resource_set: generate_mock_resource_set(res_count, switch_size, node_size, cpu_size),
-        quotas_config: generate_mock_quotas_config(quotas_enable),
+        quotas_config: generate_mock_quotas_config(quotas_enable, res_count),
     }
 }
 
@@ -97,11 +97,14 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
         hierarchy,
     }
 }
-pub fn generate_mock_quotas_config(enabled: bool) -> QuotasConfig {
+pub fn generate_mock_quotas_config(enabled: bool, res_count: u32) -> QuotasConfig {
 
     let default_rules = HashMap::from([
-        (("*".into(), "*".into(), "besteffort".into(), "*".into()), QuotasValue::new(None, Some(100), None)),
+        (("*".into(), "*".into(), "besteffort".into(), "*".into()), QuotasValue::new(None, None, None)),
+        (("*".into(), "*".into(), "smalljobs".into(), "*".into()), QuotasValue::new(Some(res_count * 8 / 10), None, None)),
+        (("*".into(), "*".into(), "midjobs".into(), "*".into()), QuotasValue::new(Some(res_count * 8 / 10), None, None)),
+        (("*".into(), "*".into(), "longrun".into(), "*".into()), QuotasValue::new(None, Some(5), None)),
     ]);
 
-    QuotasConfig::new(enabled, None, default_rules, Box::new(["*".into(), "besteffort".into()]))
+    QuotasConfig::new(enabled, None, default_rules, Box::new(["*".into(), "besteffort".into(), "smalljobs".into(), "midjobs".into(), "longrun".into()]))
 }

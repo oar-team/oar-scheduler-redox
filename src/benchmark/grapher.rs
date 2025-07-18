@@ -6,7 +6,7 @@ use plotters::drawing::IntoDrawingArea;
 use plotters::element::{Boxplot, PathElement};
 use plotters::prelude::full_palette::{BLUE_900, GREY_100};
 use plotters::prelude::{Color, LineSeries, WHITE};
-use plotters::style::full_palette::{GREEN_400, RED_400};
+use plotters::style::full_palette::{CYAN_300, CYAN_400, CYAN_500, GREEN_400, ORANGE_200, ORANGE_400, PINK_400, RED_400};
 use plotters::style::RGBColor;
 
 pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, results: Vec<BenchmarkAverageResult>) {
@@ -29,11 +29,26 @@ pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, resu
         false,
         results.iter().map(|result| (result.jobs_count, &result.slot_count)).collect::<Vec<_>>(),
     ));
+
+    series.push(Series::new(
+        "Resource usage (%)",
+        CYAN_400,
+        false,
+        true,
+        results.iter().map(|result| (result.jobs_count, &result.resource_occupation)).collect::<Vec<_>>(),
+    ));
+    series.push(Series::new(
+        "Quotas hits (%)",
+        ORANGE_400,
+        true,
+        true,
+        results.iter().map(|result| (result.jobs_count, &result.quotas_hit)).collect::<Vec<_>>(),
+    ));
     if target.has_cache() {
         series.push(Series::new(
             "Cache hits (%)",
             RED_400,
-            true,
+            false,
             true,
             results.iter().map(|result| (result.jobs_count, &result.cache_hits)).collect::<Vec<_>>(),
         ));

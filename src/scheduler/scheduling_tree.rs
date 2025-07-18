@@ -31,9 +31,11 @@ pub fn schedule_job(slot_set: &mut TreeSlotSet, job: &mut Job) {
     let mut chosen_end = None;
     let mut chosen_proc_set = None;
     let mut chosen_moldable_index = None;
+    let mut total_quotas_hit_count = 0;
 
     job.moldables.iter().enumerate().for_each(|(i, moldable)| {
-        if let Some((tree_node, proc_set)) = slot_set.find_node_for_moldable(moldable, &job) {
+        if let Some((tree_node, proc_set, quotas_hit_count)) = slot_set.find_node_for_moldable(moldable, &job) {
+            total_quotas_hit_count += quotas_hit_count;
             let begin = tree_node.begin();
             let end = begin + max(0, moldable.walltime - 1);
 
@@ -54,6 +56,7 @@ pub fn schedule_job(slot_set: &mut TreeSlotSet, job: &mut Job) {
             chosen_proc_set.unwrap(),
             chosen_moldable_index.unwrap(),
         ));
+        job.quotas_hit_count = total_quotas_hit_count;
         slot_set.claim_node_for_scheduled_job(node_id, &job);
     } else {
         info!("Warning: no node found for job {:?}", job);

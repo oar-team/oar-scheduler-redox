@@ -158,12 +158,12 @@ impl TreeNode {
     /// Return [`FitState::None`] if the moldable cannot fit in this node or its children.
     /// Return [`FitState::MaybeChildren`] if the moldable might fit in the children. The children can then be traversed to find a smaller fitting node.
     /// Return [`FitState::Fit(proc_set)`] if the moldable fits in this node, and the `proc_set` is the resources that can be claimed for the moldable.
-    pub fn fit_state(&self, moldable: &Moldable, job: &Job, walltime: i64) -> FitState {
+    pub fn fit_state(&self, moldable: &Moldable, job: &Job, walltime: i64, quotas_hit_count: &mut u32) -> FitState {
         let hierarchy = &self.slot.platform_config.resource_set.hierarchy;
         if moldable.walltime <= self.slot.duration() {
             // Needs to fit without considering the MaybeChildren option because is_leaf or because no children will be large enough for the walltime.
             if self.is_leaf || moldable.walltime == self.slot.duration() {
-                return self.fit_state_in_intersection(&moldable, job, walltime, FitState::None);
+                return self.fit_state_in_intersection(&moldable, job, walltime, FitState::None, quotas_hit_count);
             }
             // Check that it might fit on children
             return hierarchy
@@ -171,7 +171,7 @@ impl TreeNode {
                 // TODO: check union quotas. This is not required, it might increase the traversed nodes, but a benchmark is required to check if checking quotas on union is worth it.
                 .map(|_| {
                     // Fits on the union: either it fits the intersection or it returns MaybeChildren
-                    self.fit_state_in_intersection(&moldable, job, walltime, FitState::MaybeChildren)
+                    self.fit_state_in_intersection(&moldable, job, walltime, FitState::MaybeChildren, quotas_hit_count)
                 })
                 .unwrap_or(FitState::None); // Do not fit the union
         }
@@ -180,7 +180,7 @@ impl TreeNode {
 
     /// Utility function for `TreeNode::fit_state`.
     /// Checks the fit state of a job in the intersection of the proc_set and the moldable requests.
-    fn fit_state_in_intersection(&self, moldable: &Moldable, job: &Job, walltime: i64, no_fit_state: FitState) -> FitState {
+    fn fit_state_in_intersection(&self, moldable: &Moldable, job: &Job, walltime: i64, no_fit_state: FitState, quotas_hit_count: &mut u32) -> FitState {
         self.slot.platform_config.resource_set.hierarchy
             .request(&self.slot.proc_set, &moldable.requests)
             .and_then(|proc_set| {
@@ -189,6 +189,7 @@ impl TreeNode {
                     // TODO: To support temporal quotas, the unions and intersections should be a HashMap<rules_id, Quotas>
                     let res = check_quotas(HashMap::from([(-1, (self.slot.quotas.clone(), self.duration()))]), job, proc_set.core_count());
                     if let Some((msg, rule, limit)) = res {
+                        *quotas_hit_count += 1;
                         //info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
                         return None;
                     }
@@ -347,20 +348,21 @@ impl TreeSlotSet {
     /// Returns the first node in which the job fits, and the `ProcSet` of the resources that can be claimed for the moldable.
     /// The returned node is bigger than the moldable walltime and may not be a leaf.
     /// The job can be scheduled starting at the beginning of the node, and resources can be subtracted using [`TreeSlotSet::claim_node_for_scheduled_job`].
-    /// If no node can fit the moldable, returns `None`.
-    pub fn find_node_for_moldable(&self, moldable: &Moldable, job: &Job) -> Option<(&TreeNode, ProcSet)> {
-        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, job);
+    /// If no node can fit the moldable, returns `None`. The third returned value is the number of quotas hit during the search.
+    pub fn find_node_for_moldable(&self, moldable: &Moldable, job: &Job) -> Option<(&TreeNode, ProcSet, u32)> {
+        let mut quotas_hit_count = 0;
+        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, job, &mut quotas_hit_count);
         debug!("Found node for moldable iterating over {} nodes", count);
-        node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set))
+        node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set, quotas_hit_count))
     }
     /// Helper recursive function to find a node for moldable, see [`TreeSlotSet::find_node_for_moldable`].
-    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable, job: &Job) -> (usize, Option<(NodeId, ProcSet)>) {
+    fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable, job: &Job, quotas_hit_count: &mut u32) -> (usize, Option<(NodeId, ProcSet)>) {
 
-        match node.data().fit_state(moldable, job, moldable.walltime) {
+        match node.data().fit_state(moldable, job, moldable.walltime, quotas_hit_count) {
             FitState::Fit(proc_set) => return (1, Some((node.node_id(), proc_set))),
             FitState::MaybeChildren => {
                 for child in node.children() {
-                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable, job);
+                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable, job, quotas_hit_count);
                     if let Some(child) = child {
                         return (1 + count, Some(child));
                     }

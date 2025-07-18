@@ -454,7 +454,7 @@ impl SlotSet {
                     slot.sub_proc_set(&scheduled_data.proc_set);
                     if self.platform_config.quotas_config.enabled && do_update_quotas {
                         slot.quotas
-                            .increment_for_job(job, scheduled_data.end - scheduled_data.begin + 1, scheduled_data.proc_set.core_count());
+                            .increment_for_job(job, self.end - self.begin + 1, scheduled_data.proc_set.core_count());
                     }
                 } else {
                     self.slots.get_mut(&slot_id).unwrap().add_proc_set(&scheduled_data.proc_set);

@@ -143,7 +143,7 @@ impl TreeNode {
         }
         self.slot
             .quotas
-            .increment_for_job(job, job.walltime().unwrap(), job.resource_count().unwrap());
+            .increment_for_job(job, self.duration(), job.resource_count().unwrap());
     }
     /// Increment the union quotas of this node for a scheduled job. Automatically ignores the request if they are not enabled.
     pub fn increment_union_quotas(&mut self, job: &Job) {
@@ -151,7 +151,7 @@ impl TreeNode {
             return;
         }
         self.quotas_union
-            .increment_for_job(job, job.walltime().unwrap(), job.resource_count().unwrap());
+            .increment_for_job(job, self.duration(), job.resource_count().unwrap());
     }
 
     /// Returns how could a moldable fit in this node and its children.
@@ -187,7 +187,7 @@ impl TreeNode {
                 // Checking quotas
                 if self.platform_config().quotas_config.enabled {
                     // TODO: To support temporal quotas, the unions and intersections should be a HashMap<rules_id, Quotas>
-                    let res = check_quotas(HashMap::from([(-1, self.slot.quotas.clone())]), job, walltime, proc_set.core_count());
+                    let res = check_quotas(HashMap::from([(-1, (self.slot.quotas.clone(), self.duration()))]), job, proc_set.core_count());
                     if let Some((msg, rule, limit)) = res {
                         //info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
                         return None;

@@ -1,0 +1,10 @@
+implementation=CPython
+version=3.9
+shared=true
+abi3=false
+lib_name=python3.10
+lib_dir=/nix/store/nzgbhxyy106gwf87hs7d6das7bsqwyxc-python3-3.10.18/lib
+executable=/Users/clement/CodeIF/oar3/.venv/bin/python
+pointer_width=64
+build_flags=
+suppress_build_script_link_lines=false

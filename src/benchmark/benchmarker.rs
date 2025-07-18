@@ -12,6 +12,7 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
+use crate::benchmark::oar_python_caller::schedule_cycle_on_oar_python;
 
 #[derive(Clone)]
 pub struct BenchmarkResult {
@@ -20,7 +21,6 @@ pub struct BenchmarkResult {
     pub scheduling_time: u32,
     pub cache_hits: u32,
     pub slot_count: u32,
-    pub nodes_count: u32,
     pub quotas_hit: u32,
     pub gantt_width: u32,
     pub optimal_gantt_width: u32,
@@ -28,14 +28,13 @@ pub struct BenchmarkResult {
 }
 
 impl BenchmarkResult {
-    pub fn new(jobs_count: u32, scheduled_jobs_count: u32, scheduling_time: u32, cache_hits: u32, slot_count: u32, nodes_count: u32, quotas_hit: u32, gantt_width: u32, optimal_gantt_width: u32) -> Self {
+    pub fn new(jobs_count: u32, scheduled_jobs_count: u32, scheduling_time: u32, cache_hits: u32, slot_count: u32, quotas_hit: u32, gantt_width: u32, optimal_gantt_width: u32) -> Self {
         BenchmarkResult {
             jobs_count,
             scheduled_jobs_count,
             scheduling_time,
             cache_hits,
             slot_count,
-            nodes_count,
             quotas_hit,
             gantt_width: gantt_width / 60,
             optimal_gantt_width: optimal_gantt_width / 60,
@@ -146,6 +145,8 @@ pub enum BenchmarkTarget {
     Basic(WaitingJobsSampleType, bool),
     #[allow(dead_code)]
     Tree(WaitingJobsSampleType),
+    #[allow(dead_code)]
+    Python(WaitingJobsSampleType),
 }
 
 impl BenchmarkTarget {
@@ -153,6 +154,7 @@ impl BenchmarkTarget {
         match self {
             BenchmarkTarget::Basic(sample_type, _) => sample_type.clone(),
             BenchmarkTarget::Tree(sample_type) => sample_type.clone(),
+            BenchmarkTarget::Python(sample_type) => sample_type.clone(),
         }
     }
     pub fn benchmark_file_name(&self, prefix: String) -> String {
@@ -165,6 +167,7 @@ impl BenchmarkTarget {
             BenchmarkTarget::Basic(_, true) => "basic-Cache",
             BenchmarkTarget::Basic(_, false) => "basic-NoCache",
             BenchmarkTarget::Tree(_) => "tree",
+            BenchmarkTarget::Python(_) => "oar-python",
         };
         format!(
             "./benchmarks/{}_{}_{}-{}.svg",
@@ -191,6 +194,7 @@ impl BenchmarkTarget {
                 profile, sample_type_str
             ),
             BenchmarkTarget::Tree(_) => format!("Tree scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
+            BenchmarkTarget::Python(_) => format!("OAR Python scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
         }
             .to_string()
     }
@@ -198,6 +202,7 @@ impl BenchmarkTarget {
         match self {
             BenchmarkTarget::Basic(sample_type, _) => sample_type.clone(),
             BenchmarkTarget::Tree(sample_type) => sample_type.clone(),
+            BenchmarkTarget::Python(sample_type) => sample_type.clone(),
         }
     }
 
@@ -205,12 +210,15 @@ impl BenchmarkTarget {
         match self {
             BenchmarkTarget::Basic(_, has_cache) => *has_cache,
             BenchmarkTarget::Tree(_) => false,
+            BenchmarkTarget::Python(_) => true,
         }
     }
     pub fn has_nodes(&self) -> bool {
         match self {
             BenchmarkTarget::Basic(_, _) => false,
             BenchmarkTarget::Tree(_) => true,
+            BenchmarkTarget::Python(_) => false,
+
         }
     }
 
@@ -244,13 +252,14 @@ impl BenchmarkTarget {
                 let mut platform = PlatformBenchMock::new(platform_config, vec![], waiting_jobs);
                 let queues = vec!["default".to_string()];
 
-                let (scheduling_time, (slot_count, nodes_count)) = measure_time(|| match target {
-                    BenchmarkTarget::Basic(_, _) => (kamelot_basic::schedule_cycle(&mut platform, queues), 0),
-                    BenchmarkTarget::Tree(_) => kamelot_tree::schedule_cycle(&mut platform, queues),
-                });
+                let (scheduling_time, slot_count) = match target {
+                    BenchmarkTarget::Basic(_, _) => measure_time(|| kamelot_basic::schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Tree(_) => measure_time(|| kamelot_tree::schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Python(_) => schedule_cycle_on_oar_python(&mut platform, queues),
+                };
 
                 let quotas_hits = platform.get_scheduled_jobs().iter().map(|j| j.quotas_hit_count).sum::<u32>();
-                let gantt_width = platform.get_scheduled_jobs().iter().map(|j| j.scheduled_data.clone().unwrap().end).max().unwrap();
+                let gantt_width = platform.get_scheduled_jobs().iter().map(|j| j.scheduled_data.clone().unwrap().end).max().unwrap_or(0);
                 let optimal_gantt_width = platform.get_scheduled_jobs().iter().map(|j| j.scheduled_data.clone().unwrap()).map(|sd| sd.proc_set.core_count() * ((sd.end - sd.begin + 1) as u32)).sum::<u32>() / res_count;
 
                 BenchmarkResult::new(
@@ -259,7 +268,6 @@ impl BenchmarkTarget {
                     scheduling_time,
                     (cache_hits * 100 / jobs_count) as u32,
                     slot_count as u32,
-                    nodes_count as u32,
                     (quotas_hits * 100 / jobs_count as u32),
                     gantt_width as u32,
                     optimal_gantt_width

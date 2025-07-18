@@ -373,16 +373,14 @@ impl TreeSlotSet {
         (1, None)
     }
 
-    /// Returns the number of leaves and the total number of nodes in the tree.
-    pub fn count_leaves_and_nodes(&self) -> (usize, usize) {
+    /// Returns the number of leaves slots.
+    pub fn count_leaves(&self) -> usize {
         self.tree
             .root()
             .unwrap()
             .traverse_level_order()
-            .fold((0, 0), |(leaves, nodes), node| match node.data().is_leaf {
-                true => (leaves + 1, nodes + 1),
-                false => (leaves, nodes + 1),
-            })
+            .filter(|node| node.data().is_leaf)
+            .count()
     }
 
     pub fn leaf_slot_at(&self, time: i64) -> Option<&TreeSlot> {

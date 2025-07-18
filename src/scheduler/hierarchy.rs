@@ -3,7 +3,7 @@ use log::warn;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HierarchyRequests(Box<[HierarchyRequest]>);
+pub struct HierarchyRequests(pub Box<[HierarchyRequest]>);
 impl HierarchyRequests {
     pub fn from_requests(requests: Vec<HierarchyRequest>) -> Self {
         HierarchyRequests(requests.into_boxed_slice())
@@ -33,7 +33,7 @@ impl HierarchyRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hierarchy{
     partitions: HashMap<Box<str>, Box<[ProcSet]>>, // Level name, partitions of that level
-    unit_partition: Option<Box<str>>, // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
+    pub(crate) unit_partition: Option<Box<str>>, // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
 }
 
 impl Hierarchy {

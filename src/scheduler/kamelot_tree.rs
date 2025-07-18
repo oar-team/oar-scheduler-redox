@@ -5,7 +5,8 @@ use crate::scheduler::tree_slot::TreeSlotSet;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> (usize, usize) {
+// Returns the number of slots
+pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> usize {
     let now = platform.get_now();
     let max_time = platform.get_max_time();
 
@@ -37,7 +38,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) 
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();
         platform.set_scheduled_jobs(scheduled_jobs);
 
-        return slot_sets.get("default").unwrap().count_leaves_and_nodes();
+        return slot_sets.get("default").unwrap().count_leaves();
     }
-    (0, 0)
+    0
 }

@@ -12,6 +12,8 @@ use plotters::style::RGBColor;
 pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, results: Vec<BenchmarkAverageResult>) {
     let mut series = Vec::with_capacity(6);
 
+    let is_python = matches!(target, BenchmarkTarget::Python(_));
+
     series.push(Series::new(
         "Scheduling time (ms)",
         BLUE_900,
@@ -22,13 +24,16 @@ pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, resu
             .map(|result| (result.jobs_count, &result.scheduling_time))
             .collect::<Vec<_>>(),
     ));
-    series.push(Series::new(
-        "Slot count",
-        GREEN_400,
-        true,
-        false,
-        results.iter().map(|result| (result.jobs_count, &result.slot_count)).collect::<Vec<_>>(),
-    ));
+    if !is_python {
+        series.push(Series::new(
+            "Slot count",
+            GREEN_400,
+            true,
+            false,
+            results.iter().map(|result| (result.jobs_count, &result.slot_count)).collect::<Vec<_>>(),
+        ));
+    }
+
 
     series.push(Series::new(
         "Resource usage (%)",
@@ -37,13 +42,15 @@ pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, resu
         true,
         results.iter().map(|result| (result.jobs_count, &result.resource_occupation)).collect::<Vec<_>>(),
     ));
-    series.push(Series::new(
-        "Quotas hits (%)",
-        ORANGE_400,
-        true,
-        true,
-        results.iter().map(|result| (result.jobs_count, &result.quotas_hit)).collect::<Vec<_>>(),
-    ));
+    if !is_python {
+        series.push(Series::new(
+            "Quotas hits (%)",
+            ORANGE_400,
+            true,
+            true,
+            results.iter().map(|result| (result.jobs_count, &result.quotas_hit)).collect::<Vec<_>>(),
+        ));
+    }
     if target.has_cache() {
         series.push(Series::new(
             "Cache hits (%)",

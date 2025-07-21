@@ -236,6 +236,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpu-time"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9e393a7668fe1fad3075085b86c781883000b4ede868f43627b34a87c8b7ded"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -820,6 +830,7 @@ dependencies = [
 name = "oar3-rust"
 version = "0.1.0"
 dependencies = [
+ "cpu-time",
  "env_logger",
  "futures",
  "log",

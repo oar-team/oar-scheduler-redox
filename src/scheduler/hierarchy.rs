@@ -1,6 +1,10 @@
-use crate::models::models::{ProcSet, ProcSetCoresOp};
+use crate::models::models::{proc_set_to_python, ProcSet, ProcSetCoresOp};
 use log::warn;
+use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
+use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
 use std::collections::HashMap;
+use crate::platform::ResourceSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyRequests(pub Box<[HierarchyRequest]>);
@@ -9,17 +13,37 @@ impl HierarchyRequests {
         HierarchyRequests(requests.into_boxed_slice())
     }
     pub fn get_cache_key(&self) -> String {
-        self.0.iter()
-            .map(|req| format!("{}-{}", req.filter, req.level_nbs.iter().map(|(name, count)| format!("{}:{}", name, count)).collect::<Vec<_>>().join(",")))
+        self.0
+            .iter()
+            .map(|req| {
+                format!(
+                    "{}-{}",
+                    req.filter,
+                    req.level_nbs
+                        .iter()
+                        .map(|(name, count)| format!("{}:{}", name, count))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            })
             .collect::<Vec<_>>()
             .join(";")
+    }
+}
+impl<'a> IntoPyObject<'a> for &HierarchyRequests {
+    type Target = PyAny;
+    type Output = Bound<'a, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
+        Ok(self.0.iter().map(|req| req).collect::<Vec<_>>().into_pyobject(py).unwrap())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyRequest {
     pub filter: ProcSet,
-    pub level_nbs: Box<[(Box<str>, u32)]> // Level name, number of resources requested at that level
+    pub level_nbs: Box<[(Box<str>, u32)]>, // Level name, number of resources requested at that level
 }
 impl HierarchyRequest {
     pub fn new(filter: ProcSet, level_nbs: Vec<(Box<str>, u32)>) -> Self {
@@ -29,11 +53,37 @@ impl HierarchyRequest {
         }
     }
 }
+impl<'a> IntoPyObject<'a> for &HierarchyRequest {
+    type Target = PyDict;
+    type Output = Bound<'a, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
+        let request_dict = PyDict::new(py);
+        request_dict.set_item("filter", proc_set_to_python(py, &self.filter)).unwrap();
+        request_dict
+            .set_item(
+                "level_nbs",
+                self.level_nbs
+                    .iter()
+                    .map(|n| {
+                        // Tuple like (n.0.to_string(), n.1)
+                        PyTuple::new(py, [n.0.to_string()])
+                            .unwrap()
+                            .add(PyTuple::new(py, [n.1]).unwrap())
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+        Ok(request_dict)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hierarchy{
+pub struct Hierarchy {
     partitions: HashMap<Box<str>, Box<[ProcSet]>>, // Level name, partitions of that level
-    pub(crate) unit_partition: Option<Box<str>>, // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
+    pub(crate) unit_partition: Option<Box<str>>,   // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
 }
 
 impl Hierarchy {
@@ -63,9 +113,7 @@ impl Hierarchy {
     pub fn has_partition(&self, name: &Box<str>) -> bool {
         self.partitions.contains_key(name.as_ref()) || Some(name) == self.unit_partition.as_ref()
     }
-}
 
-impl Hierarchy {
     pub fn request(&self, available_proc_set: &ProcSet, request: &HierarchyRequests) -> Option<ProcSet> {
         request.0.iter().try_fold(ProcSet::new(), |acc, req| {
             self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs)
@@ -80,18 +128,19 @@ impl Hierarchy {
         }
 
         if let Some(partitions) = self.partitions.get(name) {
-            let (proc_sets, count) = partitions.iter()
+            let (proc_sets, count) = partitions
+                .iter()
                 .filter_map(|proc_set| {
                     if level_requests.len() > 1 {
-                        // If next level is core, do not iterate over it and do the check directly. The core level should correspond to a single proc.
+                        // If the next level is core, do not iterate over it and do the check directly. The core level should correspond to a single proc.
                         if Some(name) == self.unit_partition.as_ref() {
                             proc_set.sub_proc_set_with_cores(level_requests[1].1)
                         } else {
                             self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])
                         }
-                    }else if proc_set.is_subset(&available_proc_set) {
+                    } else if proc_set.is_subset(&available_proc_set) {
                         Some(proc_set.clone())
-                    }else {
+                    } else {
                         None
                     }
                 })
@@ -106,5 +155,33 @@ impl Hierarchy {
             warn!("No such hierarchy level matching name {}", name);
             None
         }
+    }
+}
+
+impl<'a> IntoPyObject<'a> for &Hierarchy {
+    type Target = PyDict;
+    type Output = Bound<'a, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
+        let dict = PyDict::new(py);
+
+        let partitions_dict = PyDict::new(py);
+        for (name, partitions) in &self.partitions {
+            let partitions_list = PyList::empty(py);
+            for partition in partitions {
+                partitions_list.append(proc_set_to_python(py, partition)).unwrap();
+            }
+            partitions_dict.set_item(name.to_string(), partitions_list).unwrap();
+        }
+        dict.set_item("partitions", partitions_dict).unwrap();
+
+        if let Some(unit_partition) = &self.unit_partition {
+            dict.set_item("unit_partition", unit_partition.to_string()).unwrap();
+        } else {
+            dict.set_item("unit_partition", py.None()).unwrap();
+        }
+
+        Ok(dict)
     }
 }

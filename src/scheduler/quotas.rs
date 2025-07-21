@@ -1,11 +1,14 @@
-use crate::models::models::Job;
-use crate::platform::PlatformConfig;
+use crate::models::models::{proc_set_to_python, Job};
+use crate::platform::{PlatformConfig, ResourceSet};
 use crate::scheduler::slot::Slot;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use pyo3::{Bound, IntoPyObject, PyErr, Python};
+use pyo3::prelude::PyDictMethods;
+use pyo3::types::{PyDict, PyList};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
@@ -46,6 +49,20 @@ pub struct QuotasConfig {
 impl Default for QuotasConfig {
     fn default() -> Self {
         QuotasConfig::new(true, None, Default::default(), Box::new(["*".into()]))
+    }
+}
+impl<'a> IntoPyObject<'a> for &QuotasConfig {
+    type Target = PyDict;
+    type Output = Bound<'a, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
+        let dict = PyDict::new(py);
+
+        dict.set_item("enabled", self.enabled).unwrap();
+        // Other fields not in use for now.
+
+        Ok(dict)
     }
 }
 

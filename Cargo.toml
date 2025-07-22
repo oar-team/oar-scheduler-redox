@@ -16,8 +16,9 @@ slab_tree = "0.3.2"
 serde_json = "1.0"
 serde = { version = "1.0.219", features = ["derive"] }
 pyo3 = { version = "0.25", features = ["auto-initialize"] }
-cpu-time = "1.0.0"
-
+oar3-rust-macros = { path = "./oar3-rust-macros" }
+lazy_static = "1.5.0"
+colored = "3.0.0"
 
 [profile.release]
 lto = "fat"

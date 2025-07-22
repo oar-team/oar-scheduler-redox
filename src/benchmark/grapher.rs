@@ -1,4 +1,4 @@
-use crate::benchmark::benchmarker::{BenchmarkAverageResult, BenchmarkMeasurementStatistics, BenchmarkTarget};
+use crate::benchmark::benchmarker::{BenchmarkAverageResult, BenchmarkConfig, BenchmarkMeasurementStatistics, BenchmarkTarget};
 use plotters::backend::SVGBackend;
 use plotters::chart::{ChartBuilder, LabelAreaPosition, SeriesLabelPosition};
 use plotters::data::Quartiles;
@@ -6,13 +6,13 @@ use plotters::drawing::IntoDrawingArea;
 use plotters::element::{Boxplot, PathElement};
 use plotters::prelude::full_palette::{BLUE_900, GREY_100};
 use plotters::prelude::{Color, LineSeries, WHITE};
-use plotters::style::full_palette::{CYAN_300, CYAN_400, CYAN_500, GREEN_400, ORANGE_200, ORANGE_400, PINK_400, RED_400};
+use plotters::style::full_palette::{CYAN_400, GREEN_400, ORANGE_400, RED_400};
 use plotters::style::RGBColor;
 
-pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, results: Vec<BenchmarkAverageResult>) {
+pub fn graph_benchmark_result(prefix_name: String, benchmark: BenchmarkConfig, results: Vec<BenchmarkAverageResult>) {
     let mut series = Vec::with_capacity(6);
 
-    let is_python = matches!(target, BenchmarkTarget::Python(_));
+    let is_python = matches!(benchmark.target, BenchmarkTarget::Python);
 
     series.push(Series::new(
         "Scheduling time (ms)",
@@ -51,7 +51,7 @@ pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, resu
             results.iter().map(|result| (result.jobs_count, &result.quotas_hit)).collect::<Vec<_>>(),
         ));
     }
-    if target.has_cache() {
+    if benchmark.cache {
         series.push(Series::new(
             "Cache hits (%)",
             RED_400,
@@ -61,7 +61,7 @@ pub fn graph_benchmark_result(prefix_name: String, target: BenchmarkTarget, resu
         ));
     };
 
-    graph_benchmark_series(prefix_name, target, series);
+    graph_benchmark_series(prefix_name, benchmark, series);
 }
 
 struct Series {
@@ -89,11 +89,11 @@ impl Series {
     }
 }
 
-fn graph_benchmark_series(prefix_name: String, target: BenchmarkTarget, series: Vec<Series>) {
+fn graph_benchmark_series(prefix_name: String, benchmark: BenchmarkConfig, series: Vec<Series>) {
     let max_x = (series.iter().map(|s| s.max_x).max().unwrap() as f32 * 1.02) as u32;
     let max_y = series.iter().map(|s| s.max_y as u32).max().unwrap() as f32 * 1.2;
 
-    let path = target.benchmark_file_name(prefix_name);
+    let path = benchmark.benchmark_file_name(prefix_name);
     let root_area = SVGBackend::new(&path, (450, 300)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
 
@@ -102,7 +102,7 @@ fn graph_benchmark_series(prefix_name: String, target: BenchmarkTarget, series: 
         .set_label_area_size(LabelAreaPosition::Bottom, 30)
         .set_label_area_size(LabelAreaPosition::Left, 30)
         .set_label_area_size(LabelAreaPosition::Right, 30)
-        .caption(target.benchmark_friendly_name(), ("sans-serif", 12))
+        .caption(benchmark.benchmark_friendly_name(), ("sans-serif", 12))
         .build_cartesian_2d(0..max_x, 0f32..max_y)
         .unwrap()
         .set_secondary_coord(0..max_x, 0f32..100f32);

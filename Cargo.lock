@@ -184,6 +184,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
+name = "colored"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -233,16 +242,6 @@ dependencies = [
  "core-graphics",
  "foreign-types",
  "libc",
-]
-
-[[package]]
-name = "cpu-time"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e393a7668fe1fad3075085b86c781883000b4ede868f43627b34a87c8b7ded"
-dependencies = [
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -830,10 +829,12 @@ dependencies = [
 name = "oar3-rust"
 version = "0.1.0"
 dependencies = [
- "cpu-time",
+ "colored",
  "env_logger",
  "futures",
+ "lazy_static",
  "log",
+ "oar3-rust-macros",
  "plotters",
  "prettytable-rs",
  "pyo3",
@@ -843,6 +844,15 @@ dependencies = [
  "serde_json",
  "slab_tree",
  "tokio",
+]
+
+[[package]]
+name = "oar3-rust-macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "rand",
+ "syn",
 ]
 
 [[package]]

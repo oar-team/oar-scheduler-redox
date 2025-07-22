@@ -3,8 +3,10 @@ use crate::scheduler::tree_slot::TreeSlotSet;
 use log::{debug, info};
 use std::cmp::max;
 use std::collections::HashMap;
+use oar3_rust_macros::benchmark;
 
 /// Schedule loop with support for jobs container - can be recursive
+#[benchmark]
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, TreeSlotSet>, waiting_jobs: &mut Vec<Job>) {
     waiting_jobs.into_iter().for_each(|job| {
         let slot_set_name = "default".to_string();
@@ -25,6 +27,7 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<String, TreeSlotSet>, waiting_jobs:
 /// This function has two side effects.
 ///   - Assign the results directly to the `job` (such as start_time, resources, etc.)
 ///   - Split the slot_set to reflect the new allocation
+#[benchmark]
 pub fn schedule_job(slot_set: &mut TreeSlotSet, job: &mut Job) {
     let mut chosen_node_id_left = None;
     let mut chosen_begin = None;

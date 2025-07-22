@@ -5,7 +5,6 @@ use crate::models::models::{Job, Moldable, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformTrait;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::{kamelot_basic, kamelot_tree};
-use cpu_time::ProcessTime;
 use log::info;
 use plotters::data::Quartiles;
 use rand::prelude::SliceRandom;
@@ -161,40 +160,45 @@ impl From<Vec<BenchmarkResult>> for BenchmarkAverageResult {
 #[derive(Copy, Clone)]
 pub enum BenchmarkTarget {
     #[allow(dead_code)]
-    Basic(WaitingJobsSampleType, bool),
+    Basic,
     #[allow(dead_code)]
-    Tree(WaitingJobsSampleType),
+    Tree,
     #[allow(dead_code)]
-    Python(WaitingJobsSampleType),
+    Python,
 }
 
-impl BenchmarkTarget {
-    pub fn get_sample_type(&self) -> WaitingJobsSampleType {
-        match self {
-            BenchmarkTarget::Basic(sample_type, _) => sample_type.clone(),
-            BenchmarkTarget::Tree(sample_type) => sample_type.clone(),
-            BenchmarkTarget::Python(sample_type) => sample_type.clone(),
-        }
-    }
+pub struct BenchmarkConfig {
+    pub target: BenchmarkTarget,
+    pub sample_type: WaitingJobsSampleType,
+    pub cache: bool,
+    pub averaging: usize,
+    pub res_count: u32,
+    pub start: usize,
+    pub end: usize,
+    pub step: usize,
+    pub seed: usize,
+    pub single_thread: bool,
+}
+
+impl BenchmarkConfig {
     pub fn benchmark_file_name(&self, prefix: String) -> String {
         #[cfg(debug_assertions)]
         let profile = "debug";
         #[cfg(not(debug_assertions))]
         let profile = "release";
 
-        let target = match self {
-            BenchmarkTarget::Basic(_, true) => "basic-Cache",
-            BenchmarkTarget::Basic(_, false) => "basic-NoCache",
-            BenchmarkTarget::Tree(_) => "tree",
-            BenchmarkTarget::Python(_) => "oar-python",
+        let target = match self.target {
+            BenchmarkTarget::Basic => {
+                if self.cache {
+                    "basic-Cache"
+                } else {
+                    "basic-NoCache"
+                }
+            }
+            BenchmarkTarget::Tree => "tree",
+            BenchmarkTarget::Python => "oar-python",
         };
-        format!(
-            "./benchmarks/{}_{}_{}-{}.svg",
-            prefix,
-            profile,
-            target,
-            self.get_sample_type().to_string()
-        )
+        format!("./benchmarks/{}_{}_{}-{}.svg", prefix, profile, target, self.sample_type.to_string())
     }
     pub fn benchmark_friendly_name(&self) -> String {
         #[cfg(debug_assertions)]
@@ -202,56 +206,23 @@ impl BenchmarkTarget {
         #[cfg(not(debug_assertions))]
         let profile = "Release";
 
-        let sample_type_str = self.get_sample_type().to_friendly_string();
-        match self {
-            BenchmarkTarget::Basic(_, true) => format!(
-                "Basic scheduler performance by number of jobs ({}, With cache, {})",
-                profile, sample_type_str
+        let sample_type_str = self.sample_type.to_friendly_string();
+        let cache_str = if self.cache { "With cache" } else { "No cache" };
+        match self.target {
+            BenchmarkTarget::Basic => format!(
+                "Basic scheduler performance by number of jobs ({}, {}, {})",
+                profile, cache_str, sample_type_str
             ),
-            BenchmarkTarget::Basic(_, false) => format!(
-                "Basic scheduler performance by number of jobs ({}, No cache, {})",
-                profile, sample_type_str
-            ),
-            BenchmarkTarget::Tree(_) => format!("Tree scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
-            BenchmarkTarget::Python(_) => format!("OAR Python scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
+            BenchmarkTarget::Tree => format!("Tree scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
+            BenchmarkTarget::Python => format!("OAR Python scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
         }
         .to_string()
     }
-    pub fn sample_type(&self) -> WaitingJobsSampleType {
-        match self {
-            BenchmarkTarget::Basic(sample_type, _) => sample_type.clone(),
-            BenchmarkTarget::Tree(sample_type) => sample_type.clone(),
-            BenchmarkTarget::Python(sample_type) => sample_type.clone(),
-        }
-    }
 
-    pub fn has_cache(&self) -> bool {
-        match self {
-            BenchmarkTarget::Basic(_, has_cache) => *has_cache,
-            BenchmarkTarget::Tree(_) => false,
-            BenchmarkTarget::Python(_) => true,
-        }
-    }
-    pub fn has_nodes(&self) -> bool {
-        match self {
-            BenchmarkTarget::Basic(_, _) => false,
-            BenchmarkTarget::Tree(_) => true,
-            BenchmarkTarget::Python(_) => false,
-        }
-    }
-
-    pub async fn benchmark_batch(
-        &self,
-        averaging: usize,
-        res_count: u32,
-        start: usize,
-        end: usize,
-        step: usize,
-        seed: usize,
-    ) -> Vec<BenchmarkAverageResult> {
-        futures::future::join_all(((start / step)..=(end / step)).map(async |i| {
-            let jobs = i * step;
-            let result = self.benchmark(averaging, res_count, jobs, seed + (i + 1)).await;
+    pub async fn benchmark(&self) -> Vec<BenchmarkAverageResult> {
+        self.run_sampling((self.start / self.step)..=(self.end / self.step), async |i| {
+            let jobs = i * self.step;
+            let result = self.benchmark_single_size(jobs, self.seed + (i + 1)).await;
             info!(
                 "{} of {} jobs scheduled in {} ms ({}% cache hits, {} slots, {}/{}h width ({}% usage), {}% quotas hit)",
                 result.scheduled_jobs_count.mean,
@@ -265,32 +236,48 @@ impl BenchmarkTarget {
                 result.quotas_hit.mean
             );
             result
-        }))
-        .await
+        }).await
     }
 
-    pub async fn benchmark(&self, averaging: usize, res_count: u32, sample_size: usize, seed: usize) -> BenchmarkAverageResult {
+    async fn run_sampling<R, F, Fut>(&self, range: RangeInclusive<usize>, f: F) -> Vec<R>
+    where
+        F: Fn(usize) -> Fut,
+        Fut: Future<Output = R>,
+    {
+        if self.single_thread {
+            let mut results = Vec::with_capacity(range.end() - range.start() + 1);
+            for i in range {
+                results.push(f(i).await);
+            }
+            results
+        } else {
+            futures::future::join_all(range.map(f)).await
+        }
+    }
+
+    async fn benchmark_single_size(&self, sample_size: usize, seed: usize) -> BenchmarkAverageResult {
         if sample_size == 0 {
             return vec![].into();
         }
         let new_seed = StdRng::seed_from_u64(seed as u64).next_u64();
-        futures::future::join_all((0..averaging).map(|i| {
-            let res_count_clone = res_count.clone();
+        self.run_sampling(1..=self.averaging, |i| {
+            let res_count = self.res_count.clone();
             let jobs_count = sample_size.clone();
-            let target = self.clone();
-            let sample_type = self.sample_type();
+            let target = self.target;
+            let cache = self.cache.clone();
+            let sample_type = self.sample_type;
             tokio::spawn(async move {
-                let waiting_jobs = get_sample_waiting_jobs(res_count_clone, jobs_count, sample_type, new_seed.wrapping_mul(1 + i as u64));
+                let waiting_jobs = get_sample_waiting_jobs(res_count, jobs_count, sample_type, new_seed.wrapping_mul(1 + i as u64));
                 let cache_hits = count_cache_hits(&waiting_jobs);
 
-                let platform_config = platform_mock::generate_mock_platform_config(target.has_cache(), res_count_clone, 24, 4, 64, false);
+                let platform_config = platform_mock::generate_mock_platform_config(cache, res_count, 24, 4, 64, false);
                 let mut platform = PlatformBenchMock::new(platform_config, vec![], waiting_jobs);
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, slot_count) = match target {
-                    BenchmarkTarget::Basic(_, _) => measure_time(|| kamelot_basic::schedule_cycle(&mut platform, queues)),
-                    BenchmarkTarget::Tree(_) => measure_time(|| kamelot_tree::schedule_cycle(&mut platform, queues)),
-                    BenchmarkTarget::Python(_) => schedule_cycle_on_oar_python(&mut platform, queues),
+                    BenchmarkTarget::Basic => measure_time(|| kamelot_basic::schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Tree => measure_time(|| kamelot_tree::schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Python => schedule_cycle_on_oar_python(&mut platform, queues),
                 };
 
                 let quotas_hits = platform.get_scheduled_jobs().iter().map(|j| j.quotas_hit_count).sum::<u32>();
@@ -314,17 +301,12 @@ impl BenchmarkTarget {
                     scheduling_time,
                     (cache_hits * 100 / jobs_count) as u32,
                     slot_count as u32,
-                    (quotas_hits * 100 / jobs_count as u32),
+                    quotas_hits * 100 / jobs_count as u32,
                     gantt_width as u32,
                     optimal_gantt_width,
                 )
             })
-        }))
-        .await
-        .into_iter()
-        .map(|f| f.unwrap())
-        .collect::<Vec<BenchmarkResult>>()
-        .into()
+        }).await.into_iter().map(|r| r.unwrap()).collect::<Vec<BenchmarkResult>>().into()
     }
 }
 
@@ -608,16 +590,12 @@ pub fn measure_time<F, R>(f: F) -> (u32, R)
 where
     F: FnOnce() -> R,
 {
-    let start_cpu = ProcessTime::now();
     let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
     let res = f();
 
     let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let time = (end.as_millis() - start.as_millis()) as u32;
-    let _time_cpu = start_cpu.elapsed().as_millis() as u32;
-
-    //info!("CPU time / system tyme: {} ms / {} ms", time_cpu, time);
 
     (time, res)
 }

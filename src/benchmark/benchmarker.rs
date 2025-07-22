@@ -117,6 +117,7 @@ pub enum WaitingJobsSampleType {
     Normal,
     HighCacheHit,
     Besteffort,
+    NodeOnly,
 }
 impl WaitingJobsSampleType {
     pub fn to_friendly_string(&self) -> String {
@@ -124,6 +125,7 @@ impl WaitingJobsSampleType {
             WaitingJobsSampleType::Normal => "Normal jobs".to_string(),
             WaitingJobsSampleType::HighCacheHit => "High cache hits jobs".to_string(),
             WaitingJobsSampleType::Besteffort => "Besteffort jobs".to_string(),
+            WaitingJobsSampleType::NodeOnly => "Node only jobs".to_string(),
         }
     }
 }
@@ -133,6 +135,7 @@ impl Display for WaitingJobsSampleType {
             WaitingJobsSampleType::Normal => "Normal",
             WaitingJobsSampleType::HighCacheHit => "HighCacheHits",
             WaitingJobsSampleType::Besteffort => "Besteffort",
+            WaitingJobsSampleType::NodeOnly => "NodeOnly",
         }
         .to_string();
         write!(f, "{}", str)
@@ -297,13 +300,13 @@ impl BenchmarkTarget {
                     .map(|j| j.scheduled_data.clone().unwrap().end)
                     .max()
                     .unwrap_or(0);
-                let optimal_gantt_width = platform
+                let optimal_gantt_width = (platform
                     .get_scheduled_jobs()
                     .iter()
                     .map(|j| j.scheduled_data.clone().unwrap())
-                    .map(|sd| sd.proc_set.core_count() * ((sd.end - sd.begin + 1) as u32))
-                    .sum::<u32>()
-                    / res_count;
+                    .map(|sd| sd.proc_set.core_count() as i64 * (sd.end - sd.begin + 1))
+                    .sum::<i64>()
+                    / res_count as i64) as u32;
 
                 BenchmarkResult::new(
                     jobs_count as u32,
@@ -485,6 +488,24 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
             res_in_single_type: "cpus".to_string(),
         }
         .generate_jobs(),
+        WaitingJobsSampleType::NodeOnly => RandomJobGenerator {
+            rand: StdRng::from_os_rng(),
+            count: jobs_count,
+            id_offset: 0,
+            total_res: res_count,
+            job_type: "nodeonly".to_string(),
+
+            walltime_min: 60,
+            walltime_max: 60 * 24,
+            walltime_step: 60,
+
+            res_min: 1,
+            res_max: 39,
+            res_step: 1,
+            res_type: "nodes".to_string(),
+            res_in_single_type: "".to_string(),
+        }
+        .generate_jobs(),
     };
     waiting_jobs.append(&mut jobs);
     waiting_jobs
@@ -534,13 +555,16 @@ impl RandomJobGenerator {
             let walltime = self.generate(self.walltime_min, self.walltime_max, self.walltime_step) as i64;
             let res_count = self.generate(self.res_min, self.res_max, self.res_step);
 
-            let request = HierarchyRequest::new(
-                ProcSet::from_iter(1..=self.total_res),
+            let hierarchy_req = if self.res_in_single_type == "" {
+                vec![(self.res_type.clone().into_boxed_str(), res_count)]
+            } else {
                 vec![
                     (self.res_in_single_type.clone().into_boxed_str(), 1),
                     (self.res_type.clone().into_boxed_str(), res_count),
-                ],
-            );
+                ]
+            };
+
+            let request = HierarchyRequest::new(ProcSet::from_iter(1..=self.total_res), hierarchy_req);
 
             let moldable = Moldable::new(walltime, HierarchyRequests::from_requests(vec![request]));
             jobs.push(Job::new(
@@ -590,10 +614,10 @@ where
     let res = f();
 
     let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let _time = (end.as_millis() - start.as_millis()) as u32;
-    let time_cpu = start_cpu.elapsed().as_millis() as u32;
+    let time = (end.as_millis() - start.as_millis()) as u32;
+    let _time_cpu = start_cpu.elapsed().as_millis() as u32;
 
     //info!("CPU time / system tyme: {} ms / {} ms", time_cpu, time);
 
-    (time_cpu, res)
+    (time, res)
 }

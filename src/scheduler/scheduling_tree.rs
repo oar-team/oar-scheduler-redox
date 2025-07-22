@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use oar3_rust_macros::benchmark;
 
 /// Schedule loop with support for jobs container - can be recursive
-#[benchmark]
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, TreeSlotSet>, waiting_jobs: &mut Vec<Job>) {
     waiting_jobs.into_iter().for_each(|job| {
         let slot_set_name = "default".to_string();

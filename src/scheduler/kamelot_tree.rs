@@ -4,11 +4,9 @@ use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling_tree::schedule_jobs;
 use crate::scheduler::tree_slot::TreeSlotSet;
 use std::rc::Rc;
-use oar3_rust_macros::benchmark;
 
 
 // Returns the number of slots
-#[benchmark]
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> usize {
     let now = platform.get_now();
     let max_time = platform.get_max_time();

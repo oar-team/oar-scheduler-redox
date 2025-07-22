@@ -9,6 +9,7 @@ use std::rc::Rc;
 use pyo3::{Bound, IntoPyObject, PyErr, Python};
 use pyo3::prelude::PyDictMethods;
 use pyo3::types::{PyDict, PyList};
+use oar3_rust_macros::{benchmark, benchmark_hierarchy};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
@@ -454,6 +455,7 @@ pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resou
 
 }
 /// The job does not need to be scheduled yet, hence the resource_count is provided.
+#[benchmark]
 pub fn check_quotas<'s>(mut slots_quotas: HashMap<i32, (Quotas, i64)>, job: &Job, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     // Check each combined quotas against the job.
     for (_, (quotas, duration)) in slots_quotas.iter_mut() {

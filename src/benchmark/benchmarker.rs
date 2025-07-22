@@ -114,17 +114,21 @@ impl From<Vec<u32>> for BenchmarkMeasurementStatistics {
 #[allow(dead_code)]
 pub enum WaitingJobsSampleType {
     Normal,
+    OldNormal,
     HighCacheHit,
     Besteffort,
     NodeOnly,
+    CoreOnly,
 }
 impl WaitingJobsSampleType {
     pub fn to_friendly_string(&self) -> String {
         match self {
             WaitingJobsSampleType::Normal => "Normal jobs".to_string(),
+            WaitingJobsSampleType::OldNormal => "Old normal jobs".to_string(),
             WaitingJobsSampleType::HighCacheHit => "High cache hits jobs".to_string(),
             WaitingJobsSampleType::Besteffort => "Besteffort jobs".to_string(),
             WaitingJobsSampleType::NodeOnly => "Node only jobs".to_string(),
+            WaitingJobsSampleType::CoreOnly => "Core only jobs".to_string(),
         }
     }
 }
@@ -132,9 +136,11 @@ impl Display for WaitingJobsSampleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
             WaitingJobsSampleType::Normal => "Normal",
+            WaitingJobsSampleType::OldNormal => "OldNormal",
             WaitingJobsSampleType::HighCacheHit => "HighCacheHits",
             WaitingJobsSampleType::Besteffort => "Besteffort",
             WaitingJobsSampleType::NodeOnly => "NodeOnly",
+            WaitingJobsSampleType::CoreOnly => "CoreOnly",
         }
         .to_string();
         write!(f, "{}", str)
@@ -488,6 +494,41 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
             res_in_single_type: "".to_string(),
         }
         .generate_jobs(),
+        WaitingJobsSampleType::CoreOnly => RandomJobGenerator {
+            rand: StdRng::from_os_rng(),
+            count: jobs_count,
+            id_offset: 0,
+            total_res: res_count,
+            job_type: "nodeonly".to_string(),
+
+            walltime_min: 60,
+            walltime_max: 60 * 24,
+            walltime_step: 60,
+
+            res_min: 1*64,
+            res_max: 39*64,
+            res_step: 1,
+            res_type: "cores".to_string(),
+            res_in_single_type: "".to_string(),
+        }
+            .generate_jobs(),
+        WaitingJobsSampleType::OldNormal => RandomJobGenerator {
+            rand: StdRng::seed_from_u64(seed),
+            count: jobs_count,
+            id_offset: 0,
+            total_res: res_count,
+            job_type: "smalljobs".to_string(),
+
+            walltime_min: 10,
+            walltime_max: 60 * 24,
+            walltime_step: 1,
+
+            res_min: 1,
+            res_max: 1000,
+            res_step: 1,
+            res_type: "cores".to_string(),
+            res_in_single_type: "".to_string(),
+        }.generate_jobs(),
     };
     waiting_jobs.append(&mut jobs);
     waiting_jobs

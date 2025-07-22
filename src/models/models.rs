@@ -4,6 +4,7 @@ use pyo3::prelude::{PyAnyMethods, PyListMethods, PyModule};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use crate::scheduler::hierarchy::HierarchyRequests;
 use range_set_blaze::RangeSetBlaze;
+use oar3_rust_macros::{benchmark, benchmark_hierarchy};
 
 pub type ProcSet = RangeSetBlaze<u32>;
 pub fn proc_set_to_python<'a>(py: Python<'a>, proc_set: &ProcSet) -> Bound<'a, PyAny> {
@@ -164,6 +165,7 @@ impl ProcSetCoresOp for ProcSet {
     /// Will not substract cores to the slots. This function will only try to find a fitting subset of cores
     /// If successful, return a new `ProcSet` that represents the selected available cores.
     /// Returns `None` if there are not enough cores available.
+    #[benchmark]
     fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet> {
         let available_cores = self.core_count();
         if available_cores < core_count {

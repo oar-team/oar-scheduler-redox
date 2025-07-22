@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 use std::str::EncodeUtf16;
+use oar3_rust_macros::{benchmark, benchmark_hierarchy};
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -158,6 +159,7 @@ impl TreeNode {
     /// Return [`FitState::None`] if the moldable cannot fit in this node or its children.
     /// Return [`FitState::MaybeChildren`] if the moldable might fit in the children. The children can then be traversed to find a smaller fitting node.
     /// Return [`FitState::Fit(proc_set)`] if the moldable fits in this node, and the `proc_set` is the resources that can be claimed for the moldable.
+    #[benchmark]
     pub fn fit_state(&self, moldable: &Moldable, job: &Job, walltime: i64, quotas_hit_count: &mut u32) -> FitState {
         let hierarchy = &self.slot.platform_config.resource_set.hierarchy;
         if moldable.walltime <= self.slot.duration() {
@@ -180,6 +182,7 @@ impl TreeNode {
 
     /// Utility function for `TreeNode::fit_state`.
     /// Checks the fit state of a job in the intersection of the proc_set and the moldable requests.
+    #[benchmark]
     fn fit_state_in_intersection(&self, moldable: &Moldable, job: &Job, walltime: i64, no_fit_state: FitState, quotas_hit_count: &mut u32) -> FitState {
         self.slot.platform_config.resource_set.hierarchy
             .request(&self.slot.proc_set, &moldable.requests)
@@ -344,11 +347,7 @@ impl TreeSlotSet {
         }
     }
 
-    /// Finds a node that can fit the moldable.
-    /// Returns the first node in which the job fits, and the `ProcSet` of the resources that can be claimed for the moldable.
-    /// The returned node is bigger than the moldable walltime and may not be a leaf.
-    /// The job can be scheduled starting at the beginning of the node, and resources can be subtracted using [`TreeSlotSet::claim_node_for_scheduled_job`].
-    /// If no node can fit the moldable, returns `None`. The third returned value is the number of quotas hit during the search.
+
     pub fn find_node_for_moldable(&self, moldable: &Moldable, job: &Job) -> Option<(&TreeNode, ProcSet, u32)> {
         let mut quotas_hit_count = 0;
         let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, job, &mut quotas_hit_count);
@@ -356,6 +355,7 @@ impl TreeSlotSet {
         node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set, quotas_hit_count))
     }
     /// Helper recursive function to find a node for moldable, see [`TreeSlotSet::find_node_for_moldable`].
+    #[benchmark]
     fn find_node_for_moldable_rec(node: NodeRef<TreeNode>, moldable: &Moldable, job: &Job, quotas_hit_count: &mut u32) -> (usize, Option<(NodeId, ProcSet)>) {
 
         match node.data().fit_state(moldable, job, moldable.walltime, quotas_hit_count) {

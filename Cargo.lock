@@ -851,7 +851,6 @@ name = "oar3-rust-macros"
 version = "0.1.0"
 dependencies = [
  "quote",
- "rand",
  "syn",
 ]
 

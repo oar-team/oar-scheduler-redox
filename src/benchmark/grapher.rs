@@ -1,3 +1,4 @@
+use log::info;
 use crate::benchmark::benchmarker::{BenchmarkAverageResult, BenchmarkConfig, BenchmarkMeasurementStatistics, BenchmarkTarget};
 use plotters::backend::SVGBackend;
 use plotters::chart::{ChartBuilder, LabelAreaPosition, SeriesLabelPosition};
@@ -163,4 +164,6 @@ fn graph_benchmark_series(prefix_name: String, benchmark: BenchmarkConfig, serie
         .margin(5)
         .draw()
         .unwrap();
+
+    info!("Graph saved to {}", path);
 }

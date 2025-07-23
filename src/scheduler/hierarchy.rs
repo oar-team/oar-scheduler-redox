@@ -1,11 +1,11 @@
 use crate::models::models::{proc_set_to_python, ProcSet, ProcSetCoresOp};
+use crate::platform::ResourceSet;
 use log::{debug, info, warn};
+use oar3_rust_macros::{benchmark, benchmark_hierarchy};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
 use std::collections::HashMap;
-use oar3_rust_macros::{benchmark, benchmark_hierarchy};
-use crate::platform::ResourceSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyRequests(pub Box<[HierarchyRequest]>);
@@ -120,7 +120,6 @@ impl Hierarchy {
             self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs)
                 .map(|partition| partition | acc)
         });
-        info!("Hierarchy request result: {:?}", result);
         result
     }
     #[benchmark]

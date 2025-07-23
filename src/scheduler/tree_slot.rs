@@ -193,13 +193,6 @@ impl TreeNode {
     /// Checks the fit state of a job in the intersection of the proc_set and the moldable requests.
     #[benchmark]
     fn fit_state_in_intersection(&self, moldable: &Moldable, job: &Job, no_fit_state: FitState, quotas_hit_count: &mut u32) -> FitState {
-        info!(
-            "-- [{}] Tree Hierarchy request on intersection from {} to {} (Procset {:?})",
-            job.id,
-            self.slot.begin(),
-            self.slot.end(),
-            self.slot.proc_set
-        );
         self.slot
             .platform_config
             .resource_set
@@ -426,26 +419,38 @@ impl TreeSlotSet {
     }
 
     pub fn find_node_for_moldable(&self, moldable: &Moldable, job: &Job) -> Option<(&TreeNode, ProcSet, u32)> {
-        self.print_tree();
         let mut quotas_hit_count = 0;
-        let (count, node_id_proc_set) = Self::find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, job, &mut quotas_hit_count);
-        debug!("Found node for moldable iterating over {} nodes", count);
+        let (count, node_id_proc_set) = self.find_node_for_moldable_rec(self.tree.root().unwrap(), moldable, job, &mut quotas_hit_count);
         node_id_proc_set.map(|(node_id, proc_set)| (self.tree.get(node_id).unwrap().data(), proc_set, quotas_hit_count))
     }
     /// Helper recursive function to find a node for moldable, see [`TreeSlotSet::find_node_for_moldable`].
     #[benchmark]
     fn find_node_for_moldable_rec(
+        &self,
         node: NodeRef<TreeNode>,
         moldable: &Moldable,
         job: &Job,
         quotas_hit_count: &mut u32,
     ) -> (usize, Option<(NodeId, ProcSet)>) {
         match node.data().fit_state(moldable, job, quotas_hit_count) {
-            FitState::Fit(proc_set) => return (1, Some((node.node_id(), proc_set))),
+            FitState::Fit(proc_set) => {
+                // Find the smallest children node with the same beginning.
+                let mut child_node_id = node.node_id();
+                while let Some(child) = self.tree.get(child_node_id).unwrap().first_child() {
+                    if child.data().duration() < moldable.walltime {
+                        break;
+                    }
+                    child_node_id = child.node_id();
+                }
+                if child_node_id == node.node_id() {
+                    return (1, Some((child_node_id, proc_set)))
+                }
+                // Compute again the proc_set for the children node in case a more isolated proc_set could be found.
+                return self.find_node_for_moldable_rec(self.tree.get(child_node_id).unwrap(), moldable, job, quotas_hit_count);
+            },
             FitState::MaybeChildren => {
                 for child in node.children() {
-                    info!("Iterating over child node from {} to {}", child.data().begin(), child.data().end());
-                    let (count, child) = Self::find_node_for_moldable_rec(child, moldable, job, quotas_hit_count);
+                    let (count, child) = self.find_node_for_moldable_rec(child, moldable, job, quotas_hit_count);
                     if let Some(child) = child {
                         return (1 + count, Some(child));
                     }

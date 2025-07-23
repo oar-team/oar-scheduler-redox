@@ -1,12 +1,12 @@
-use std::cell::RefCell;
 use crate::benchmark::benchmarker::{BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
+use crate::benchmark::function_benchmark::{print_function_benchmark_results, print_function_benchmark_results_hierarchy};
 use crate::benchmark::grapher::graph_benchmark_result;
 use lazy_static::lazy_static;
 use log::LevelFilter;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
-use crate::benchmark::function_benchmark::{print_function_benchmark_results, print_function_benchmark_results_hierarchy};
 
 mod benchmark;
 mod models;
@@ -37,10 +37,10 @@ async fn main() {
         cache: false,
         averaging: 1,
         res_count: 10_000,
-        start: 6,
-        end: 6,
-        step: 6,
-        seed: 22,
+        start: 7,
+        end: 7,
+        step: 1,
+        seed: 26,
         single_thread: false,
     };
     let results = benchmark.benchmark().await;

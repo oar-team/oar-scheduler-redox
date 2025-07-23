@@ -1,10 +1,9 @@
-use log::info;
-use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
+use crate::scheduler::hierarchy::HierarchyRequests;
+use oar3_rust_macros::benchmark;
 use pyo3::prelude::{PyAnyMethods, PyListMethods, PyModule};
 use pyo3::types::{PyDict, PyList, PyTuple};
-use crate::scheduler::hierarchy::HierarchyRequests;
+use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
 use range_set_blaze::RangeSetBlaze;
-use oar3_rust_macros::{benchmark, benchmark_hierarchy};
 
 pub type ProcSet = RangeSetBlaze<u32>;
 pub fn proc_set_to_python<'a>(py: Python<'a>, proc_set: &ProcSet) -> Bound<'a, PyAny> {

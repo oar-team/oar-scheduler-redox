@@ -323,7 +323,6 @@ impl BenchmarkConfig {
 fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> Vec<Job> {
     let mut waiting_jobs: Vec<Job> = vec![];
     let last_remaining = jobs_count - ((2 * jobs_count / 5) * 2 + (jobs_count / 10));
-    info!("Generating {} jobs of type {:?} with seed {}", jobs_count, sample_type, seed);
     let mut jobs = match sample_type {
         WaitingJobsSampleType::Normal => RandomJobGenerator {
             rand: StdRng::seed_from_u64(seed),
@@ -579,11 +578,9 @@ struct RandomJobGenerator {
 impl RandomJobGenerator {
     fn generate_jobs(&mut self) -> Vec<Job> {
         let mut jobs: Vec<Job> = Vec::with_capacity(self.count);
-        info!("Generating {} jobs with seed {}", self.count, self.rand.next_u64());
         for i in 0..self.count {
             let walltime = self.generate(self.walltime_min, self.walltime_max, self.walltime_step) as i64;
             let res_count = self.generate(self.res_min, self.res_max, self.res_step);
-            info!("Generating job {} with walltime {} and {} nodes = {} cores", i, walltime, res_count, res_count * 256);
 
             let hierarchy_req = if self.res_in_single_type == "" {
                 vec![(self.res_type.clone().into_boxed_str(), res_count)]

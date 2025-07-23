@@ -1,9 +1,9 @@
 use crate::models::models::{Job, ScheduledJobData};
 use crate::scheduler::tree_slot::TreeSlotSet;
 use log::{debug, info};
+use oar3_rust_macros::benchmark;
 use std::cmp::max;
 use std::collections::HashMap;
-use oar3_rust_macros::benchmark;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, TreeSlotSet>, waiting_jobs: &mut Vec<Job>) {

@@ -1,5 +1,5 @@
-use log::info;
 use crate::benchmark::benchmarker::{BenchmarkAverageResult, BenchmarkConfig, BenchmarkMeasurementStatistics, BenchmarkTarget};
+use log::info;
 use plotters::backend::SVGBackend;
 use plotters::chart::{ChartBuilder, LabelAreaPosition, SeriesLabelPosition};
 use plotters::data::Quartiles;

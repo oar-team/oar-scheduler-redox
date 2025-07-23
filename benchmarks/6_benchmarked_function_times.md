@@ -1,107 +1,49 @@
-# Execution times for Tree algorithm functions
-## OldNormal
-Function schedule_job                        called   1000 times, took  174ms ( 174µs on average)
-Function find_node_for_moldable_rec          called 158943 times, took 7.79s  (  49µs on average)
-Function fit_state                           called 158943 times, took  131ms (   0µs on average)
-Function request                             called 161770 times, took  107ms (   0µs on average)
-Function fit_state_in_intersection           called  80674 times, took   34ms (   0µs on average)
-Function find_resource_hierarchies_scattered called 161770 times, took   69ms (   0µs on average)
-Function sub_proc_set_with_cores             called 161770 times, took   54ms (   0µs on average)
+# Execution times of the benchmarked functions
+## Basic (no cache) NodeOnly 1000 Jobs
+1000 of 1000 jobs scheduled in 4108 ms (39% cache hits, 877 slots, 6920/6477h width (93% usage), 0% quotas hit)
+Function schedule_job                        called   1000 times, took 4104ms ( 4104µs on average)
+Function find_slots_for_moldable             called   1000 times, took 4100ms ( 4100µs on average)
+Function request                             called 369698 times, took 2887ms ( 7810ns on average)
+Function find_resource_hierarchies_scattered called 369698 times, took 2515ms ( 6803ns on average)
+Function intersect_slots_intervals           called 369698 times, took  816ms ( 2210ns on average)
 
-## CoreOnly 64
-Function schedule_job                        called   1000 times, took   331ms ( 331µs on average)
-Function find_node_for_moldable_rec          called 223198 times, took 21.17s  (  94µs on average)
-Function fit_state                           called 223198 times, took   288ms (   1µs on average)
-Function request                             called 242378 times, took   252ms (   1µs on average)
-Function find_resource_hierarchies_scattered called 242378 times, took   199ms (   0µs on average)
-Function sub_proc_set_with_cores             called 242378 times, took   175ms (   0µs on average)
-Function fit_state_in_intersection           called 125379 times, took    53ms (   0µs on average)
-
-## CoreOnly 64 in switch
-Function schedule_job                        called   1000 times, took   460ms ( 460µs on average)
-Function find_node_for_moldable_rec          called 230570 times, took 30.89s  ( 133µs on average)
-Function fit_state                           called 230570 times, took   415ms (   1µs on average)
-Function request                             called 251310 times, took   378ms (   1µs on average)
-Function fit_state_in_intersection           called 127994 times, took   131ms (   1µs on average)
-Function find_resource_hierarchies_scattered called 643333 times, took   544ms (   0µs on average)
-Function sub_proc_set_with_cores             called 392023 times, took   187ms (   0µs on average)
+## Tree NodeOnly 1000 Jobs
+1000 of 1000 jobs scheduled in 9209 ms (39% cache hits, 821 slots, 7019/6491h width (92% usage), 0% quotas hit)
+Function schedule_job                        called   1000 times, took 9134ms ( 9134µs on average)
+Function find_node_for_moldable_rec          called 446703 times, took 1509s  ( 3377µs on average)
+Function fit_state                           called 446703 times, took 8688ms (   19µs on average)
+Function request                             called 555886 times, took 8373ms (   15µs on average)
+Function find_resource_hierarchies_scattered called 555886 times, took 7756ms (   13µs on average)
+Function fit_state_in_intersection           called 287059 times, took 1719ms ( 5989ns on average)
 
 
-## CoreOnly 256
-Function schedule_job                        called   1000 times, took   1.66s  (   1ms on average)
-Function find_node_for_moldable_rec          called 446658 times, took 274.41s  ( 614µs on average)
-Function fit_state                           called 446658 times, took   1.58s  (   3µs on average)
-Function request                             called 545337 times, took   1.50s  (   2µs on average)
-Function find_resource_hierarchies_scattered called 545337 times, took   1.38s  (   2µs on average)
-Function sub_proc_set_with_cores             called 545337 times, took   1.33s  (   2µs on average)
-Function fit_state_in_intersection           called 277049 times, took    120ms (   0µs on average)
+## Basic (no cache) NodeOnly 7 Jobs
+0: 0->539 (proc_set 1..=7936)
+1: 540->1259 (proc_set 1..=2816)
+2: 540->1019 (proc_set 2817..=6656)
+3: 1020->1139 (proc_set 2817..=8704)
+4: 1140->2519 (proc_set 2817..=9472)  VS 1260->2639 (proc_set 1..=6656)
+5: 2520->3659 (proc_set 1..=4096)
+6: 2520->3899 (proc_set 4097..=9728)
+7 of 7 jobs scheduled in 0 ms (0% cache hits, 8 slots, 64/50h width (78% usage), 0% quotas hit)
+Function schedule_job                        called  7 times, took  778µs ( 111µs on average)
+Function find_slots_for_moldable             called  7 times, took  716µs ( 102µs on average)
+Function request                             called 24 times, took  571µs (  23µs on average)
+Function find_resource_hierarchies_scattered called 24 times, took  539µs (  22µs on average)
+Function intersect_slots_intervals           called 24 times, took   76µs (3184ns on average)
 
-## NodeOnly
-Function schedule_job                        called   1000 times, took   1s  ( 1047µs on average)
-Function find_node_for_moldable_rec          called 436944 times, took 179s  (  409µs on average)
-Function fit_state                           called 436944 times, took 965ms ( 2209ns on average)
-Function request                             called 537598 times, took 886ms ( 1649ns on average)
-Function find_resource_hierarchies_scattered called 537598 times, took 768ms ( 1430ns on average)
-Function fit_state_in_intersection           called 274821 times, took 299ms ( 1089ns on average)
-
-## Normal
-Function schedule_job                        called    1000 times, took   990ms ( 990µs on average)
-Function find_node_for_moldable_rec          called  133567 times, took 15.04s  ( 112µs on average)
-Function fit_state                           called  133567 times, took   960ms (   7µs on average)
-Function request                             called  156206 times, took   936ms (   5µs on average)
-Function fit_state_in_intersection           called   79183 times, took   465ms (   5µs on average)
-Function find_resource_hierarchies_scattered called 1828818 times, took  1.53s  (   0µs on average)
-Function sub_proc_set_with_cores             called 1480262 times, took    25ms (   0µs on average)
-
-# Execution times for Basic algorithm without cache
-
-## NodeOnly
-Function schedule_job                        called   1000 times, took 512ms ( 512µs on average)
-Function find_slots_for_moldable             called   1000 times, took 511ms ( 511µs on average)
-Function request                             called 354352 times, took 320ms ( 906ns on average)
-Function find_resource_hierarchies_scattered called 354352 times, took 259ms ( 732ns on average)
-Function intersect_slots_intervals           called 354352 times, took 113ms ( 319ns on average)
-
-# For 100 Jobs - Basic
-## NodeOnly
-Function schedule_job                        called  100 times, took  6525µs (  65µs on average)
-Function find_slots_for_moldable             called  100 times, took  6454µs (  64µs on average)
-Function request                             called 3735 times, took  4121µs (1103ns on average)
-Function find_resource_hierarchies_scattered called 3735 times, took  3408µs ( 913ns on average)
-Function intersect_slots_intervals           called 3735 times, took  1456µs ( 390ns on average)
-
-# For 100 Jobs - Tree
-## NodeOnly
-Function schedule_job                        called  100 times, took    12ms ( 120µs on average)
-Function find_node_for_moldable_rec          called 4396 times, took   208ms (  47µs on average)
-Function fit_state                           called 4396 times, took    11ms (2545ns on average)
-Function request                             called 5512 times, took    10ms (1889ns on average)
-Function find_resource_hierarchies_scattered called 5512 times, took  9245µs (1677ns on average)
-Function fit_state_in_intersection           called 2860 times, took  4671µs (1633ns on average)
-
-# For 10 Jobs - Basic
-## NodeOnly
-Function schedule_job                        called 10 times, took  130µs (  13µs on average)
-Function find_slots_for_moldable             called 10 times, took  122µs (  12µs on average)
-Function request                             called 47 times, took   86µs (1831ns on average)
-Function find_resource_hierarchies_scattered called 47 times, took   76µs (1622ns on average)
-Function intersect_slots_intervals           called 47 times, took   20µs ( 435ns on average)
-
-# For 10 Jobs - Tree
-## NodeOnly
-Function schedule_job                        called 10 times, took  184µs (  18µs on average)
-Function find_node_for_moldable_rec          called 47 times, took  514µs (  10µs on average)
-Function fit_state                           called 47 times, took  166µs (3532ns on average)
-Function fit_state_in_intersection           called 35 times, took   98µs (2820ns on average)
-Function request                             called 60 times, took  156µs (2604ns on average)
-Function find_resource_hierarchies_scattered called 60 times, took  130µs (2172ns on average)
-
-## NodeOnly - intersection first
-Function schedule_job                        called  10 times, took   367µs (  36µs on average)
-Function find_node_for_moldable_rec          called 100 times, took  1408µs (  14µs on average)
-Function fit_state                           called 100 times, took   344µs (3446ns on average)
-Function request                             called 115 times, took   325µs (2830ns on average)
-Function fit_state_in_intersection           called  70 times, took   191µs (2735ns on average)
-Function find_resource_hierarchies_scattered called 115 times, took   287µs (2497ns on average)
-
-
+## Tree NodeOnly 7 Jobs
+0: 0->539 (proc_set 1..=7936)
+1: 540->1259 (proc_set 1..=2816)
+2: 540->1019 (proc_set 2817..=6656)
+3: 1020->1139 (proc_set 2817..=8704)
+4: 1260->2639 (proc_set 1..=6656)
+5: 2640->3779 (proc_set 1..=4096)
+6: 2640->4019 (proc_set 4097..=9728)
+7 of 7 jobs scheduled in 2 ms (0% cache hits, 8 slots, 66/50h width (75% usage), 0% quotas hit)
+Function schedule_job                        called  7 times, took  1744µs ( 249µs on average)
+Function find_node_for_moldable_rec          called 33 times, took  3578µs ( 108µs on average)
+Function fit_state                           called 33 times, took  1544µs (  46µs on average)
+Function fit_state_in_intersection           called 26 times, took  1004µs (  38µs on average)
+Function request                             called 41 times, took  1502µs (  36µs on average)
+Function find_resource_hierarchies_scattered called 41 times, took  1413µs (  34µs on average)

@@ -68,7 +68,6 @@ pub fn print_function_benchmark_results() {
 }
 
 pub fn print_function_benchmark_results_hierarchy() {
-    println!("Function Benchmark Hierarchy:");
     let report = FUNCTION_METRICS_HIERARCHY.lock().unwrap();
     print_hierarchy_helper(&report, Vec::new(), 0);
 }

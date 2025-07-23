@@ -2,10 +2,10 @@ use crate::models::models::{Job, Moldable, ScheduledJobData};
 use crate::models::models::{ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::SlotSet;
-use log::{debug, info};
+use log::warn;
+use oar3_rust_macros::benchmark;
 use std::cmp::max;
 use std::collections::HashMap;
-use oar3_rust_macros::benchmark;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {
@@ -60,7 +60,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
         job.quotas_hit_count = total_quotas_hit_count;
         slot_set.split_slots_for_job_and_update_resources(&job, true, true, chosen_slot_id_left);
     } else {
-        info!("Warning: no node found for job {:?}", job);
+        warn!("Warning: no node found for job {:?}", job);
         slot_set.to_table().printstd();
     }
 }
@@ -68,7 +68,6 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
 /// Returns left slot id, right slot id, proc_set and quotas hit count.
 #[benchmark]
 pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable) -> Option<(i32, i32, ProcSet, u32)> {
-
     let mut iter = slot_set.iter();
     if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
         iter = iter.start_at(cache_first_slot);
@@ -86,8 +85,10 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
         let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id());
 
         // Finding resources according to hierarchy request
-        info!("-- Basic Hierarchy request on slots from {} to {}", left_slot.begin(), right_slot.end());
-        slot_set.get_platform_config().resource_set.hierarchy
+        slot_set
+            .get_platform_config()
+            .resource_set
+            .hierarchy
             .request(&available_resources, &moldable.requests)
             .map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))
             .and_then(|result| {
@@ -109,14 +110,10 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
     });
 
     if slot_set.get_platform_config().cache_enabled {
-       if let Some(cache_first_slot_id) = cache_first_slot {
-            slot_set.insert_cache_entry(
-                moldable.get_cache_key(),
-                cache_first_slot_id,
-            );
+        if let Some(cache_first_slot_id) = cache_first_slot {
+            slot_set.insert_cache_entry(moldable.get_cache_key(), cache_first_slot_id);
         }
     }
 
-    debug!("Found slots for moldable visiting {} slots", count);
     res
 }

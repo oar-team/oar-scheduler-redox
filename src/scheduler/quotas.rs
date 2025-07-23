@@ -1,15 +1,15 @@
-use crate::models::models::{proc_set_to_python, Job};
-use crate::platform::{PlatformConfig, ResourceSet};
+use crate::models::models::Job;
+use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
+use oar3_rust_macros::benchmark;
+use pyo3::prelude::PyDictMethods;
+use pyo3::types::PyDict;
+use pyo3::{Bound, IntoPyObject, PyErr, Python};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
-use pyo3::{Bound, IntoPyObject, PyErr, Python};
-use pyo3::prelude::PyDictMethods;
-use pyo3::types::{PyDict, PyList};
-use oar3_rust_macros::{benchmark, benchmark_hierarchy};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]

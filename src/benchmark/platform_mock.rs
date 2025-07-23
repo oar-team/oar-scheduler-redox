@@ -4,7 +4,6 @@ use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::{QuotasConfig, QuotasValue};
 use std::collections::HashMap;
 use std::rc::Rc;
-use log::info;
 
 /// In mocking, the time unit is the minute.
 pub struct PlatformBenchMock {
@@ -90,7 +89,7 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
         .add_partition("nodes".into(), nodes.into_boxed_slice())
         .add_partition("cpus".into(), cpus.into_boxed_slice())
         .add_unit_partition("cores".into());
-    
+
     ResourceSet {
         default_intervals: ProcSet::from_iter([1..=res_count]),
         available_upto: vec![], // All resources available until max_time

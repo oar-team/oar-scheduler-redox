@@ -2,12 +2,12 @@ use crate::models::models::Moldable;
 use crate::models::models::{Job, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformConfig;
 use crate::scheduler::quotas::Quotas;
+use oar3_rust_macros::benchmark;
 use prettytable::{format, row, Table};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::iter::Iterator;
 use std::rc::Rc;
-use oar3_rust_macros::benchmark;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).

@@ -1,5 +1,5 @@
 use crate::models::models::{proc_set_to_python, ProcSet, ProcSetCoresOp};
-use log::warn;
+use log::{debug, info, warn};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
@@ -116,10 +116,12 @@ impl Hierarchy {
     }
     #[benchmark]
     pub fn request(&self, available_proc_set: &ProcSet, request: &HierarchyRequests) -> Option<ProcSet> {
-        request.0.iter().try_fold(ProcSet::new(), |acc, req| {
+        let result = request.0.iter().try_fold(ProcSet::new(), |acc, req| {
             self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs)
                 .map(|partition| partition | acc)
-        })
+        });
+        info!("Hierarchy request result: {:?}", result);
+        result
     }
     #[benchmark]
     pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {

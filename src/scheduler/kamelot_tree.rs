@@ -39,6 +39,8 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) 
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();
         platform.set_scheduled_jobs(scheduled_jobs);
 
+        slot_sets.get("default").unwrap().print_tree();
+
         return slot_sets.get("default").unwrap().count_leaves();
     }
     0

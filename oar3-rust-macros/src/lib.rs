@@ -57,28 +57,21 @@ pub fn benchmark_hierarchy(_attr: TokenStream, item: TokenStream) -> TokenStream
             let duration = start.elapsed();
             if !is_recursive {
                 crate::CALL_STACK.with(|stack| stack.borrow_mut().pop());
+
+                let mut metrics = crate::FUNCTION_METRICS.lock().unwrap();
+                let entry = metrics.entry((#function_key.to_string(), #function_num)).or_insert((0, std::time::Duration::new(0, 0)));
+                entry.0 += 1;
+                entry.1 += duration;
+
+                let mut metrics_hy = crate::FUNCTION_METRICS_HIERARCHY.lock().unwrap();
+                let entry = metrics_hy
+                    .entry(crate::CALL_STACK.with(|stack| stack.borrow().clone()))
+                    .or_insert(std::collections::HashMap::new())
+                    .entry((#function_key.to_string(), #function_num))
+                    .or_insert((0, std::time::Duration::new(0, 0)));
+                entry.0 += 1;
+                entry.1 += duration;
             }
-            // if is_recursive {
-            //     parent = crate::CALL_STACK.with(|stack| {
-            //         let stack = stack.borrow();
-            //         stack.get(stack.len() - 2).cloned().unwrap_or(0)
-            //     });
-            // }
-
-            let mut metrics = crate::FUNCTION_METRICS.lock().unwrap();
-            let entry = metrics.entry((#function_key.to_string(), #function_num)).or_insert((0, std::time::Duration::new(0, 0)));
-            entry.0 += 1;
-            entry.1 += duration;
-
-            let mut metrics_hy = crate::FUNCTION_METRICS_HIERARCHY.lock().unwrap();
-            let entry = metrics_hy
-                .entry(crate::CALL_STACK.with(|stack| stack.borrow().clone()))
-                .or_insert(std::collections::HashMap::new())
-                .entry((#function_key.to_string(), #function_num))
-                .or_insert((0, std::time::Duration::new(0, 0)));
-            entry.0 += 1;
-            entry.1 += duration;
-
             result
         }
     };

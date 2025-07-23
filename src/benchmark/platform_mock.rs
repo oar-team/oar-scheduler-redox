@@ -17,7 +17,7 @@ impl PlatformTrait for PlatformBenchMock {
         0
     }
     fn get_max_time(&self) -> i64 {
-        1_000_000
+        1_000_000_000
     }
 
     fn get_platform_config(&self) -> &Rc<PlatformConfig> {
@@ -90,7 +90,7 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
         .add_partition("nodes".into(), nodes.into_boxed_slice())
         .add_partition("cpus".into(), cpus.into_boxed_slice())
         .add_unit_partition("cores".into());
-
+    
     ResourceSet {
         default_intervals: ProcSet::from_iter([1..=res_count]),
         available_upto: vec![], // All resources available until max_time

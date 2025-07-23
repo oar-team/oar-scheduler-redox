@@ -38,24 +38,9 @@ pub fn print_function_benchmark_results() {
             } else {
                 format!("{}", key_str)
             };
-
             let call_count = format!("{}", count);
-            let took_count = if duration.as_millis() < 1000 {
-                format!("{:.2}ms", duration.as_millis())
-            } else {
-                format!("{:.2}s ", duration.as_secs_f64())
-            };
-            let took_avg = duration.div_f64(count as f64);
-            let took_avg_count = if took_avg.as_millis() < 1000 {
-                if took_avg.as_millis() < 1 {
-                    format!("{:.2}µs", took_avg.as_micros())
-                } else {
-                    format!("{:.2}ms", took_avg.as_millis())
-                }
-            } else {
-                format!("{:.2}s ", took_avg.as_secs_f64())
-            };
-
+            let took_count = format_duration(duration);
+            let took_avg_count = format_duration(duration.div_f64(count as f64));
             (
                 key.blue().bold(),
                 call_count.red().bold(),
@@ -154,21 +139,24 @@ fn format_benchmark_data(func_name: &String, func_id: u32, count: u64, duration:
     let func_key = func_name.to_string();
 
     let call_count = format!("{}", count);
-    let took_count = if duration.as_millis() < 1000 {
-        format!("{:.2}ms", duration.as_millis())
-    } else {
-        format!("{:.2}s ", duration.as_secs_f64())
-    };
-    let took_avg = duration.div_f64(count as f64);
-    let took_avg_count = if took_avg.as_millis() < 1000 {
-        if took_avg.as_millis() < 1 {
-            format!("{:.2}µs", took_avg.as_micros())
-        } else {
-            format!("{:.2}ms", took_avg.as_millis())
-        }
-    } else {
-        format!("{:.2}s ", took_avg.as_secs_f64())
-    };
+    let took_count = format_duration(duration);
+    let took_avg_count = format_duration(duration.div_f64(count as f64));
 
     (func_key, call_count, took_count, took_avg_count)
+}
+
+pub fn format_duration(duration: Duration) -> String {
+    if duration.as_secs() < 10 {
+        if duration.as_millis() < 10 {
+            if duration.as_micros() < 10 {
+                format!("{:.0}ns", duration.as_nanos())
+            } else {
+                format!("{:.0}µs", duration.as_micros())
+            }
+        } else {
+            format!("{:.0}ms", duration.as_millis())
+        }
+    } else {
+        format!("{:.0}s ", duration.as_secs_f64())
+    }
 }

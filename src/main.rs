@@ -26,16 +26,20 @@ lazy_static! {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
-    env_logger::Builder::new().filter(None, LevelFilter::Info).init();
+    env_logger::Builder::new()
+        .filter(None, LevelFilter::Info)
+        .filter(Some("oar3_rust::scheduler::hierarchy"), LevelFilter::Debug)
+        .init();
+
     let benchmark = BenchmarkConfig {
         target: BenchmarkTarget::Tree,
-        sample_type: WaitingJobsSampleType::CoreOnly,
-        cache: true,
+        sample_type: WaitingJobsSampleType::NodeOnly,
+        cache: false,
         averaging: 1,
         res_count: 10_000,
-        start: 1000,
-        end: 1000,
-        step: 200,
+        start: 6,
+        end: 6,
+        step: 6,
         seed: 22,
         single_thread: false,
     };

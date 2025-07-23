@@ -5,6 +5,7 @@ use crate::scheduler::slot::SlotSet;
 use log::{debug, info};
 use std::cmp::max;
 use std::collections::HashMap;
+use oar3_rust_macros::benchmark;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {
@@ -23,6 +24,7 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mu
 /// This function has two side effects.
 ///   - Assign the results directly to the `job` (such as start_time, resources, etc.)
 ///   - Split the slot_set to reflect the new allocation
+#[benchmark]
 pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
     let mut chosen_slot_id_left = None;
     let mut chosen_begin = None;
@@ -64,6 +66,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
 }
 
 /// Returns left slot id, right slot id, proc_set and quotas hit count.
+#[benchmark]
 pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable) -> Option<(i32, i32, ProcSet, u32)> {
 
     let mut iter = slot_set.iter();
@@ -83,6 +86,7 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
         let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id());
 
         // Finding resources according to hierarchy request
+        info!("-- Basic Hierarchy request on slots from {} to {}", left_slot.begin(), right_slot.end());
         slot_set.get_platform_config().resource_set.hierarchy
             .request(&available_resources, &moldable.requests)
             .map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))

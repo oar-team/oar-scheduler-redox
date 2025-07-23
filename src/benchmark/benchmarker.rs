@@ -110,7 +110,7 @@ impl From<Vec<u32>> for BenchmarkMeasurementStatistics {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[allow(dead_code)]
 pub enum WaitingJobsSampleType {
     Normal,
@@ -296,7 +296,11 @@ impl BenchmarkConfig {
                 let optimal_gantt_width = (platform
                     .get_scheduled_jobs()
                     .iter()
-                    .map(|j| j.scheduled_data.clone().unwrap())
+                    .map(|j| {
+                        let sd = j.scheduled_data.clone().unwrap();
+                        info!("Sched. Job {}: {}->{} (proc_set {:?})", j.id, sd.begin, sd.end, sd.proc_set);
+                        sd
+                    })
                     .map(|sd| sd.proc_set.core_count() as i64 * (sd.end - sd.begin + 1))
                     .sum::<i64>()
                     / res_count as i64) as u32;
@@ -319,6 +323,7 @@ impl BenchmarkConfig {
 fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> Vec<Job> {
     let mut waiting_jobs: Vec<Job> = vec![];
     let last_remaining = jobs_count - ((2 * jobs_count / 5) * 2 + (jobs_count / 10));
+    info!("Generating {} jobs of type {:?} with seed {}", jobs_count, sample_type, seed);
     let mut jobs = match sample_type {
         WaitingJobsSampleType::Normal => RandomJobGenerator {
             rand: StdRng::seed_from_u64(seed),
@@ -477,7 +482,7 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
         }
         .generate_jobs(),
         WaitingJobsSampleType::NodeOnly => RandomJobGenerator {
-            rand: StdRng::from_os_rng(),
+            rand: StdRng::seed_from_u64(seed),
             count: jobs_count,
             id_offset: 0,
             total_res: res_count,
@@ -495,7 +500,7 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
         }
         .generate_jobs(),
         WaitingJobsSampleType::CoreOnly => RandomJobGenerator {
-            rand: StdRng::from_os_rng(),
+            rand: StdRng::seed_from_u64(seed),
             count: jobs_count,
             id_offset: 0,
             total_res: res_count,
@@ -509,7 +514,7 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
             res_max: 39*64,
             res_step: 1,
             res_type: "cores".to_string(),
-            res_in_single_type: "".to_string(),
+            res_in_single_type: "switches".to_string(),
         }
             .generate_jobs(),
         WaitingJobsSampleType::OldNormal => RandomJobGenerator {
@@ -574,9 +579,11 @@ struct RandomJobGenerator {
 impl RandomJobGenerator {
     fn generate_jobs(&mut self) -> Vec<Job> {
         let mut jobs: Vec<Job> = Vec::with_capacity(self.count);
+        info!("Generating {} jobs with seed {}", self.count, self.rand.next_u64());
         for i in 0..self.count {
             let walltime = self.generate(self.walltime_min, self.walltime_max, self.walltime_step) as i64;
             let res_count = self.generate(self.res_min, self.res_max, self.res_step);
+            info!("Generating job {} with walltime {} and {} nodes = {} cores", i, walltime, res_count, res_count * 256);
 
             let hierarchy_req = if self.res_in_single_type == "" {
                 vec![(self.res_type.clone().into_boxed_str(), res_count)]

@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::iter::Iterator;
 use std::rc::Rc;
+use oar3_rust_macros::benchmark;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -483,6 +484,7 @@ impl SlotSet {
     }
 
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
+    #[benchmark]
     pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
         self.iter()
             .between(begin_slot_id, end_slot_id)

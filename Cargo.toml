@@ -19,6 +19,7 @@ pyo3 = { version = "0.25", features = ["auto-initialize"] }
 oar3-rust-macros = { path = "./oar3-rust-macros" }
 lazy_static = "1.5.0"
 colored = "3.0.0"
+ptree = "0.5.2"
 
 [profile.release]
 lto = "fat"

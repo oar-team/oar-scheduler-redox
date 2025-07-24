@@ -1,11 +1,10 @@
-use crate::models::models::{Job, Moldable, ScheduledJobData};
-use crate::models::models::{ProcSet, ProcSetCoresOp};
+use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::SlotSet;
+use auto_bench_fct::auto_bench_fct_hy;
 use log::warn;
 use std::cmp::max;
 use std::collections::HashMap;
-use auto_bench_fct::auto_bench_fct_hy;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {

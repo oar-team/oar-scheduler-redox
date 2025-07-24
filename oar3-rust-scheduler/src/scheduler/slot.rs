@@ -1,5 +1,4 @@
-use crate::models::models::Moldable;
-use crate::models::models::{Job, ProcSet, ProcSetCoresOp};
+use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformConfig;
 use crate::scheduler::quotas::Quotas;
 use auto_bench_fct::auto_bench_fct_hy;
@@ -39,7 +38,16 @@ impl Debug for Slot {
 }
 
 impl Slot {
-    pub fn new(platform_config: Rc<PlatformConfig>, id: i32, prev: Option<i32>, next: Option<i32>, begin: i64, end: i64, proc_set: ProcSet, quotas: Option<Quotas>) -> Slot {
+    pub fn new(
+        platform_config: Rc<PlatformConfig>,
+        id: i32,
+        prev: Option<i32>,
+        next: Option<i32>,
+        begin: i64,
+        end: i64,
+        proc_set: ProcSet,
+        quotas: Option<Quotas>,
+    ) -> Slot {
         Slot {
             id,
             prev,
@@ -320,7 +328,7 @@ impl SlotSet {
 
     /// Split a given slot just before the given time. Splits between time-1 and time.
     /// The new slot is created and inserted before or after the original slot depending on `before`.
-    /// ```
+    /// ```text
     ///           |                     |       |          |          |
     ///           |       Slot 1        |  -->  |  Slot 2  |  Slot 1  |
     ///           |                     |       |          |          |

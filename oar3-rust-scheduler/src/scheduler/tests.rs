@@ -4,3 +4,5 @@ pub mod slot_test;
 pub mod hierarchy_test;
 #[cfg(test)]
 mod quotas_test;
+#[cfg(test)]
+mod platform_mock;

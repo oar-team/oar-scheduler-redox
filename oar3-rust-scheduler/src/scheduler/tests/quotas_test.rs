@@ -2,8 +2,8 @@
 // For tests not possible to implement yet, the Python code is left as a comment above a blank test function.
 // Helper and config functions are provided for test clarity.
 
-use crate::benchmark::platform_mock::generate_mock_platform_config;
-use crate::models::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData};
+use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
+use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::quotas::*;

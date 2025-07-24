@@ -1,9 +1,12 @@
-use crate::models::models::ProcSet;
-use crate::models::models::{proc_set_to_python, Job};
+use crate::models::ProcSet;
+use crate::models::{proc_set_to_python, Job};
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasConfig;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};
+#[cfg(feature = "pyo3")]
 use pyo3::types::{PyDict, PyList};
+#[cfg(feature = "pyo3")]
 use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyErr, Python};
 use std::rc::Rc;
 
@@ -19,7 +22,7 @@ pub trait PlatformTrait {
     fn set_scheduled_jobs(&mut self, jobs: Vec<Job>);
 }
 
-#[derive(IntoPyObjectRef)]
+#[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]
 pub struct PlatformConfig {
     /// Size of an hour in units of time (e.g., 3600 for second resolution)
     pub hour_size: i64,
@@ -35,7 +38,7 @@ pub struct ResourceSet {
     pub available_upto: Vec<(i64, ProcSet)>,
     pub hierarchy: Hierarchy,
 }
-
+#[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &ResourceSet {
     type Target = PyDict;
     type Output = Bound<'a, Self::Target>;

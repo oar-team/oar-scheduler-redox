@@ -1,9 +1,12 @@
-use crate::models::models::Job;
+use crate::models::Job;
 use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
 use auto_bench_fct::auto_bench_fct_hy;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::PyDictMethods;
+#[cfg(feature = "pyo3")]
 use pyo3::types::PyDict;
+#[cfg(feature = "pyo3")]
 use pyo3::{Bound, IntoPyObject, PyErr, Python};
 use serde::Deserialize;
 use serde_json::Value;
@@ -52,6 +55,7 @@ impl Default for QuotasConfig {
         QuotasConfig::new(true, None, Default::default(), Box::new(["*".into()]))
     }
 }
+#[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &QuotasConfig {
     type Target = PyDict;
     type Output = Bound<'a, Self::Target>;

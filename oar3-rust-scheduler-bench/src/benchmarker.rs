@@ -1,10 +1,3 @@
-use crate::benchmark::oar_python_caller::schedule_cycle_on_oar_python;
-use crate::benchmark::platform_mock;
-use crate::benchmark::platform_mock::PlatformBenchMock;
-use crate::models::models::{Job, Moldable, ProcSet, ProcSetCoresOp};
-use crate::platform::PlatformTrait;
-use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
-use crate::scheduler::kamelot;
 use log::info;
 use plotters::data::Quartiles;
 use rand::prelude::SliceRandom;
@@ -15,6 +8,13 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
+use oar3_rust_scheduler::models::{Job, Moldable, ProcSet, ProcSetCoresOp};
+use oar3_rust_scheduler::platform::PlatformTrait;
+use oar3_rust_scheduler::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
+use oar3_rust_scheduler::scheduler::kamelot::schedule_cycle;
+use crate::platform_mock;
+use crate::platform_mock::PlatformBenchMock;
+use crate::python_caller::schedule_cycle_on_oar_python;
 
 #[derive(Clone)]
 pub struct BenchmarkResult {
@@ -277,7 +277,7 @@ impl BenchmarkConfig {
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, slot_count) = match target {
-                    BenchmarkTarget::Basic => measure_time(|| kamelot::schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Basic => measure_time(|| schedule_cycle(&mut platform, queues)),
                     BenchmarkTarget::Python => schedule_cycle_on_oar_python(&mut platform, queues),
                 };
 

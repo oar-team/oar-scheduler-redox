@@ -1,0 +1,16 @@
+[package]
+name = "oar3-rust-scheduler-bench"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+oar3-rust-scheduler = { path = "../oar3-rust-scheduler", default-features = false,  features = ["pyo3", "benchmark_disable_hy"] }
+env_logger = "0.11.8"
+log = "0.4"
+range-set-blaze = { version = "0.3.0", default-features = false }
+rand = "0.9.1"
+plotters = "0.3.7"
+tokio = { version = "1.46.0", features = ["sync", "macros", "rt-multi-thread"] }
+futures = "0.3.31"
+pyo3 = { version = "0.25", features = ["auto-initialize"] }

@@ -1,4 +1,4 @@
-use crate::models::models::{Job, ScheduledJobData};
+use crate::models::{Job, ScheduledJobData};
 use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slot::SlotSet;

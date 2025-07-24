@@ -10,6 +10,7 @@ test:
   stage: test
   image: rustlang/rust:latest
   script:
+    - cd oar3-rust-scheduler
     - cargo build --verbose
     - cargo test --verbose
     - cargo tarpaulin --out Xml --cobertura --ignore-tests

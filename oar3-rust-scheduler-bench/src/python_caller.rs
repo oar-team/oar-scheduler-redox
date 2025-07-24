@@ -1,6 +1,6 @@
-use crate::benchmark::benchmarker::measure_time;
-use crate::models::models::{Job, ProcSet, ScheduledJobData};
-use crate::platform::PlatformTrait;
+use crate::benchmarker::measure_time;
+use oar3_rust_scheduler::models::{Job, ProcSet, ScheduledJobData};
+use oar3_rust_scheduler::platform::PlatformTrait;
 use pyo3::ffi::c_str;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
@@ -32,7 +32,8 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
         let schedule_cycle = py.import(PYTHON_MODULE_NAME).unwrap().getattr("schedule_cycle").unwrap();
         let time = measure_time(|| {
             schedule_cycle.call1((py.None(), create_config(py), platform_py.clone_ref(py))).unwrap();
-        }).0;
+        })
+        .0;
 
         let waiting_jobs = platform.get_waiting_jobs();
         let waiting_jobs_map = waiting_jobs.iter().map(|job| (job.id, job.clone())).collect::<HashMap<u32, Job>>();

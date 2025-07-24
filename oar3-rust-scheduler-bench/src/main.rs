@@ -1,13 +1,12 @@
-use crate::benchmark::benchmarker::{BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
-use crate::benchmark::grapher::graph_benchmark_result;
-use auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
+mod benchmarker;
+mod grapher;
+mod python_caller;
+mod platform_mock;
+
 use log::LevelFilter;
-
-mod benchmark;
-mod models;
-mod platform;
-mod scheduler;
-
+use oar3_rust_scheduler::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
+use crate::benchmarker::{BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
+use crate::grapher::graph_benchmark_result;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {

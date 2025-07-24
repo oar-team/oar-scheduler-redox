@@ -1,5 +1,5 @@
-use crate::benchmark::platform_mock::generate_mock_platform_config;
-use crate::models::models::ProcSet;
+use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
+use crate::models::ProcSet;
 use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use std::ops::RangeInclusive;
 

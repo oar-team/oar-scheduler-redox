@@ -1,7 +1,10 @@
 use crate::scheduler::hierarchy::HierarchyRequests;
 use auto_bench_fct::auto_bench_fct_hy;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyAnyMethods, PyListMethods, PyModule};
+#[cfg(feature = "pyo3")]
 use pyo3::types::{PyDict, PyList, PyTuple};
+#[cfg(feature = "pyo3")]
 use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
 use range_set_blaze::RangeSetBlaze;
 
@@ -41,7 +44,8 @@ pub struct ScheduledJobData {
     pub moldable_index: usize,
 }
 
-#[derive(Debug, Clone, IntoPyObjectRef)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]
 pub struct Moldable {
     pub walltime: i64,
     pub requests: HierarchyRequests,
@@ -105,6 +109,7 @@ impl Job {
         }
     }
 }
+#[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &Job {
     type Target = PyDict;
     type Output = Bound<'a, Self::Target>;

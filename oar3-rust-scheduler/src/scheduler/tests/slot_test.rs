@@ -1,6 +1,5 @@
-use crate::benchmark::platform_mock::generate_mock_platform_config;
-use crate::models::models::ScheduledJobData;
-use crate::models::models::{Job, ProcSet};
+use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
+use crate::models::{Job, ScheduledJobData, ProcSet};
 use crate::scheduler::slot::{Slot, SlotSet};
 use std::collections::HashMap;
 use std::rc::Rc;

@@ -1,8 +1,11 @@
-use crate::models::models::{proc_set_to_python, ProcSet, ProcSetCoresOp};
+use crate::models::{proc_set_to_python, ProcSet, ProcSetCoresOp};
 use auto_bench_fct::auto_bench_fct_hy;
 use log::warn;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
+#[cfg(feature = "pyo3")]
 use pyo3::types::{PyDict, PyList, PyTuple};
+#[cfg(feature = "pyo3")]
 use pyo3::{Bound, IntoPyObject, PyAny, PyErr, Python};
 use std::collections::HashMap;
 
@@ -30,6 +33,7 @@ impl HierarchyRequests {
             .join(";")
     }
 }
+#[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &HierarchyRequests {
     type Target = PyAny;
     type Output = Bound<'a, Self::Target>;
@@ -53,6 +57,7 @@ impl HierarchyRequest {
         }
     }
 }
+#[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &HierarchyRequest {
     type Target = PyDict;
     type Output = Bound<'a, Self::Target>;
@@ -160,6 +165,7 @@ impl Hierarchy {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &Hierarchy {
     type Target = PyDict;
     type Output = Bound<'a, Self::Target>;

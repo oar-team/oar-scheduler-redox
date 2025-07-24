@@ -1,5 +1,5 @@
 use crate::scheduler::hierarchy::HierarchyRequests;
-use oar3_rust_macros::benchmark;
+use auto_bench_fct::auto_bench_fct_hy;
 use pyo3::prelude::{PyAnyMethods, PyListMethods, PyModule};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
@@ -164,7 +164,7 @@ impl ProcSetCoresOp for ProcSet {
     /// Will not substract cores to the slots. This function will only try to find a fitting subset of cores
     /// If successful, return a new `ProcSet` that represents the selected available cores.
     /// Returns `None` if there are not enough cores available.
-    #[benchmark]
+    #[auto_bench_fct_hy]
     fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet> {
         let available_cores = self.core_count();
         if available_cores < core_count {

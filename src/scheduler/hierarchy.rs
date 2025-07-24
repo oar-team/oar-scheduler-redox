@@ -1,10 +1,9 @@
 use crate::models::models::{proc_set_to_python, ProcSet, ProcSetCoresOp};
-use crate::platform::ResourceSet;
-use log::{debug, info, warn};
-use oar3_rust_macros::{benchmark, benchmark_hierarchy};
+use auto_bench_fct::auto_bench_fct_hy;
+use log::{info, warn};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
-use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
+use pyo3::{Bound, IntoPyObject, PyAny, PyErr, Python};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,7 +113,7 @@ impl Hierarchy {
     pub fn has_partition(&self, name: &Box<str>) -> bool {
         self.partitions.contains_key(name.as_ref()) || Some(name) == self.unit_partition.as_ref()
     }
-    #[benchmark]
+    #[auto_bench_fct_hy]
     pub fn request(&self, available_proc_set: &ProcSet, request: &HierarchyRequests) -> Option<ProcSet> {
         let result = request.0.iter().try_fold(ProcSet::new(), |acc, req| {
             self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs)
@@ -122,7 +121,7 @@ impl Hierarchy {
         });
         result
     }
-    #[benchmark]
+    #[auto_bench_fct_hy]
     pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {
         let (name, request) = &level_requests[0];
         // Optimization for core that should correspond to a single proc.
@@ -141,7 +140,7 @@ impl Hierarchy {
                         } else {
                             self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])
                         }
-                    } else if proc_set.is_subset(&available_proc_set) {
+                    } else if proc_set.is_subset(&available_proc_set) { // TODO: check if proc_set & available_proc_set == *proc_set is faster.
                         Some(proc_set.clone())
                     } else {
                         None

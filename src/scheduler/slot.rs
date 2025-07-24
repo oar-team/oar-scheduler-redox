@@ -2,7 +2,7 @@ use crate::models::models::Moldable;
 use crate::models::models::{Job, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformConfig;
 use crate::scheduler::quotas::Quotas;
-use oar3_rust_macros::benchmark;
+use auto_bench_fct::auto_bench_fct_hy;
 use prettytable::{format, row, Table};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -484,7 +484,7 @@ impl SlotSet {
     }
 
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
-    #[benchmark]
+    #[auto_bench_fct_hy]
     pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
         self.iter()
             .between(begin_slot_id, end_slot_id)

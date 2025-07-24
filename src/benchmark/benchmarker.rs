@@ -296,11 +296,7 @@ impl BenchmarkConfig {
                 let optimal_gantt_width = (platform
                     .get_scheduled_jobs()
                     .iter()
-                    .map(|j| {
-                        let sd = j.scheduled_data.clone().unwrap();
-                        info!("Sched. Job {}: {}->{} (proc_set {:?})", j.id, sd.begin, sd.end, sd.proc_set);
-                        sd
-                    })
+                    .map(|j| j.scheduled_data.clone().unwrap())
                     .map(|sd| sd.proc_set.core_count() as i64 * (sd.end - sd.begin + 1))
                     .sum::<i64>()
                     / res_count as i64) as u32;

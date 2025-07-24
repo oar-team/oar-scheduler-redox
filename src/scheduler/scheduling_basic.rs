@@ -3,9 +3,9 @@ use crate::models::models::{ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::SlotSet;
 use log::warn;
-use oar3_rust_macros::benchmark;
 use std::cmp::max;
 use std::collections::HashMap;
+use auto_bench_fct::auto_bench_fct_hy;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {
@@ -24,7 +24,7 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mu
 /// This function has two side effects.
 ///   - Assign the results directly to the `job` (such as start_time, resources, etc.)
 ///   - Split the slot_set to reflect the new allocation
-#[benchmark]
+#[auto_bench_fct_hy]
 pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
     let mut chosen_slot_id_left = None;
     let mut chosen_begin = None;
@@ -66,7 +66,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
 }
 
 /// Returns left slot id, right slot id, proc_set and quotas hit count.
-#[benchmark]
+#[auto_bench_fct_hy]
 pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable) -> Option<(i32, i32, ProcSet, u32)> {
     let mut iter = slot_set.iter();
     if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
@@ -99,7 +99,7 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
                 // Checking quotas
                 if slot_set.get_platform_config().quotas_config.enabled {
                     let slots = slot_set.iter().between(left_slot.id(), right_slot.id()).collect::<Vec<_>>();
-                    if let Some((msg, rule, limit)) = quotas::check_slots_quotas(slots, job, moldable.walltime, result.2.core_count()) {
+                    if let Some((_msg, _rule, _limit)) = quotas::check_slots_quotas(slots, job, result.2.core_count()) {
                         //info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
                         quotas_hit_count += 1;
                         return None; // Skip this slot if quotas check fails

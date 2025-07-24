@@ -1,28 +1,13 @@
 use crate::benchmark::benchmarker::{BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
-use crate::benchmark::function_benchmark::{print_function_benchmark_results, print_function_benchmark_results_hierarchy};
 use crate::benchmark::grapher::graph_benchmark_result;
-use lazy_static::lazy_static;
+use auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
 use log::LevelFilter;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::Duration;
 
 mod benchmark;
 mod models;
 mod platform;
 mod scheduler;
 
-
-thread_local! {
-    static CALL_STACK: RefCell<Vec<u32>> = RefCell::new(Vec::new());
-}
-lazy_static! {
-    /// (Function name, Function index) -> (Call count, Total duration)
-    static ref FUNCTION_METRICS: Mutex<HashMap<(String, u32), (u64, Duration)>> = Mutex::new(HashMap::new());
-    /// (function index stack) -> (Function name, Function index, Call count, Total duration)
-    static ref FUNCTION_METRICS_HIERARCHY: Mutex<HashMap<Vec<u32>, HashMap<(String, u32), (u64, Duration)>>> = Mutex::new(HashMap::new());
-}
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
@@ -33,12 +18,12 @@ async fn main() {
 
     let benchmark = BenchmarkConfig {
         target: BenchmarkTarget::Tree,
-        sample_type: WaitingJobsSampleType::NodeOnly,
+        sample_type: WaitingJobsSampleType::CoreOnly,
         cache: false,
         averaging: 1,
         res_count: 10_000,
-        start: 7,
-        end: 7,
+        start: 700,
+        end: 700,
         step: 1,
         seed: 26,
         single_thread: false,
@@ -46,7 +31,7 @@ async fn main() {
     let results = benchmark.benchmark().await;
 
 
-    print_function_benchmark_results();
-    print_function_benchmark_results_hierarchy();
+    print_bench_fct_results();
+    print_bench_fct_hy_results();
     graph_benchmark_result("6_benchmarked".to_string(), benchmark, results);
 }

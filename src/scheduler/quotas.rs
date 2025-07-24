@@ -1,7 +1,7 @@
 use crate::models::models::Job;
 use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
-use oar3_rust_macros::benchmark;
+use auto_bench_fct::auto_bench_fct_hy;
 use pyo3::prelude::PyDictMethods;
 use pyo3::types::PyDict;
 use pyo3::{Bound, IntoPyObject, PyErr, Python};
@@ -60,7 +60,7 @@ impl<'a> IntoPyObject<'a> for &QuotasConfig {
     fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
         let dict = PyDict::new(py);
 
-        dict.set_item("enabled", self.enabled).unwrap();
+        dict.set_item("enabled", self.enabled)?;
         // Other fields not in use for now.
 
         Ok(dict)
@@ -438,7 +438,7 @@ impl Quotas {
 }
 
 /// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
-pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
+pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     let mut slots_quotas: HashMap<i32, (Quotas, i64)> = HashMap::new();
     // Combine in slot_quotas all quotas with the total duration they cover, grouped by rules_id.
     for slot in slots {
@@ -447,7 +447,7 @@ pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resou
             .entry(quotas.rules_id)
             .and_modify(|(q, duration)| {
                 q.combine(&quotas);
-                *duration += (slot.end() - slot.begin() + 1);
+                *duration += slot.end() - slot.begin() + 1;
             })
             .or_insert((quotas.clone(), slot.end() - slot.begin() + 1));
     }
@@ -455,7 +455,7 @@ pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, walltime: i64, resou
 
 }
 /// The job does not need to be scheduled yet, hence the resource_count is provided.
-#[benchmark]
+#[auto_bench_fct_hy]
 pub fn check_quotas<'s>(mut slots_quotas: HashMap<i32, (Quotas, i64)>, job: &Job, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     // Check each combined quotas against the job.
     for (_, (quotas, duration)) in slots_quotas.iter_mut() {

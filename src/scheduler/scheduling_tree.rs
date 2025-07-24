@@ -1,7 +1,7 @@
 use crate::models::models::{Job, ScheduledJobData};
 use crate::scheduler::tree_slot::TreeSlotSet;
+use auto_bench_fct::auto_bench_fct_hy;
 use log::{debug, info};
-use oar3_rust_macros::benchmark;
 use std::cmp::max;
 use std::collections::HashMap;
 
@@ -26,7 +26,7 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<String, TreeSlotSet>, waiting_jobs:
 /// This function has two side effects.
 ///   - Assign the results directly to the `job` (such as start_time, resources, etc.)
 ///   - Split the slot_set to reflect the new allocation
-#[benchmark]
+#[auto_bench_fct_hy]
 pub fn schedule_job(slot_set: &mut TreeSlotSet, job: &mut Job) {
     let mut chosen_node_id_left = None;
     let mut chosen_begin = None;

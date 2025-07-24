@@ -1,6 +1,6 @@
 use crate::models::models::{proc_set_to_python, ProcSet, ProcSetCoresOp};
 use auto_bench_fct::auto_bench_fct_hy;
-use log::{info, warn};
+use log::warn;
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{Bound, IntoPyObject, PyAny, PyErr, Python};

@@ -7,7 +7,7 @@ use crate::models::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJob
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::quotas::*;
-use crate::scheduler::scheduling_basic;
+use crate::scheduler::scheduling;
 use crate::scheduler::slot::{Slot, SlotSet};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -61,7 +61,7 @@ fn test_quotas_one_job_no_rules() {
         vec![moldable],
     );
 
-    scheduling_basic::schedule_jobs(&mut all_ss, &mut vec![job]);
+    scheduling::schedule_jobs(&mut all_ss, &mut vec![job]);
 
     let ss = all_ss.get("default").unwrap();
 
@@ -105,7 +105,7 @@ fn test_quotas_one_job_rule_nb_res_1() {
     );
 
     let mut jobs = vec![job];
-    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
     println!("jobs: {:?}", jobs);
 
@@ -143,7 +143,7 @@ fn test_quotas_one_job_rule_nb_res_2() {
     );
 
     let mut jobs = vec![job];
-    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
     // With quota of 64, job should get scheduled on 64 cores
     let scheduled = &jobs[0].scheduled_data;
@@ -206,7 +206,7 @@ fn test_quotas_four_jobs_rule_1() {
     );
     let j4 = Job::new(4, "lulu".into(), "yop".into(), "default".into(), vec![], vec![moldable_j4]);
     let mut jobs_new = vec![j3, j4];
-    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs_new);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j3 = &jobs_new[0];
     let j4 = &jobs_new[1];
     // Check results
@@ -261,7 +261,7 @@ fn test_quotas_three_jobs_rule_1() {
     );
     let j3 = Job::new(3, "lulu".into(), "yop".into(), "default".into(), vec![], vec![moldable_j3]);
     let mut jobs_new = vec![j2, j3];
-    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs_new);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j2 = &jobs_new[0];
     let j3 = &jobs_new[1];
     // Check results
@@ -303,7 +303,7 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     let moldable_j2 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
     let j2 = Job::new(2, "tutu".into(), "".into(), "default".into(), vec![], vec![moldable_j2]);
     let mut jobs = vec![j1, j2];
-    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
     let j2 = &jobs[1];
     // Check results
@@ -338,7 +338,7 @@ fn test_quotas_two_jobs_job_type_proc() {
     let moldable_j2 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
     let j2 = Job::new(2, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j2]);
     let mut jobs = vec![j1, j2];
-    scheduling_basic::schedule_jobs(&mut all_ss, &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
     let j2 = &jobs[1];
     // Check results

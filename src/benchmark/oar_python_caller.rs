@@ -7,29 +7,29 @@ use pyo3::types::{PyDict, PyList, PyTuple};
 use std::collections::HashMap;
 use std::ffi::CStr;
 
-const python_module_name: &str = "oar.kao.kamelot_basic";
-const python_module_dir: &str = "/Users/clement/CodeIF/oar3/";
-const python_site_packages_dir: &str = "/Users/clement/CodeIF/oar3/.venv/lib/python3.10/site-packages";
+const PYTHON_MODULE_NAME: &str = "oar.kao.kamelot_basic";
+const PYTHON_MODULE_DIR: &str = "/Users/clement/CodeIF/oar3/";
+const PYTHON_SITE_PACKAGES_DIR: &str = "/Users/clement/CodeIF/oar3/.venv/lib/python3.10/site-packages";
 
-const adapter_module: &CStr = c_str!("adapter");
-const adapter_file: &CStr = c_str!("adapter.py");
-const adapter_code: &CStr = c_str!(include_str!("adapter.py"));
+const ADAPTER_MODULE: &CStr = c_str!("adapter");
+const ADAPTER_FILE: &CStr = c_str!("adapter.py");
+const ADAPTER_CODE: &CStr = c_str!(include_str!("adapter.py"));
 
 // Returns (elapsed ms, slot count)
 pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> (u32, usize) {
     let time = Python::with_gil(|py| {
         let sys = py.import("sys").unwrap();
-        sys.getattr("path").unwrap().call_method1("append", (python_module_dir,)).unwrap();
-        sys.getattr("path").unwrap().call_method1("append", (python_site_packages_dir,)).unwrap();
+        sys.getattr("path").unwrap().call_method1("append", (PYTHON_MODULE_DIR,)).unwrap();
+        sys.getattr("path").unwrap().call_method1("append", (PYTHON_SITE_PACKAGES_DIR,)).unwrap();
 
-        PyModule::from_code(py, adapter_code, adapter_file, adapter_module).unwrap();
+        PyModule::from_code(py, ADAPTER_CODE, ADAPTER_FILE, ADAPTER_MODULE).unwrap();
 
         //info!("Python {:?}, path = {:?}", sys.getattr("version"), sys.getattr("path"));
 
         let platform_py = create_platform(py, platform);
 
         // Run scheduling using basic scheduler (no quotas)
-        let schedule_cycle = py.import(python_module_name).unwrap().getattr("schedule_cycle").unwrap();
+        let schedule_cycle = py.import(PYTHON_MODULE_NAME).unwrap().getattr("schedule_cycle").unwrap();
         let time = measure_time(|| {
             schedule_cycle.call1((py.None(), create_config(py), platform_py.clone_ref(py))).unwrap();
         }).0;
@@ -54,7 +54,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
             let quotas_hit_count: u32 = job_py.get_item("quotas_hit_count").unwrap().unwrap().extract().unwrap();
             let begin: i64 = job_py.get_item("begin").unwrap().unwrap().extract().unwrap();
             let end: i64 = job_py.get_item("end").unwrap().unwrap().extract().unwrap();
-            let mut moldable_index: usize = job_py.get_item("moldable_index").unwrap().unwrap().extract().unwrap();
+            let moldable_index: usize = job_py.get_item("moldable_index").unwrap().unwrap().extract().unwrap();
             let mut proc_set = ProcSet::new();
             let proc_set_list: Vec<Bound<PyTuple>> = job_py.get_item("proc_set").unwrap().unwrap().extract().unwrap();
             for range in proc_set_list {

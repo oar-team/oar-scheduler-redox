@@ -4,7 +4,7 @@ use crate::benchmark::platform_mock::PlatformBenchMock;
 use crate::models::models::{Job, Moldable, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformTrait;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
-use crate::scheduler::{kamelot_basic, kamelot_tree};
+use crate::scheduler::kamelot;
 use log::info;
 use plotters::data::Quartiles;
 use rand::prelude::SliceRandom;
@@ -168,8 +168,6 @@ pub enum BenchmarkTarget {
     #[allow(dead_code)]
     Basic,
     #[allow(dead_code)]
-    Tree,
-    #[allow(dead_code)]
     Python,
 }
 
@@ -201,7 +199,6 @@ impl BenchmarkConfig {
                     "basic-NoCache"
                 }
             }
-            BenchmarkTarget::Tree => "tree",
             BenchmarkTarget::Python => "oar-python",
         };
         format!("./benchmarks/{}_{}_{}-{}.svg", prefix, profile, target, self.sample_type.to_string())
@@ -219,7 +216,6 @@ impl BenchmarkConfig {
                 "Basic scheduler performance by number of jobs ({}, {}, {})",
                 profile, cache_str, sample_type_str
             ),
-            BenchmarkTarget::Tree => format!("Tree scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
             BenchmarkTarget::Python => format!("OAR Python scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
         }
         .to_string()
@@ -281,8 +277,7 @@ impl BenchmarkConfig {
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, slot_count) = match target {
-                    BenchmarkTarget::Basic => measure_time(|| kamelot_basic::schedule_cycle(&mut platform, queues)),
-                    BenchmarkTarget::Tree => measure_time(|| kamelot_tree::schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Basic => measure_time(|| kamelot::schedule_cycle(&mut platform, queues)),
                     BenchmarkTarget::Python => schedule_cycle_on_oar_python(&mut platform, queues),
                 };
 

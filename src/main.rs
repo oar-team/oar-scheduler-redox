@@ -17,7 +17,7 @@ async fn main() {
         .init();
 
     let benchmark = BenchmarkConfig {
-        target: BenchmarkTarget::Tree,
+        target: BenchmarkTarget::Basic,
         sample_type: WaitingJobsSampleType::CoreOnly,
         cache: false,
         averaging: 1,

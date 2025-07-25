@@ -1,4 +1,11 @@
+use crate::platform_mock;
+use crate::platform_mock::PlatformBenchMock;
+use crate::python_caller::schedule_cycle_on_oar_python;
 use log::info;
+use oar3_rust_scheduler::models::{Job, JobBuilder, ProcSet, ProcSetCoresOp};
+use oar3_rust_scheduler::platform::PlatformTrait;
+use oar3_rust_scheduler::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
+use oar3_rust_scheduler::scheduler::kamelot::schedule_cycle;
 use plotters::data::Quartiles;
 use rand::prelude::SliceRandom;
 use rand::rngs::StdRng;
@@ -8,13 +15,6 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
-use oar3_rust_scheduler::models::{Job, Moldable, ProcSet, ProcSetCoresOp};
-use oar3_rust_scheduler::platform::PlatformTrait;
-use oar3_rust_scheduler::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
-use oar3_rust_scheduler::scheduler::kamelot::schedule_cycle;
-use crate::platform_mock;
-use crate::platform_mock::PlatformBenchMock;
-use crate::python_caller::schedule_cycle_on_oar_python;
 
 #[derive(Clone)]
 pub struct BenchmarkResult {
@@ -238,7 +238,8 @@ impl BenchmarkConfig {
                 result.quotas_hit.mean
             );
             result
-        }).await
+        })
+        .await
     }
 
     async fn run_sampling<R, F, Fut>(&self, range: RangeInclusive<usize>, f: F) -> Vec<R>
@@ -307,7 +308,12 @@ impl BenchmarkConfig {
                     optimal_gantt_width,
                 )
             })
-        }).await.into_iter().map(|r| r.unwrap()).collect::<Vec<BenchmarkResult>>().into()
+        })
+        .await
+        .into_iter()
+        .map(|r| r.unwrap())
+        .collect::<Vec<BenchmarkResult>>()
+        .into()
     }
 }
 
@@ -500,13 +506,13 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
             walltime_max: 60 * 24,
             walltime_step: 60,
 
-            res_min: 1*64,
-            res_max: 39*64,
+            res_min: 1 * 64,
+            res_max: 39 * 64,
             res_step: 1,
             res_type: "cores".to_string(),
             res_in_single_type: "switches".to_string(),
         }
-            .generate_jobs(),
+        .generate_jobs(),
         WaitingJobsSampleType::OldNormal => RandomJobGenerator {
             rand: StdRng::seed_from_u64(seed),
             count: jobs_count,
@@ -523,7 +529,8 @@ fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: Waiti
             res_step: 1,
             res_type: "cores".to_string(),
             res_in_single_type: "".to_string(),
-        }.generate_jobs(),
+        }
+        .generate_jobs(),
     };
     waiting_jobs.append(&mut jobs);
     waiting_jobs
@@ -583,16 +590,12 @@ impl RandomJobGenerator {
             };
 
             let request = HierarchyRequest::new(ProcSet::from_iter(1..=self.total_res), hierarchy_req);
-
-            let moldable = Moldable::new(walltime, HierarchyRequests::from_requests(vec![request]));
-            jobs.push(Job::new(
-                i as u32 + self.id_offset,
-                "user".to_string(),
-                "project".to_string(),
-                "queue".to_string(),
-                vec![self.job_type.clone()],
-                vec![moldable],
-            ));
+            jobs.push(
+                JobBuilder::new(i as u32 + self.id_offset)
+                    .moldable_auto(walltime, HierarchyRequests::from_requests(vec![request]))
+                    .single_type(self.job_type.clone().into())
+                    .build(),
+            );
         }
         jobs
     }

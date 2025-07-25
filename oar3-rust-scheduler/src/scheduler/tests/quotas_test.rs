@@ -1,9 +1,5 @@
-// Rust translation of Python quotas tests from oar.kao.quotas
-// For tests not possible to implement yet, the Python code is left as a comment above a blank test function.
-// Helper and config functions are provided for test clarity.
-
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
-use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData};
+use crate::models::{JobBuilder, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::quotas::*;
@@ -13,12 +9,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 fn quotas_platform_config() -> Rc<PlatformConfig> {
-    // Adjust as needed for your actual config
     let platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
     Rc::new(platform_config)
 }
-
-// --- TESTS ---
 
 #[test]
 fn test_quotas_rules_from_json() {
@@ -52,14 +45,13 @@ fn test_quotas_one_job_no_rules() {
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 2)])]),
     );
 
-    let job = Job::new(
-        1,
-        String::from("user"),
-        String::from("project"),
-        String::from("queue"),
-        vec![String::from("type1")],
-        vec![moldable],
-    );
+    let job = JobBuilder::new(1)
+        .user("user".into())
+        .project("project".into())
+        .queue("queue".into())
+        .single_type("type1".into())
+        .moldable(moldable)
+        .build();
 
     scheduling::schedule_jobs(&mut all_ss, &mut vec![job]);
 
@@ -95,14 +87,13 @@ fn test_quotas_one_job_rule_nb_res_1() {
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 2)])]),
     );
 
-    let job = Job::new(
-        1,
-        String::from("user"),
-        String::from("project"),
-        String::from("queue"),
-        vec![String::from("type1")],
-        vec![moldable],
-    );
+    let job = JobBuilder::new(1)
+        .user("user".into())
+        .project("project".into())
+        .queue("queue".into())
+        .single_type("type1".into())
+        .moldable(moldable)
+        .build();
 
     let mut jobs = vec![job];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
@@ -133,19 +124,18 @@ fn test_quotas_one_job_rule_nb_res_2() {
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 2)])]),
     );
 
-    let job = Job::new(
-        2,
-        String::from("user"),
-        String::from("project"),
-        String::from("queue"),
-        vec![String::from("type1")],
-        vec![moldable],
-    );
+    let job = JobBuilder::new(2)
+        .user("user".into())
+        .project("project".into())
+        .queue("queue".into())
+        .single_type("type1".into())
+        .moldable(moldable)
+        .build();
 
     let mut jobs = vec![job];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
-    // With quota of 64, job should get scheduled on 64 cores
+    // With a quota of 64, the job should get scheduled on 64 cores
     let scheduled = &jobs[0].scheduled_data;
     assert!(scheduled.is_some());
     let sched = scheduled.as_ref().unwrap();
@@ -170,25 +160,18 @@ fn test_quotas_four_jobs_rule_1() {
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 10000);
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
-    // First two jobs are already scheduled
-    let job1 = Job::new_scheduled(
-        1,
-        "toto".into(),
-        "".into(),
-        "default".into(),
-        vec![],
-        vec![],
-        ScheduledJobData::new(0, 19, ProcSet::from_iter(9..=24), 0),
-    );
-    let job2 = Job::new_scheduled(
-        2,
-        "lulu".into(),
-        "yop".into(),
-        "default".into(),
-        vec![],
-        vec![],
-        ScheduledJobData::new(0, 49, ProcSet::from_iter(1..=8), 0),
-    );
+    // The first two jobs are already scheduled
+    let job1 = JobBuilder::new(1)
+        .user("toto".into())
+        .queue("default".into())
+        .scheduled(ScheduledJobData::new(0, 19, ProcSet::from_iter(9..=24), 0))
+        .build();
+    let job2 = JobBuilder::new(2)
+        .user("lulu".into())
+        .project("yop".into())
+        .queue("default".into())
+        .scheduled(ScheduledJobData::new(0, 49, ProcSet::from_iter(1..=8), 0))
+        .build();
     let jobs = vec![&job1, &job2];
     // Insert scheduled jobs into slots
     let ss = all_ss.get_mut("default").unwrap();
@@ -199,12 +182,17 @@ fn test_quotas_four_jobs_rule_1() {
         10,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
-    let j3 = Job::new(3, "toto".into(), "".into(), "default".into(), vec![], vec![moldable_j3]);
+    let j3 = JobBuilder::new(3).user("toto".into()).queue("default".into()).moldable(moldable_j3).build();
     let moldable_j4 = Moldable::new(
         60,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
-    let j4 = Job::new(4, "lulu".into(), "yop".into(), "default".into(), vec![], vec![moldable_j4]);
+    let j4 = JobBuilder::new(4)
+        .user("lulu".into())
+        .project("yop".into())
+        .queue("default".into())
+        .moldable(moldable_j4)
+        .build();
     let mut jobs_new = vec![j3, j4];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j3 = &jobs_new[0];
@@ -236,15 +224,11 @@ fn test_quotas_three_jobs_rule_1() {
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
     // First job is already scheduled
-    let job = Job::new_scheduled(
-        1,
-        "toto".into(),
-        "".into(),
-        "default".into(),
-        vec![],
-        vec![],
-        ScheduledJobData::new(50, 149, ProcSet::from_iter(17..=24), 0),
-    );
+    let job = JobBuilder::new(1)
+        .user("toto".into())
+        .queue("default".into())
+        .scheduled(ScheduledJobData::new(50, 149, ProcSet::from_iter(17..=24), 0))
+        .build();
     let jobs = vec![&job];
     let ss = all_ss.get_mut("default").unwrap();
     ss.split_slots_for_jobs_and_update_resources(&jobs, true, true, None);
@@ -254,12 +238,17 @@ fn test_quotas_three_jobs_rule_1() {
         200,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
-    let j2 = Job::new(2, "toto".into(), "".into(), "default".into(), vec![], vec![moldable_j2]);
+    let j2 = JobBuilder::new(2).user("toto".into()).queue("default".into()).moldable(moldable_j2).build();
     let moldable_j3 = Moldable::new(
         100,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
-    let j3 = Job::new(3, "lulu".into(), "yop".into(), "default".into(), vec![], vec![moldable_j3]);
+    let j3 = JobBuilder::new(3)
+        .user("lulu".into())
+        .project("yop".into())
+        .queue("default".into())
+        .moldable(moldable_j3)
+        .build();
     let mut jobs_new = vec![j2, j3];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j2 = &jobs_new[0];
@@ -298,10 +287,10 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
 
     // Job 1: user toto, requests 2 nodes (should be denied, only 1 proc allowed)
     let moldable_j1 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
-    let j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec![], vec![moldable_j1]);
+    let j1 = JobBuilder::new(1).user("toto".into()).queue("default".into()).moldable(moldable_j1).build();
     // Job 2: user tutu, requests 2 nodes (should succeed, unlimited for others)
     let moldable_j2 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
-    let j2 = Job::new(2, "tutu".into(), "".into(), "default".into(), vec![], vec![moldable_j2]);
+    let j2 = JobBuilder::new(2).user("tutu".into()).queue("default".into()).moldable(moldable_j2).build();
     let mut jobs = vec![j1, j2];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
@@ -334,9 +323,19 @@ fn test_quotas_two_jobs_job_type_proc() {
 
     // Both jobs have job_type "yop", request 1 node each, walltime 50
     let moldable_j1 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
-    let j1 = Job::new(1, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j1]);
+    let j1 = JobBuilder::new(1)
+        .user("toto".into())
+        .queue("default".into())
+        .single_type("yop".into())
+        .moldable(moldable_j1)
+        .build();
     let moldable_j2 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
-    let j2 = Job::new(2, "toto".into(), "".into(), "default".into(), vec!["yop".into()], vec![moldable_j2]);
+    let j2 = JobBuilder::new(2)
+        .user("toto".into())
+        .queue("default".into())
+        .single_type("yop".into())
+        .moldable(moldable_j2)
+        .build();
     let mut jobs = vec![j1, j2];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];

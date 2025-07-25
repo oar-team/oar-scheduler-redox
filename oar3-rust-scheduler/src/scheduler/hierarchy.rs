@@ -15,6 +15,9 @@ impl HierarchyRequests {
     pub fn from_requests(requests: Vec<HierarchyRequest>) -> Self {
         HierarchyRequests(requests.into_boxed_slice())
     }
+    pub fn new_single(filter: ProcSet, level_nbs: Vec<(Box<str>, u32)>) -> Self {
+        HierarchyRequests::from_requests(vec![HierarchyRequest::new(filter, level_nbs)])
+    }
     pub fn get_cache_key(&self) -> String {
         self.0
             .iter()

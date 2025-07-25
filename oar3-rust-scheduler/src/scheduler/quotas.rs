@@ -358,7 +358,7 @@ impl Quotas {
             .quotas_config
             .tracked_job_types
             .iter()
-            .filter(|t| &(***t) == "*" || job.types.contains(&t.to_string()))
+            .filter(|t| &(***t) == "*" || job.types.contains(t))
             .collect::<Box<[&Box<str>]>>();
         let matched_users = ["*", &job.user];
 
@@ -388,12 +388,13 @@ impl Quotas {
 
     /// Finds the rule key that should be applied to `job` (i.e., the QuotasMapKey).
     /// The rule is found by looking at `Quotas::rules_tree` with the following key priority: named > '/' > '*'
+    /// Quotas rules only applies to the first job type in the `job.types` `Vec`.
     /// It returns two keys, the first one being the same as the second one, but with the "/" replaced by the actual name, and the value QuotasValue (the limits).
     pub fn find_applicable_rule(&self, job: &Job) -> Option<(QuotasKey, QuotasKey, &QuotasValue)> {
-        let key_queue = job.queue.as_str();
-        let key_project = job.project.as_str();
-        let key_job_type = job.types.get(0).map(|s| s.clone().into_boxed_str()).unwrap_or("*".into()); // TODO: document that only the first job type is used for quotas
-        let key_user = job.user.as_str();
+        let key_queue = job.queue.as_ref();
+        let key_project = job.project.as_ref();
+        let key_job_type = job.types.get(0).map(|s| s.clone()).unwrap_or("*".into());
+        let key_user = job.user.as_ref();
 
         let mut rule_key = None;
         let mut rule_value = None;

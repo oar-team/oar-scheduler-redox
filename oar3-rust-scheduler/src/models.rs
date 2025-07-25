@@ -9,6 +9,7 @@ use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
 use range_set_blaze::RangeSetBlaze;
 
 pub type ProcSet = RangeSetBlaze<u32>;
+#[cfg(feature = "pyo3")]
 pub fn proc_set_to_python<'a>(py: Python<'a>, proc_set: &ProcSet) -> Bound<'a, PyAny> {
     let procset_module = PyModule::import(py, "procset").unwrap();
     let procset_class = procset_module.getattr("ProcSet").unwrap();
@@ -26,13 +27,19 @@ pub fn proc_set_to_python<'a>(py: Python<'a>, proc_set: &ProcSet) -> Bound<'a, P
 #[derive(Debug, Clone)]
 pub struct Job {
     pub id: u32,
-    pub user: String,
-    pub project: String,
-    pub queue: String,
-    pub types: Vec<String>,
+    pub name: Box<str>,
+    pub user: Box<str>,
+    pub project: Box<str>,
+    pub queue: Box<str>,
+    pub types: Vec<Box<str>>,
     pub moldables: Vec<Moldable>,
     pub scheduled_data: Option<ScheduledJobData>,
-    pub quotas_hit_count: u32, // Used for benchmarking the quotas hit count
+    /// Used for benchmarking the quotas hit count
+    pub quotas_hit_count: u32,
+    pub time_sharing: bool,
+    /// Name of the user/job to which the job can be time-shared with, or "*" to indicate all users/jobs.
+    pub time_sharing_user_name: Option<Box<str>>,
+    pub time_sharing_job_name: Option<Box<str>>,
 }
 
 #[derive(Debug, Clone)]
@@ -40,7 +47,6 @@ pub struct ScheduledJobData {
     pub begin: i64,
     pub end: i64,
     pub proc_set: ProcSet,
-    #[allow(dead_code)]
     pub moldable_index: usize,
 }
 
@@ -52,47 +58,14 @@ pub struct Moldable {
 }
 
 impl Job {
-    pub fn new(id: u32, user: String, project: String, queue: String, types: Vec<String>, moldable: Vec<Moldable>) -> Job {
-        Job {
-            id,
-            user,
-            project,
-            queue,
-            types,
-            moldables: moldable,
-            scheduled_data: None,
-            quotas_hit_count: 0
-        }
-    }
-    #[allow(dead_code)]
-    pub fn new_scheduled(id: u32, user: String, project: String, queue: String, types: Vec<String>, moldable: Vec<Moldable>, scheduled_data: ScheduledJobData) -> Job {
-        Job {
-            id,
-            user,
-            project,
-            queue,
-            types,
-            moldables: moldable,
-            scheduled_data: Some(scheduled_data),
-            quotas_hit_count: 0
-        }
-    }
     pub fn is_scheduled(&self) -> bool {
         self.scheduled_data.is_some()
     }
     pub fn begin(&self) -> Option<i64> {
-        if let Some(data) = &self.scheduled_data {
-            Some(data.begin)
-        } else {
-            None
-        }
+        if let Some(data) = &self.scheduled_data { Some(data.begin) } else { None }
     }
     pub fn end(&self) -> Option<i64> {
-        if let Some(data) = &self.scheduled_data {
-            Some(data.end)
-        } else {
-            None
-        }
+        if let Some(data) = &self.scheduled_data { Some(data.end) } else { None }
     }
     pub fn walltime(&self) -> Option<i64> {
         if let Some(data) = &self.scheduled_data {
@@ -109,6 +82,100 @@ impl Job {
         }
     }
 }
+
+pub struct JobBuilder {
+    id: u32,
+    name: Option<Box<str>>,
+    user: Option<Box<str>>,
+    project: Option<Box<str>>,
+    queue: Option<Box<str>>,
+    types: Option<Vec<Box<str>>>,
+    moldables: Vec<Moldable>,
+    scheduled_data: Option<ScheduledJobData>,
+    time_sharing: bool,
+    time_sharing_user_name: Option<Box<str>>,
+    time_sharing_job_name: Option<Box<str>>,
+}
+impl JobBuilder {
+    pub fn new(id: u32) -> Self {
+        JobBuilder {
+            id,
+            name: None,
+            user: None,
+            project: None,
+            queue: None,
+            types: None,
+            moldables: vec![],
+            scheduled_data: None,
+            time_sharing: false,
+            time_sharing_user_name: None,
+            time_sharing_job_name: None,
+        }
+    }
+    pub fn moldable_auto(mut self, walltime: i64, requests: HierarchyRequests) -> Self {
+        self.moldables.push(Moldable::new(walltime, requests));
+        self
+    }
+    pub fn moldable(mut self, moldable: Moldable) -> Self {
+        self.moldables.push(moldable);
+        self
+    }
+    pub fn moldables(mut self, moldables: Vec<Moldable>) -> Self {
+        self.moldables = moldables;
+        self
+    }
+    pub fn time_sharing(mut self, user_name: Box<str>, job_name: Box<str>) -> Self {
+        self.time_sharing_user_name = Some(user_name);
+        self.time_sharing_job_name = Some(job_name);
+        self.time_sharing = true;
+        self
+    }
+    pub fn name(mut self, name: Box<str>) -> Self {
+        self.name = Some(name);
+        self
+    }
+    pub fn user(mut self, user: Box<str>) -> Self {
+        self.user = Some(user);
+        self
+    }
+    pub fn project(mut self, project: Box<str>) -> Self {
+        self.project = Some(project);
+        self
+    }
+    pub fn queue(mut self, queue: Box<str>) -> Self {
+        self.queue = Some(queue);
+        self
+    }
+    pub fn single_type(mut self, job_type: Box<str>) -> Self {
+        self.types = Some(vec![job_type]);
+        self
+    }
+    pub fn types(mut self, types: Vec<Box<str>>) -> Self {
+        self.types = Some(types);
+        self
+    }
+    pub fn scheduled(mut self, scheduled_data: ScheduledJobData) -> Self {
+        self.scheduled_data = Some(scheduled_data);
+        self
+    }
+    pub fn build(self) -> Job {
+        Job {
+            id: self.id,
+            name: self.name.unwrap_or_else(|| "Unnamed Job".into()),
+            user: self.user.unwrap_or_else(|| "unknown_user".into()),
+            project: self.project.unwrap_or_else(|| "unknown_project".into()),
+            queue: self.queue.unwrap_or_else(|| "default".into()),
+            types: self.types.unwrap_or_default(),
+            moldables: self.moldables,
+            scheduled_data: self.scheduled_data,
+            quotas_hit_count: 0,
+            time_sharing: self.time_sharing,
+            time_sharing_user_name: self.time_sharing_user_name,
+            time_sharing_job_name: self.time_sharing_job_name,
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &Job {
     type Target = PyDict;
@@ -118,16 +185,19 @@ impl<'a> IntoPyObject<'a> for &Job {
     fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
         let dict = PyDict::new(py);
         dict.set_item("id", self.id).unwrap();
-        dict.set_item("user", self.user.as_str()).unwrap();
-        dict.set_item("project", self.project.as_str()).unwrap();
-        dict.set_item("queue", self.queue.as_str()).unwrap();
-        dict.set_item("types", self.types.iter().map(|s| s.as_str()).collect::<Vec<_>>()).unwrap();
-        dict.set_item("moldables", self.moldables.iter().enumerate().collect::<Vec<(usize, &Moldable)>>()).unwrap();
+        dict.set_item("user", self.user.as_ref()).unwrap();
+        dict.set_item("project", self.project.as_ref()).unwrap();
+        dict.set_item("queue", self.queue.as_ref()).unwrap();
+        dict.set_item("types", self.types.iter().map(|s| s.as_ref()).collect::<Vec<_>>()).unwrap();
+        dict.set_item("moldables", self.moldables.iter().enumerate().collect::<Vec<(usize, &Moldable)>>())
+            .unwrap();
         if let Some(scheduled_data) = &self.scheduled_data {
             let scheduled_dict = PyDict::new(py);
             scheduled_dict.set_item("begin", scheduled_data.begin).unwrap();
             scheduled_dict.set_item("end", scheduled_data.end).unwrap();
-            scheduled_dict.set_item("proc_set", proc_set_to_python(py, &scheduled_data.proc_set)).unwrap();
+            scheduled_dict
+                .set_item("proc_set", proc_set_to_python(py, &scheduled_data.proc_set))
+                .unwrap();
             scheduled_dict.set_item("moldable_index", scheduled_data.moldable_index).unwrap();
             dict.set_item("scheduled_data", scheduled_dict).unwrap();
         } else {

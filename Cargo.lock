@@ -876,6 +876,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oar3-scheduler-lib"
+version = "0.1.0"
+dependencies = [
+ "oar3-scheduler",
+ "pyo3",
+]
+
+[[package]]
 name = "object"
 version = "0.36.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

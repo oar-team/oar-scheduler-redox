@@ -2,13 +2,13 @@ use crate::models::ProcSet;
 use crate::models::{proc_set_to_python, Job};
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasConfig;
+use std::rc::Rc;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyDict, PyList};
 #[cfg(feature = "pyo3")]
-use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyErr, Python};
-use std::rc::Rc;
+use pyo3::{pyclass, Bound, IntoPyObject, IntoPyObjectRef, PyErr, Python};
 
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;
@@ -32,6 +32,7 @@ pub struct PlatformConfig {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "pyo3-abi3-py38", pyclass(module = "oar3_scheduler_lib"))]
 pub struct ResourceSet {
     pub default_intervals: ProcSet,
     /// For each `ProcSet`, the time until which it is available. Integrated through pseudo jobs.

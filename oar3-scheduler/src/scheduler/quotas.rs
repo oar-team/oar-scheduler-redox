@@ -84,6 +84,25 @@ impl QuotasConfig {
             tracked_job_types,
         }
     }
+    pub fn load_from_file(path: &str, enabled: bool, all_value: i64) -> Self {
+        let json = std::fs::read_to_string(path).expect("Failed to read quotas config file");
+        serde_json::from_str::<JsonQuotasConfig>(&json)
+            .expect("Failed to parse quotas config JSON")
+            .into_quotas_config(enabled, all_value)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct JsonQuotasConfig {
+    quotas: String,             // JSON string representing QuotasMap
+    job_types: Box<[Box<str>]>, // tracked_job_types
+}
+impl JsonQuotasConfig {
+    /// Converts the JSON configuration into a QuotasConfig instance.
+    pub fn into_quotas_config(self, enabled: bool, all_value: i64) -> QuotasConfig {
+        let quotas_map = quotas_map_from_json(&self.quotas, all_value);
+        QuotasConfig::new(enabled, None, quotas_map, self.job_types)
+    }
 }
 
 /// key: (queue, project, job_type, user)
@@ -457,7 +476,6 @@ pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, resource_count: u32)
             .or_insert((quotas.clone(), slot.end() - slot.begin() + 1));
     }
     check_quotas(slots_quotas, job, resource_count)
-
 }
 /// The job does not need to be scheduled yet, hence the resource_count is provided.
 #[auto_bench_fct_hy]

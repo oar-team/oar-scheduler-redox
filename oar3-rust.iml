@@ -5,6 +5,7 @@
     <content url="file://$MODULE_DIR$">
       <sourceFolder url="file://$MODULE_DIR$/oar3-rust-macros/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/oar3-scheduler-bench/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/oar3-scheduler-lib/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/oar3-scheduler/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/oar3-rust-macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />

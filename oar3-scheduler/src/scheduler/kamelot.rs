@@ -32,12 +32,12 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) 
             })
             .collect::<Vec<Job>>();
         pseudo_jobs.sort_by_key(|j| j.begin().unwrap());
-        initial_slot_set.split_slots_for_jobs_and_update_resources(&pseudo_jobs.iter().collect(), true, false, None);
+        initial_slot_set.split_slots_for_jobs_and_update_resources(&pseudo_jobs.iter().collect(), false, None);
 
         // Get already scheduled jobs advanced reservations and jobs from higher priority queues
         let mut scheduled_jobs = platform.get_scheduled_jobs().iter().collect::<Vec<&Job>>();
         scheduled_jobs.sort_by_key(|j| j.begin().unwrap());
-        initial_slot_set.split_slots_for_jobs_and_update_resources(&scheduled_jobs, true, true, None);
+        initial_slot_set.split_slots_for_jobs_and_update_resources(&scheduled_jobs, true, None);
 
         // Scheduling
         let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);

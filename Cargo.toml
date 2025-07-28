@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["oar3-rust-scheduler", "oar3-rust-scheduler-bench"]
+members = ["oar3-scheduler", "oar3-scheduler-bench"]
 
 [profile.release]
 lto = "fat"

@@ -57,7 +57,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
             chosen_moldable_index,
         ));
         job.quotas_hit_count = total_quotas_hit_count;
-        slot_set.split_slots_for_job_and_update_resources(&job, true, true, chosen_slot_id_left);
+        slot_set.split_slots_for_job_and_update_resources(&job, true, chosen_slot_id_left);
     } else {
         warn!("Warning: no node found for job {:?}", job);
         slot_set.to_table().printstd();
@@ -68,7 +68,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
 #[auto_bench_fct_hy]
 pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable) -> Option<(i32, i32, ProcSet, u32)> {
     let mut iter = slot_set.iter();
-    if !job.time_sharing && let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
+    if job.time_sharing.is_none() && let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
         iter = iter.start_at(cache_first_slot);
     }
 
@@ -81,7 +81,7 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
     let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
         count += 1;
 
-        let available_resources = if job.time_sharing {
+        let available_resources = if job.time_sharing.is_some() {
             slot_set.intersect_slots_intervals_with_time_sharing(left_slot.id(), right_slot.id(), &job.user, &job.name)
         }else {
             slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id())
@@ -112,7 +112,7 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
             })
     });
 
-    if !job.time_sharing && slot_set.get_platform_config().cache_enabled {
+    if job.time_sharing.is_none() && slot_set.get_platform_config().cache_enabled {
         if let Some(cache_first_slot_id) = cache_first_slot {
             slot_set.insert_cache_entry(moldable.get_cache_key(), cache_first_slot_id);
         }

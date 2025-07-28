@@ -36,10 +36,19 @@ pub struct Job {
     pub scheduled_data: Option<ScheduledJobData>,
     /// Used for benchmarking the quotas hit count
     pub quotas_hit_count: u32,
-    pub time_sharing: bool,
-    /// Name of the user/job to which the job can be time-shared with, or "*" to indicate all users/jobs.
-    pub time_sharing_user_name: Option<Box<str>>,
-    pub time_sharing_job_name: Option<Box<str>>,
+    pub time_sharing: Option<TimeSharingType>,
+}
+
+#[derive(Debug, Clone)]
+pub enum TimeSharingType {
+    /// timesharing=*,*
+    AllAll,
+    /// timesharing=user,*
+    UserAll,
+    /// timesharing=*,name
+    AllName,
+    /// timesharing=user,name
+    UserName,
 }
 
 #[derive(Debug, Clone)]
@@ -92,9 +101,7 @@ pub struct JobBuilder {
     types: Option<Vec<Box<str>>>,
     moldables: Vec<Moldable>,
     scheduled_data: Option<ScheduledJobData>,
-    time_sharing: bool,
-    time_sharing_user_name: Option<Box<str>>,
-    time_sharing_job_name: Option<Box<str>>,
+    time_sharing: Option<TimeSharingType>
 }
 impl JobBuilder {
     pub fn new(id: u32) -> Self {
@@ -107,9 +114,7 @@ impl JobBuilder {
             types: None,
             moldables: vec![],
             scheduled_data: None,
-            time_sharing: false,
-            time_sharing_user_name: None,
-            time_sharing_job_name: None,
+            time_sharing: None,
         }
     }
     pub fn moldable_auto(mut self, walltime: i64, requests: HierarchyRequests) -> Self {
@@ -124,10 +129,8 @@ impl JobBuilder {
         self.moldables = moldables;
         self
     }
-    pub fn time_sharing(mut self, user_name: Box<str>, job_name: Box<str>) -> Self {
-        self.time_sharing_user_name = Some(user_name);
-        self.time_sharing_job_name = Some(job_name);
-        self.time_sharing = true;
+    pub fn time_sharing(mut self, ts_type: TimeSharingType) -> Self {
+        self.time_sharing = Some(ts_type);
         self
     }
     pub fn name(mut self, name: Box<str>) -> Self {
@@ -170,8 +173,6 @@ impl JobBuilder {
             scheduled_data: self.scheduled_data,
             quotas_hit_count: 0,
             time_sharing: self.time_sharing,
-            time_sharing_user_name: self.time_sharing_user_name,
-            time_sharing_job_name: self.time_sharing_job_name,
         }
     }
 }

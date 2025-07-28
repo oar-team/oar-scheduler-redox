@@ -1,6 +1,6 @@
 use crate::benchmarker::measure_time;
-use oar3_rust_scheduler::models::{Job, ProcSet, ScheduledJobData};
-use oar3_rust_scheduler::platform::PlatformTrait;
+use oar3_scheduler::models::{Job, ProcSet, ScheduledJobData};
+use oar3_scheduler::platform::PlatformTrait;
 use pyo3::ffi::c_str;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};

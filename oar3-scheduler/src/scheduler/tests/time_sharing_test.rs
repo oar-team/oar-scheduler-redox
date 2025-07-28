@@ -1,4 +1,4 @@
-use crate::models::{JobBuilder, Moldable, ProcSet};
+use crate::models::{JobBuilder, Moldable, ProcSet, TimeSharingType};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::HierarchyRequests;
 use crate::scheduler::scheduling;
@@ -25,23 +25,26 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
 
     let job_1 = JobBuilder::new(1).moldable(moldable1.clone()).build();
     let job_2 = JobBuilder::new(2)
-        .time_sharing("toto".into(), "*".into())
+        .user("toto".into())
+        .time_sharing(TimeSharingType::UserAll)
         .moldable(moldable1.clone())
         .build();
     let job_3 = JobBuilder::new(3)
         .user("toto".into())
-        .time_sharing("".into(), "".into())
+        .time_sharing(TimeSharingType::UserAll)
         .moldable(moldable1.clone())
         .build();
 
     let job_4 = JobBuilder::new(3)
         .user("toto".into())
         .name("tata".into())
-        .time_sharing("".into(), "".into())
+        .time_sharing(TimeSharingType::AllName)
         .moldable(moldable2.clone())
         .build();
     let job_5 = JobBuilder::new(3)
-        .time_sharing("*".into(), "tata".into())
+        .user("toto".into())
+        .name("tata2".into())
+        .time_sharing(TimeSharingType::AllName)
         .moldable(moldable2.clone())
         .build();
 

@@ -1,5 +1,5 @@
 [package]
-name = "oar3-rust-scheduler"
+name = "oar3-scheduler"
 version = "0.1.0"
 edition = "2024"
 

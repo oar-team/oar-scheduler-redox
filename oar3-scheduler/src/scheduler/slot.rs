@@ -1,4 +1,4 @@
-use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp};
+use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp, TimeSharingType};
 use crate::platform::PlatformConfig;
 use crate::scheduler::quotas::Quotas;
 use auto_bench_fct::auto_bench_fct_hy;
@@ -111,12 +111,12 @@ impl Slot {
 
     /// Returns the proc_set of the slot, taking into account the time-sharing for the given user and job names.
     /// Meaning that the time-shared proc_set of the user and job name is added to the proc_set of the slot to give the available resources for the job.
-    pub fn get_proc_set_with_time_sharing(
-        &self,
-        user_name: &Box<str>,
-        job_name: &Box<str>,
-    ) -> ProcSet {
-        if let Some(map) = self.time_shared_proc_set.get("*".into()).or_else(|| self.time_shared_proc_set.get(user_name)) {
+    pub fn get_proc_set_with_time_sharing(&self, user_name: &Box<str>, job_name: &Box<str>) -> ProcSet {
+        if let Some(map) = self
+            .time_shared_proc_set
+            .get("*".into())
+            .or_else(|| self.time_shared_proc_set.get(user_name))
+        {
             if let Some(proc_set) = map.get("*".into()).or_else(|| map.get(job_name)) {
                 return self.proc_set.clone() | proc_set.clone();
             }
@@ -125,9 +125,11 @@ impl Slot {
     }
 
     /// Updates the `time_shared_proc_set` adding an entry for the user and job names.
+    /// user_name and job_name can either be a user and job name, or be `*`.
     /// This will declare that jobs with the given user and job names can use the proc_set resources in this slot even if they are not in `self.proc_set`.
     pub fn add_time_sharing_entry(&mut self, user_name: &Box<str>, job_name: &Box<str>, proc_set: &ProcSet) {
-        self.time_shared_proc_set.entry(user_name.clone())
+        self.time_shared_proc_set
+            .entry(user_name.clone())
             .or_insert(HashMap::new())
             .entry(job_name.clone())
             .and_modify(|p| *p = p.clone() | proc_set)
@@ -464,13 +466,7 @@ impl SlotSet {
         (begin_slot_id, end_slot_id)
     }
     /// See `SlotSet::split_slots_for_jobs_and_update_resources`.
-    pub fn split_slots_for_job_and_update_resources(
-        &mut self,
-        job: &Job,
-        sub_resources: bool,
-        do_update_quotas: bool,
-        start_slot_id: Option<i32>,
-    ) -> (i32, i32) {
+    pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, do_update_quotas: bool, start_slot_id: Option<i32>) -> (i32, i32) {
         let scheduled_data = job
             .scheduled_data
             .as_ref()
@@ -484,24 +480,20 @@ impl SlotSet {
             .iter()
             .for_each(|slot_id| {
                 let slot = self.slots.get_mut(&slot_id).unwrap();
-                if sub_resources {
-                    slot.sub_proc_set(&scheduled_data.proc_set);
+                let proc_set = &scheduled_data.proc_set;
+                slot.sub_proc_set(proc_set);
 
-                    if job.time_sharing && let Some(user_name) = &job.time_sharing_user_name && let Some(job_name) = &job.time_sharing_job_name {
-                        slot.add_time_sharing_entry(
-                            user_name,
-                            job_name,
-                            &scheduled_data.proc_set,
-                        );
-                    }
+                match job.time_sharing {
+                    None => {}
+                    Some(TimeSharingType::AllAll) => slot.add_time_sharing_entry(&"*".into(), &"*".into(), proc_set),
+                    Some(TimeSharingType::AllName) => slot.add_time_sharing_entry(&"*".into(), &job.name, proc_set),
+                    Some(TimeSharingType::UserAll) => slot.add_time_sharing_entry(&job.user, &"*".into(), proc_set),
+                    Some(TimeSharingType::UserName) => slot.add_time_sharing_entry(&job.user, &job.name, proc_set),
+                }
 
-                    if self.platform_config.quotas_config.enabled && do_update_quotas {
-                        slot.quotas
-                            .increment_for_job(job, self.end - self.begin + 1, scheduled_data.proc_set.core_count());
-                    }
-                } else {
-                    self.slots.get_mut(&slot_id).unwrap().add_proc_set(&scheduled_data.proc_set);
-                    // TODO: update quotas for the job. Anyway, adding is never used?
+                if self.platform_config.quotas_config.enabled && do_update_quotas {
+                    slot.quotas
+                        .increment_for_job(job, self.end - self.begin + 1, scheduled_data.proc_set.core_count());
                 }
             });
         (begin_slot_id, end_slot_id)
@@ -512,15 +504,9 @@ impl SlotSet {
     /// If `sub_resources` is true, the resources are subtracted from the slots. Otherwise, they are added.
     /// If `do_update_quotas` is true, the quotas are also updated for the jobs.
     /// Pseudo jobs (for proc_set availability) should sub resources with `do_update_quotas` set to `false`.
-    pub fn split_slots_for_jobs_and_update_resources(
-        &mut self,
-        jobs: &Vec<&Job>,
-        sub_resources: bool,
-        do_update_quotas: bool,
-        mut start_slot_id: Option<i32>,
-    ) {
+    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<&Job>, do_update_quotas: bool, mut start_slot_id: Option<i32>) {
         for job in jobs {
-            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, sub_resources, do_update_quotas, start_slot_id);
+            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, do_update_quotas, start_slot_id);
             start_slot_id = Some(begin_slot_id);
         }
     }
@@ -535,7 +521,13 @@ impl SlotSet {
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive).
     /// Take into account the time-sharing for the given user and job names.
     #[auto_bench_fct_hy]
-    pub fn intersect_slots_intervals_with_time_sharing(&self, begin_slot_id: i32, end_slot_id: i32, user_name: &Box<str>, job_name: &Box<str>) -> ProcSet {
+    pub fn intersect_slots_intervals_with_time_sharing(
+        &self,
+        begin_slot_id: i32,
+        end_slot_id: i32,
+        user_name: &Box<str>,
+        job_name: &Box<str>,
+    ) -> ProcSet {
         self.iter()
             .between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| {

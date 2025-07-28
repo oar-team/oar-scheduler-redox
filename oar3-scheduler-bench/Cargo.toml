@@ -1,11 +1,11 @@
 [package]
-name = "oar3-rust-scheduler-bench"
+name = "oar3-scheduler-bench"
 version = "0.1.0"
 edition = "2024"
 
 
 [dependencies]
-oar3-rust-scheduler = { path = "../oar3-rust-scheduler", default-features = false,  features = ["pyo3", "benchmark_disable_hy"] }
+oar3-scheduler = { path = "../oar3-scheduler", default-features = false,  features = ["pyo3", "benchmark_disable_hy"] }
 env_logger = "0.11.8"
 log = "0.4"
 range-set-blaze = { version = "0.3.0", default-features = false }

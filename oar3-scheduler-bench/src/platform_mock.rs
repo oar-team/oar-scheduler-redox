@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use oar3_rust_scheduler::models::{Job, ProcSet};
-use oar3_rust_scheduler::platform::{PlatformConfig, PlatformTrait, ResourceSet};
-use oar3_rust_scheduler::scheduler::hierarchy::Hierarchy;
-use oar3_rust_scheduler::scheduler::quotas::{QuotasConfig, QuotasValue};
+use oar3_scheduler::models::{Job, ProcSet};
+use oar3_scheduler::platform::{PlatformConfig, PlatformTrait, ResourceSet};
+use oar3_scheduler::scheduler::hierarchy::Hierarchy;
+use oar3_scheduler::scheduler::quotas::{QuotasConfig, QuotasValue};
 
 /// In mocking, the time unit is the minute.
 pub struct PlatformBenchMock {

@@ -4,7 +4,7 @@ mod python_caller;
 mod platform_mock;
 
 use log::LevelFilter;
-use oar3_rust_scheduler::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
+use oar3_scheduler::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
 use crate::benchmarker::{BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
 use crate::grapher::graph_benchmark_result;
 

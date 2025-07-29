@@ -1,4 +1,3 @@
-use log::info;
 use oar3_scheduler::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData, TimeSharingType};
 use oar3_scheduler::platform::{PlatformConfig, PlatformTrait, ResourceSet};
 use oar3_scheduler::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
@@ -18,7 +17,7 @@ pub struct Platform<'p> {
     py_platform: Bound<'p, PyAny>,
     py_session: Bound<'p, PyAny>,
     py_res_set: Bound<'p, PyAny>,
-    py_waiting_jobs: Bound<'p, PyList>,
+    py_waiting_jobs_map: Bound<'p, PyDict>,
 }
 
 impl PlatformTrait for Platform<'_> {
@@ -44,7 +43,7 @@ impl PlatformTrait for Platform<'_> {
         self.py_platform
             .getattr("save_assigns")
             .unwrap()
-            .call1((&self.py_session, &self.py_waiting_jobs, &self.py_res_set))
+            .call1((&self.py_session, &self.py_waiting_jobs_map, &self.py_res_set))
             .unwrap();
 
         // Save jobs in the rust platform
@@ -56,13 +55,11 @@ impl PlatformTrait for Platform<'_> {
 impl<'p> Platform<'p> {
     fn update_py_waiting_jobs_from_rs_jobs(&self, jobs: &[Job]) -> PyResult<()> {
         let jobs_map: HashMap<u32, &Job> = jobs.iter().map(|j| (j.id, j)).collect();
-
-        for py_job in self.py_waiting_jobs.clone() {
-            let id: u32 = py_job.getattr("id")?.extract()?;
-
-            if let Some(job) = jobs_map.get(&id) {
+        for (py_job_id, py_job) in &self.py_waiting_jobs_map {
+            if let Some(job) = jobs_map.get(&py_job_id.extract::<u32>()?) {
                 if let Some(sd) = &job.scheduled_data {
                     py_job.setattr("start_time", sd.begin)?;
+                    py_job.setattr("walltime", sd.end - sd.begin + 1)?;
                     py_job.setattr("end_time", sd.end)?;
                     py_job.setattr("moldable_id", job.moldables[sd.moldable_index].id)?;
                     py_job.setattr("res_set", Self::proc_set_to_python(py_job.py(), &sd.proc_set)?)?;
@@ -81,7 +78,6 @@ impl<'p> Platform<'p> {
     ) -> PyResult<Self> {
         let py_now = py_platform.getattr("get_time")?.call0()?;
         let now: i64 = py_now.extract()?;
-        info!("Building platform with now: {}", now);
 
         // Get the resource set
         let kwargs = PyDict::new(py_platform.py());
@@ -94,12 +90,12 @@ impl<'p> Platform<'p> {
         kwargs.set_item("session", py_session.clone())?;
         let py_waiting_jobs_tuple = py_platform.getattr("get_waiting_jobs")?.call((py_queues,), Some(&kwargs))?;
         let py_waiting_jobs_map = py_waiting_jobs_tuple.downcast::<PyTuple>()?.get_item(0)?;
-        let py_waiting_jobs_list: Bound<PyList> = py_waiting_jobs_map.downcast::<PyDict>()?.values();
+        let py_waiting_jobs_map = py_waiting_jobs_map.downcast::<PyDict>()?;
         let py_waiting_jobs_ids = py_waiting_jobs_tuple.downcast::<PyTuple>()?.get_item(1)?;
         py_platform.getattr("get_data_jobs")?.call(
             (
                 py_session,
-                py_waiting_jobs_map,
+                py_waiting_jobs_map.clone(),
                 py_waiting_jobs_ids,
                 py_res_set.clone(),
                 py_job_security_time,
@@ -111,11 +107,11 @@ impl<'p> Platform<'p> {
             now,
             platform_config: Rc::new(Self::build_platform_config(py_res_set.clone())?),
             scheduled_jobs: Vec::new(),
-            waiting_jobs: Self::build_waiting_jobs(&py_waiting_jobs_list)?,
+            waiting_jobs: Self::build_waiting_jobs(py_waiting_jobs_map.clone())?,
             py_platform: py_platform.clone(),
             py_session: py_session.clone(),
             py_res_set,
-            py_waiting_jobs: py_waiting_jobs_list.clone(),
+            py_waiting_jobs_map: py_waiting_jobs_map.clone(),
         })
     }
     fn build_platform_config(py_res_set: Bound<PyAny>) -> PyResult<PlatformConfig> {
@@ -128,7 +124,7 @@ impl<'p> Platform<'p> {
     }
 
     fn build_resource_set(py_res_set: &Bound<PyAny>) -> PyResult<ResourceSet> {
-        let py_default_intervals = py_res_set.getattr("default_itvs")?;
+        let py_default_intervals = py_res_set.getattr("roid_itvs")?;
         let available_upto = py_res_set
             .getattr("available_upto")?
             .downcast::<PyDict>()?
@@ -182,6 +178,7 @@ impl<'p> Platform<'p> {
             .fold(ProcSet::new(), |acc, x| acc | x))
     }
     fn proc_set_to_python(py: Python<'p>, proc_set: &ProcSet) -> PyResult<Bound<'p, PyAny>> {
+
         let intervals = proc_set
             .ranges()
             .map(|r| PyList::new(py, [*r.start(), *r.end()]))
@@ -237,10 +234,9 @@ impl<'p> Platform<'p> {
         Ok(QuotasConfig::new(enabled, calendar, default_rules, tracked_job_types))
     }
 
-    fn build_waiting_jobs(py_jobs: &Bound<PyList>) -> PyResult<Vec<Job>> {
+    fn build_waiting_jobs(py_jobs: Bound<PyDict>) -> PyResult<Vec<Job>> {
         let mut jobs = Vec::new();
-        for job in py_jobs.iter() {
-            let id: u32 = job.getattr("id")?.extract()?;
+        for (id, job) in py_jobs.iter() {
             let name: Option<String> = job.getattr("name")?.extract()?;
             let user: Option<String> = job.getattr("user")?.extract()?;
             let project: Option<String> = job.getattr("project")?.extract()?;
@@ -294,25 +290,27 @@ impl<'p> Platform<'p> {
 
             let mut scheduled_data: Option<ScheduledJobData> = None;
             if job.hasattr("start_time")? && job.hasattr("walltime")? {
-                let begin: i64 = job.getattr("start_time")?.extract()?;
-                let walltime: i64 = job.getattr("walltime")?.extract()?;
-                let end: i64 = begin + walltime - 1;
+                let begin: Option<i64> = job.getattr("start_time")?.extract()?;
+                let walltime: Option<i64> = job.getattr("walltime")?.extract()?;
+                if let (Some(begin), Some(walltime)) = (begin, walltime) && begin > 0 && walltime > 0 {
+                    let end: i64 = begin + walltime - 1;
 
-                let proc_set: ProcSet = Self::build_proc_set(&job.getattr("res_set")?)?;
+                    let proc_set: ProcSet = Self::build_proc_set(&job.getattr("res_set")?)?;
 
-                let moldables_id: u32 = job.getattr("moldable_id")?.extract()?;
-                let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
+                    let moldables_id: u32 = job.getattr("moldable_id")?.extract()?;
+                    let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
 
-                scheduled_data = Some(ScheduledJobData {
-                    begin,
-                    end,
-                    proc_set,
-                    moldable_index,
-                });
+                    scheduled_data = Some(ScheduledJobData {
+                        begin,
+                        end,
+                        proc_set,
+                        moldable_index,
+                    });
+                }
             }
 
             jobs.push(Job {
-                id,
+                id: id.extract::<u32>()?,
                 name: name.map(|n| n.into_boxed_str()),
                 user: user.map(|u| u.into_boxed_str()),
                 project: project.map(|p| p.into_boxed_str()),
@@ -324,6 +322,7 @@ impl<'p> Platform<'p> {
                 time_sharing,
             });
         }
+
         Ok(jobs)
     }
 }

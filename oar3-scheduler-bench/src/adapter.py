@@ -30,7 +30,7 @@ class PlatformAdapter(Platform):
         hy = data['hierarchy']['partitions']
         if 'unit_partition' in data['hierarchy']:
             hy[data['hierarchy']['unit_partition']] = [
-                ProcSet(i, i) for i in range(begin, end)
+                ProcSet(i, i) for i in range(begin, end+1)
             ]
         available_upto = {}
         for (t, procset) in data['available_upto']:
@@ -57,15 +57,13 @@ class PlatformAdapter(Platform):
         return JobSimu(
             id=j['id'],
             state="Waiting",
-            queue=j['queue'],
+            queue_name=j['queue'],
+            name=j['name'],
             project=j['project'],
             user=j['user'],
             assign=False,
-            start_time=0,
-            walltime=0,
             types={},
             res_set=[],
-            moldable_id=0,
             mld_res_rqts=[
                 (
                     id,
@@ -98,15 +96,19 @@ class PlatformAdapter(Platform):
         pass
 
     def save_assigns(self, session, waiting_jobs, resource_set):
-        #for jid, j in waiting_jobs.items():
-            #logger.info(f"Job {j.id} assigned to resources: {j.res_set}, walltime: {j.walltime}, start time: {j.start_time}")
+        # for jid, j in waiting_jobs.items():
+        # logger.info(f"Job {j.id} assigned to resources: {j.res_set}, walltime: {j.walltime}, start time: {j.start_time}")
         self.assigned_jobs = waiting_jobs.values()
         pass
 
     def scheduled_jobs_benchmark_report(self):
-        """ Returns scheduled data aboat jobs that are scheduled"""
+        """ Returns scheduled data about jobs that are scheduled"""
         jobs = []
         for j in self.assigned_jobs:
+            if not hasattr(j, 'walltime') or not hasattr(j, 'start_time'):
+                logger.warning(f"Job {j.id} does not have walltime or start_time attributes.")
+                continue
+
             procset = []
             for res in list(j.res_set.intervals()):
                 procset.append((res.inf, res.sup))

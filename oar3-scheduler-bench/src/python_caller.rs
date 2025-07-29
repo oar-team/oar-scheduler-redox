@@ -16,7 +16,7 @@ const ADAPTER_FILE: &CStr = c_str!("adapter.py");
 const ADAPTER_CODE: &CStr = c_str!(include_str!("adapter.py"));
 
 // Returns (elapsed ms, slot count)
-pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> (u32, usize) {
+pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, use_rust: bool) -> (u32, usize) {
     let time = Python::with_gil(|py| {
         let sys = py.import("sys").unwrap();
         sys.getattr("path").unwrap().call_method1("append", (PYTHON_MODULE_DIR,)).unwrap();
@@ -31,7 +31,15 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
         // Run scheduling using basic scheduler (no quotas)
         let schedule_cycle = py.import(PYTHON_MODULE_NAME).unwrap().getattr("schedule_cycle").unwrap();
         let time = measure_time(|| {
-            schedule_cycle.call1((py.None(), create_config(py), platform_py.clone_ref(py))).unwrap();
+            schedule_cycle
+                .call1((
+                    py.None(),
+                    create_config(py),
+                    platform_py.clone_ref(py),
+                    PyList::new(py, ["default"]).unwrap(),
+                    use_rust,
+                ))
+                .unwrap();
         })
         .0;
 

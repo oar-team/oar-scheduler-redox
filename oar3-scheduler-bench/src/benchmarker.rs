@@ -166,9 +166,11 @@ impl From<Vec<BenchmarkResult>> for BenchmarkAverageResult {
 #[derive(Copy, Clone)]
 pub enum BenchmarkTarget {
     #[allow(dead_code)]
-    Basic,
+    Rust,
     #[allow(dead_code)]
     Python,
+    #[allow(dead_code)]
+    RustFromPython,
 }
 
 pub struct BenchmarkConfig {
@@ -192,14 +194,15 @@ impl BenchmarkConfig {
         let profile = "release";
 
         let target = match self.target {
-            BenchmarkTarget::Basic => {
+            BenchmarkTarget::Rust => {
                 if self.cache {
-                    "basic-Cache"
+                    "rs"
                 } else {
-                    "basic-NoCache"
+                    "rs[nocache]"
                 }
             }
-            BenchmarkTarget::Python => "oar-python",
+            BenchmarkTarget::Python => "py",
+            BenchmarkTarget::RustFromPython => "rp",
         };
         format!("./benchmarks/{}_{}_{}-{}.svg", prefix, profile, target, self.sample_type.to_string())
     }
@@ -212,11 +215,12 @@ impl BenchmarkConfig {
         let sample_type_str = self.sample_type.to_friendly_string();
         let cache_str = if self.cache { "With cache" } else { "No cache" };
         match self.target {
-            BenchmarkTarget::Basic => format!(
-                "Basic scheduler performance by number of jobs ({}, {}, {})",
+            BenchmarkTarget::Rust => format!(
+                "Rust scheduler performance by number of jobs ({}, {}, {})",
                 profile, cache_str, sample_type_str
             ),
-            BenchmarkTarget::Python => format!("OAR Python scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
+            BenchmarkTarget::Python => format!("Python scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
+            BenchmarkTarget::RustFromPython => format!("Rust from Python scheduler performance by number of jobs ({}, {})", profile, sample_type_str),
         }
         .to_string()
     }
@@ -278,8 +282,9 @@ impl BenchmarkConfig {
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, slot_count) = match target {
-                    BenchmarkTarget::Basic => measure_time(|| schedule_cycle(&mut platform, queues)),
-                    BenchmarkTarget::Python => schedule_cycle_on_oar_python(&mut platform, queues),
+                    BenchmarkTarget::Rust => measure_time(|| schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Python => schedule_cycle_on_oar_python(&mut platform, queues, false),
+                    BenchmarkTarget::RustFromPython => schedule_cycle_on_oar_python(&mut platform, queues, true),
                 };
 
                 let quotas_hits = platform.get_scheduled_jobs().iter().map(|j| j.quotas_hit_count).sum::<u32>();

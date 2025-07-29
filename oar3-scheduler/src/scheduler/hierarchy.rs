@@ -149,7 +149,6 @@ impl Hierarchy {
                             self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])
                         }
                     } else if proc_set.is_subset(&available_proc_set) {
-                        // TODO: check if proc_set & available_proc_set == *proc_set is faster.
                         Some(proc_set.clone())
                     } else {
                         None

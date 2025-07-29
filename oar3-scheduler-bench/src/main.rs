@@ -16,21 +16,21 @@ async fn main() {
         .init();
 
     let benchmark = BenchmarkConfig {
-        target: BenchmarkTarget::Basic,
-        sample_type: WaitingJobsSampleType::CoreOnly,
-        cache: false,
+        target: BenchmarkTarget::Rust,
+        sample_type: WaitingJobsSampleType::NodeOnly,
+        cache: true,
         averaging: 1,
         res_count: 10_000,
-        start: 700,
-        end: 700,
-        step: 1,
+        start: 0,
+        end: 500,
+        step: 100,
         seed: 26,
-        single_thread: false,
+        single_thread: true,
     };
     let results = benchmark.benchmark().await;
 
 
     print_bench_fct_results();
     print_bench_fct_hy_results();
-    graph_benchmark_result("6_benchmarked".to_string(), benchmark, results);
+    graph_benchmark_result("1_ts".to_string(), benchmark, results);
 }

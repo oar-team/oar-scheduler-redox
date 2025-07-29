@@ -96,10 +96,10 @@ pub struct Hierarchy {
 
 impl Hierarchy {
     pub fn new() -> Self {
-        Hierarchy {
-            partitions: HashMap::new(),
-            unit_partition: None,
-        }
+        Self::new_defined(HashMap::new(), None)
+    }
+    pub fn new_defined(partitions: HashMap<Box<str>, Box<[ProcSet]>>, unit_partition: Option<Box<str>>) -> Self {
+        Hierarchy { partitions, unit_partition }
     }
     pub fn add_partition(mut self, name: Box<str>, partitions: Box<[ProcSet]>) -> Self {
         if self.has_partition(&name) {
@@ -148,7 +148,8 @@ impl Hierarchy {
                         } else {
                             self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])
                         }
-                    } else if proc_set.is_subset(&available_proc_set) { // TODO: check if proc_set & available_proc_set == *proc_set is faster.
+                    } else if proc_set.is_subset(&available_proc_set) {
+                        // TODO: check if proc_set & available_proc_set == *proc_set is faster.
                         Some(proc_set.clone())
                     } else {
                         None

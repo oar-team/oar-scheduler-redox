@@ -486,9 +486,9 @@ impl SlotSet {
                 match job.time_sharing {
                     None => {}
                     Some(TimeSharingType::AllAll) => slot.add_time_sharing_entry(&"*".into(), &"*".into(), proc_set),
-                    Some(TimeSharingType::AllName) => slot.add_time_sharing_entry(&"*".into(), &job.name, proc_set),
-                    Some(TimeSharingType::UserAll) => slot.add_time_sharing_entry(&job.user, &"*".into(), proc_set),
-                    Some(TimeSharingType::UserName) => slot.add_time_sharing_entry(&job.user, &job.name, proc_set),
+                    Some(TimeSharingType::AllName) => slot.add_time_sharing_entry(&"*".into(), &job.name.clone().unwrap_or("".into()), proc_set),
+                    Some(TimeSharingType::UserAll) => slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &"*".into(), proc_set),
+                    Some(TimeSharingType::UserName) => slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &job.name.clone().unwrap_or("".into()), proc_set),
                 }
 
                 if self.platform_config.quotas_config.enabled && do_update_quotas {

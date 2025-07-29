@@ -68,7 +68,9 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
 #[auto_bench_fct_hy]
 pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable) -> Option<(i32, i32, ProcSet, u32)> {
     let mut iter = slot_set.iter();
-    if job.time_sharing.is_none() && let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
+    if job.time_sharing.is_none()
+        && let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable)
+    {
         iter = iter.start_at(cache_first_slot);
     }
 
@@ -82,8 +84,13 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
         count += 1;
 
         let available_resources = if job.time_sharing.is_some() {
-            slot_set.intersect_slots_intervals_with_time_sharing(left_slot.id(), right_slot.id(), &job.user, &job.name)
-        }else {
+            slot_set.intersect_slots_intervals_with_time_sharing(
+                left_slot.id(),
+                right_slot.id(),
+                &job.user.clone().unwrap_or("".into()),
+                &job.name.clone().unwrap_or("".into()),
+            )
+        } else {
             slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id())
         };
 

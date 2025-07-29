@@ -1,5 +1,6 @@
 use crate::scheduler::hierarchy::HierarchyRequests;
 use auto_bench_fct::auto_bench_fct_hy;
+use log::warn;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyAnyMethods, PyListMethods, PyModule};
 #[cfg(feature = "pyo3")]
@@ -27,9 +28,9 @@ pub fn proc_set_to_python<'a>(py: Python<'a>, proc_set: &ProcSet) -> Bound<'a, P
 #[derive(Debug, Clone)]
 pub struct Job {
     pub id: u32,
-    pub name: Box<str>,
-    pub user: Box<str>,
-    pub project: Box<str>,
+    pub name: Option<Box<str>>,
+    pub user: Option<Box<str>>,
+    pub project: Option<Box<str>>,
     pub queue: Box<str>,
     pub types: Vec<Box<str>>,
     pub moldables: Vec<Moldable>,
@@ -50,6 +51,20 @@ pub enum TimeSharingType {
     /// timesharing=user,name
     UserName,
 }
+impl TimeSharingType {
+    pub fn from_str(user: &str, job: &str) -> Self {
+        match (user, job) {
+            ("*", "*") => TimeSharingType::AllAll,
+            ("*", "name") => TimeSharingType::AllName,
+            ("user", "*") => TimeSharingType::UserAll,
+            ("user", "name") => TimeSharingType::UserName,
+            _ => {
+                warn!("Invalid time sharing type: user={}, job={}", user, job);
+                TimeSharingType::AllAll // Default to AllAll if invalid
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ScheduledJobData {
@@ -62,6 +77,7 @@ pub struct ScheduledJobData {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]
 pub struct Moldable {
+    pub id: u32,
     pub walltime: i64,
     pub requests: HierarchyRequests,
 }
@@ -117,8 +133,8 @@ impl JobBuilder {
             time_sharing: None,
         }
     }
-    pub fn moldable_auto(mut self, walltime: i64, requests: HierarchyRequests) -> Self {
-        self.moldables.push(Moldable::new(walltime, requests));
+    pub fn moldable_auto(mut self, id: u32, walltime: i64, requests: HierarchyRequests) -> Self {
+        self.moldables.push(Moldable::new(id, walltime, requests));
         self
     }
     pub fn moldable(mut self, moldable: Moldable) -> Self {
@@ -164,9 +180,9 @@ impl JobBuilder {
     pub fn build(self) -> Job {
         Job {
             id: self.id,
-            name: self.name.unwrap_or_else(|| "Unnamed Job".into()),
-            user: self.user.unwrap_or_else(|| "unknown_user".into()),
-            project: self.project.unwrap_or_else(|| "unknown_project".into()),
+            name: self.name,
+            user: self.user,
+            project: self.project,
             queue: self.queue.unwrap_or_else(|| "default".into()),
             types: self.types.unwrap_or_default(),
             moldables: self.moldables,
@@ -186,9 +202,24 @@ impl<'a> IntoPyObject<'a> for &Job {
     fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
         let dict = PyDict::new(py);
         dict.set_item("id", self.id).unwrap();
-        dict.set_item("user", self.user.as_ref()).unwrap();
-        dict.set_item("project", self.project.as_ref()).unwrap();
-        dict.set_item("queue", self.queue.as_ref()).unwrap();
+
+        if let Some(name) = &self.name {
+            dict.set_item("name", name.as_ref()).unwrap();
+        } else {
+            dict.set_item("name", py.None()).unwrap();
+        }
+        if let Some(user) = &self.user {
+            dict.set_item("user", user.as_ref()).unwrap();
+        } else {
+            dict.set_item("user", py.None()).unwrap();
+        }
+        if let Some(project) = &self.project {
+            dict.set_item("project", project.as_ref()).unwrap();
+        } else {
+            dict.set_item("project", py.None()).unwrap();
+        }
+
+        dict.set_item("queue", self.queue.clone().as_ref()).unwrap();
         dict.set_item("types", self.types.iter().map(|s| s.as_ref()).collect::<Vec<_>>()).unwrap();
         dict.set_item("moldables", self.moldables.iter().enumerate().collect::<Vec<(usize, &Moldable)>>())
             .unwrap();
@@ -223,8 +254,8 @@ impl ScheduledJobData {
 }
 
 impl Moldable {
-    pub fn new(walltime: i64, requests: HierarchyRequests) -> Moldable {
-        Moldable { walltime, requests }
+    pub fn new(id: u32, walltime: i64, requests: HierarchyRequests) -> Moldable {
+        Moldable { id, walltime, requests }
     }
     pub fn get_cache_key(&self) -> String {
         format!("{}-{}", self.walltime, self.requests.get_cache_key())

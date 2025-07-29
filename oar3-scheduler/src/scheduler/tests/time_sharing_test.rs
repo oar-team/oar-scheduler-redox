@@ -20,8 +20,8 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000);
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
-    let moldable1 = Moldable::new(60, HierarchyRequests::new_single(res.clone(), vec![("cpus".into(), 2)]));
-    let moldable2 = Moldable::new(60, HierarchyRequests::new_single(res.clone(), vec![("cpus".into(), 7)]));
+    let moldable1 = Moldable::new(1, 60, HierarchyRequests::new_single(res.clone(), vec![("cpus".into(), 2)]));
+    let moldable2 = Moldable::new(2, 60, HierarchyRequests::new_single(res.clone(), vec![("cpus".into(), 7)]));
 
     let job_1 = JobBuilder::new(1).moldable(moldable1.clone()).build();
     let job_2 = JobBuilder::new(2)

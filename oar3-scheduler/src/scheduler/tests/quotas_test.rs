@@ -41,6 +41,7 @@ fn test_quotas_one_job_no_rules() {
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
     let moldable = Moldable::new(
+        0,
         60,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 2)])]),
     );
@@ -83,6 +84,7 @@ fn test_quotas_one_job_rule_nb_res_1() {
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
     let moldable = Moldable::new(
+        1,
         60,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 2)])]),
     );
@@ -120,6 +122,7 @@ fn test_quotas_one_job_rule_nb_res_2() {
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
     let moldable = Moldable::new(
+        2,
         60,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("nodes".into(), 2)])]),
     );
@@ -179,11 +182,13 @@ fn test_quotas_four_jobs_rule_1() {
 
     // Now schedule two more jobs
     let moldable_j3 = Moldable::new(
+        3,
         10,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
     let j3 = JobBuilder::new(3).user("toto".into()).queue("default".into()).moldable(moldable_j3).build();
     let moldable_j4 = Moldable::new(
+        4,
         60,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
@@ -235,11 +240,13 @@ fn test_quotas_three_jobs_rule_1() {
 
     // Now schedule two more jobs
     let moldable_j2 = Moldable::new(
+        5,
         200,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
     let j2 = JobBuilder::new(2).user("toto".into()).queue("default".into()).moldable(moldable_j2).build();
     let moldable_j3 = Moldable::new(
+        6,
         100,
         HierarchyRequests::from_requests(vec![HierarchyRequest::new(available.clone(), vec![("cpus".into(), 1)])]),
     );
@@ -286,10 +293,10 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
     // Job 1: user toto, requests 2 nodes (should be denied, only 1 proc allowed)
-    let moldable_j1 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
+    let moldable_j1 = Moldable::new(7, 60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
     let j1 = JobBuilder::new(1).user("toto".into()).queue("default".into()).moldable(moldable_j1).build();
     // Job 2: user tutu, requests 2 nodes (should succeed, unlimited for others)
-    let moldable_j2 = Moldable::new(60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
+    let moldable_j2 = Moldable::new(8, 60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
     let j2 = JobBuilder::new(2).user("tutu".into()).queue("default".into()).moldable(moldable_j2).build();
     let mut jobs = vec![j1, j2];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
@@ -322,14 +329,14 @@ fn test_quotas_two_jobs_job_type_proc() {
     let mut all_ss = HashMap::from([("default".to_string(), ss)]);
 
     // Both jobs have job_type "yop", request 1 node each, walltime 50
-    let moldable_j1 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
+    let moldable_j1 = Moldable::new(9, 50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
     let j1 = JobBuilder::new(1)
         .user("toto".into())
         .queue("default".into())
         .single_type("yop".into())
         .moldable(moldable_j1)
         .build();
-    let moldable_j2 = Moldable::new(50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
+    let moldable_j2 = Moldable::new(10, 50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
     let j2 = JobBuilder::new(2)
         .user("toto".into())
         .queue("default".into())

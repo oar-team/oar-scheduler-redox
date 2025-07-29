@@ -1,9 +1,9 @@
 mod model_py;
 mod platform;
-
-use oar3_scheduler::platform::PlatformTrait;
 use pyo3::prelude::*;
 use pyo3::types::PyInt;
+use oar3_scheduler::scheduler::kamelot;
+use crate::platform::Platform;
 
 /// Python module declaration
 #[pymodule]
@@ -12,18 +12,26 @@ fn oar3_scheduler_lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-/// Formats the sum of two numbers as string.
+/// Schedules the jobs from the platform and saves the assignments back to the platform.
 #[pyfunction]
 fn schedule_cycle(
-    session: Py<PyAny>,
-    config: Py<PyAny>,
-    platform: Py<PyAny>,
-    slot_sets: Py<PyAny>,
-    job_security_time: Py<PyInt>,
-    queues: Py<PyAny>,
-    quotas: Py<PyAny>, // Quotas class (not an instance, but a class reference to access global attributes)
-) -> PyResult<String> {
-    todo!();
+    py_session: Bound<PyAny>,
+    py_config: Bound<PyAny>,
+    py_platform: Bound<PyAny>,
+    py_slot_sets: Bound<PyAny>,
+    py_job_security_time: Bound<PyInt>,
+    py_queues: Bound<PyAny>,
+) -> PyResult<()> {
+    // Extracting the platform (including the resource set, quotas config, and waiting jobs)
+    let mut platform = Platform::build_platform(&py_platform, &py_session, &py_config, &py_queues, &py_job_security_time)?;
+
+    // No persistent slot set support for now.
+
+    // Scheduling (Platform automatically calls py_platform.save_assigns upon saving scheduled jobs.)
+    let queues: Vec<String> = py_queues.extract()?;
+    kamelot::schedule_cycle(&mut platform, queues);
+
+    Ok(())
 }
 
 

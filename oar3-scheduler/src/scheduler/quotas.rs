@@ -286,20 +286,20 @@ impl From<QuotasMap> for QuotasTree {
 }
 
 trait QuotasTreeNodeTrait {
-    fn first_valid_key(&self, key: &str) -> Option<Box<str>>;
+    fn first_valid_key(&self, key: Option<&str>) -> Option<Box<str>>;
 }
 impl<T> QuotasTreeNodeTrait for HashMap<Box<str>, T> {
     /// Finds the first valid key in a QuotasTreeMap HashMap of a specific level.
     /// It checks in order for a key named `key`, then for '*', and at last for '/'.
     /// Returns the first valid key found as `Some(Box<str>)`.
-    fn first_valid_key(&self, key: &str) -> Option<Box<str>> {
+    fn first_valid_key(&self, key: Option<&str>) -> Option<Box<str>> {
         let mut has_all = false;
         let mut has_any = false;
         let has_key = self
             .keys()
             .into_iter()
             .find(|k| {
-                if k.as_ref() == key {
+                if let Some(key) = key && k.as_ref() == key {
                     return true;
                 }
                 if !has_all && k.as_ref() == "*" {
@@ -370,7 +370,10 @@ impl Quotas {
         let resources_times = slot_width * resources as i64;
 
         let matched_queues = ["*", &job.queue];
-        let matched_projects = ["*", &job.project];
+        let mut matched_projects = vec!["*"];
+        if let Some(project) = job.project.as_ref() {
+            matched_projects.push(project);
+        }
         // Tracking only the types configured in QuotasConfig::job_types.
         let matched_job_types = self
             .platform_config
@@ -379,7 +382,11 @@ impl Quotas {
             .iter()
             .filter(|t| &(***t) == "*" || job.types.contains(t))
             .collect::<Box<[&Box<str>]>>();
-        let matched_users = ["*", &job.user];
+
+        let mut matched_users = vec!["*"];
+        if let Some(user) = job.user.as_ref() {
+            matched_users.push(user);
+        }
 
         matched_queues.iter().for_each(|queue| {
             matched_projects.iter().for_each(|project| {
@@ -410,10 +417,10 @@ impl Quotas {
     /// Quotas rules only applies to the first job type in the `job.types` `Vec`.
     /// It returns two keys, the first one being the same as the second one, but with the "/" replaced by the actual name, and the value QuotasValue (the limits).
     pub fn find_applicable_rule(&self, job: &Job) -> Option<(QuotasKey, QuotasKey, &QuotasValue)> {
-        let key_queue = job.queue.as_ref();
-        let key_project = job.project.as_ref();
-        let key_job_type = job.types.get(0).map(|s| s.clone()).unwrap_or("*".into());
-        let key_user = job.user.as_ref();
+        let key_queue = Some(job.queue.as_ref());
+        let key_project = job.project.as_ref().map(|s| s.as_ref());
+        let key_job_type = Some(job.types.get(0).map(|s| s.as_ref()).unwrap_or("*"));
+        let key_user = job.user.as_ref().map(|s| s.as_ref());
 
         let mut rule_key = None;
         let mut rule_value = None;
@@ -422,7 +429,7 @@ impl Quotas {
             let map = self.rules_tree.0.get(&key_queue).unwrap();
             if let Some(key_project) = map.first_valid_key(key_project) {
                 let map = map.get(&key_project).unwrap();
-                if let Some(key_job_type) = map.first_valid_key(key_job_type.as_ref()) {
+                if let Some(key_job_type) = map.first_valid_key(key_job_type) {
                     let map = map.get(&key_job_type).unwrap();
                     if let Some(key_user) = map.first_valid_key(key_user) {
                         rule_value = map.get(&key_user);
@@ -438,12 +445,12 @@ impl Quotas {
             if key_queue.as_ref() == "/" {
                 *key_queue = job.queue.clone().into();
             }
-            if key_project.as_ref() == "/" {
-                *key_project = job.project.clone().into();
+            if let Some(project) = &job.project && key_project.as_ref() == "/" {
+                *key_project = project.clone().into();
             }
-            // "/" is not available for projects
-            if key_user.as_ref() == "/" {
-                *key_user = job.user.clone().into();
+            // "/" is not available for job types
+            if let Some(user) = &job.user && key_user.as_ref() == "/" {
+                *key_user = user.clone().into();
             }
 
             return Some((rule_key_counter.unwrap(), rule_key.unwrap(), rule_value.unwrap()));

@@ -592,7 +592,7 @@ impl RandomJobGenerator {
             let request = HierarchyRequest::new(ProcSet::from_iter(1..=self.total_res), hierarchy_req);
             jobs.push(
                 JobBuilder::new(i as u32 + self.id_offset)
-                    .moldable_auto(walltime, HierarchyRequests::from_requests(vec![request]))
+                    .moldable_auto(i as u32 + self.id_offset, walltime, HierarchyRequests::from_requests(vec![request]))
                     .single_type(self.job_type.clone().into())
                     .build(),
             );

@@ -51,5 +51,5 @@ maturin develop --release
 You can use the library in Python as follows:
 ```python
 import oar3_scheduler_lib
-oar3_scheduler_lib.schedule_cycle(session, config, platform, all_slot_sets, job_security_time, queues)
+oar3_scheduler_lib.schedule_cycle(session, config, platform, job_security_time, queues)
 ```

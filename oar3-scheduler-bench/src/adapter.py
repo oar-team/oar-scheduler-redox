@@ -48,7 +48,7 @@ class PlatformAdapter(Platform):
         self.waiting_jobs = waiting_jobs, [job['id'] for job in self.waiting_jobs_rs], len(self.waiting_jobs_rs)
 
         # Compute scheduled jobs structure (not available for now)
-        self.scheduled_jobs = {}
+        self.scheduled_jobs = []
 
         # Set placeholder for assigned jobs
         self.assigned_jobs = []
@@ -62,6 +62,7 @@ class PlatformAdapter(Platform):
             project=j['project'],
             user=j['user'],
             assign=False,
+            find=False,
             types={},
             res_set=[],
             mld_res_rqts=[

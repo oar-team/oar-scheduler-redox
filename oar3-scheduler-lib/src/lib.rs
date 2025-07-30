@@ -18,14 +18,10 @@ fn schedule_cycle(
     py_session: Bound<PyAny>,
     py_config: Bound<PyAny>,
     py_platform: Bound<PyAny>,
-    py_slot_sets: Bound<PyAny>,
-    py_job_security_time: Bound<PyInt>,
     py_queues: Bound<PyAny>,
 ) -> PyResult<()> {
     // Extracting the platform (including the resource set, quotas config, and waiting jobs)
-    let mut platform = Platform::build_platform(&py_platform, &py_session, &py_config, &py_queues, &py_job_security_time)?;
-
-    // No persistent slot set support for now.
+    let mut platform = Platform::build_platform(&py_platform, &py_session, &py_config, &py_queues)?;
 
     // Scheduling (Platform automatically calls py_platform.save_assigns upon saving scheduled jobs.)
     let queues: Vec<String> = py_queues.extract()?;

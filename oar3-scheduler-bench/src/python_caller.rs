@@ -6,8 +6,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use std::collections::HashMap;
 use std::ffi::CStr;
+use pyo3::IntoPyObjectExt;
 
-const PYTHON_MODULE_NAME: &str = "oar.kao.kamelot_basic";
+const PYTHON_MODULE_NAME: &str = "oar.kao.kamelot";
 const PYTHON_MODULE_DIR: &str = "/Users/clement/CodeIF/oar3/";
 const PYTHON_SITE_PACKAGES_DIR: &str = "/Users/clement/CodeIF/oar3/.venv/lib/python3.10/site-packages";
 
@@ -24,11 +25,9 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
 
         PyModule::from_code(py, ADAPTER_CODE, ADAPTER_FILE, ADAPTER_MODULE).unwrap();
 
-        //info!("Python {:?}, path = {:?}", sys.getattr("version"), sys.getattr("path"));
-
         let platform_py = create_platform(py, platform);
 
-        // Run scheduling using basic scheduler (no quotas)
+        let now = platform.get_now().into_bound_py_any(py)?;
         let schedule_cycle = py.import(PYTHON_MODULE_NAME).unwrap().getattr("schedule_cycle").unwrap();
         let time = measure_time(|| {
             schedule_cycle
@@ -36,6 +35,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
                     py.None(),
                     create_config(py),
                     platform_py.clone_ref(py),
+                    now,
                     PyList::new(py, ["default"]).unwrap(),
                     use_rust,
                 ))
@@ -56,9 +56,6 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
             .extract(py)
             .unwrap();
         for job_py in scheduled_jobs_py {
-            // print job_py keys and values for debugging
-            //info!("Job Py: {:?}", job_py);
-
             let id: u32 = job_py.get_item("id").unwrap().unwrap().extract::<u32>().unwrap();
             let quotas_hit_count: u32 = job_py.get_item("quotas_hit_count").unwrap().unwrap().extract().unwrap();
             let begin: i64 = job_py.get_item("begin").unwrap().unwrap().extract().unwrap();
@@ -72,7 +69,6 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
                 proc_set = proc_set | ProcSet::from_iter([start..=end]);
             }
 
-            //info!("Extracted begin-end is {}-{}, proc_set = {:?}", begin, end, proc_set);
             let mut job = waiting_jobs_map.get(&id).cloned().unwrap();
             job.quotas_hit_count = quotas_hit_count;
             job.scheduled_data = Some(ScheduledJobData {

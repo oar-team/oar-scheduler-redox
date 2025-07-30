@@ -5,7 +5,7 @@ use crate::scheduler::slot::SlotSet;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) -> usize {
+pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -> usize {
     let now = platform.get_now();
     let max_time = platform.get_max_time();
 
@@ -34,9 +34,13 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>) 
         pseudo_jobs.sort_by_key(|j| j.begin().unwrap());
         initial_slot_set.split_slots_for_jobs_and_update_resources(&pseudo_jobs.iter().collect(), false, None);
 
-        // Get already scheduled jobs advanced reservations and jobs from higher priority queues
+        // Place already scheduled jobs, advanced reservations and jobs from higher priority queues
         let mut scheduled_jobs = platform.get_scheduled_jobs().iter().collect::<Vec<&Job>>();
         scheduled_jobs.sort_by_key(|j| j.begin().unwrap());
+        if queues.len() != 1 || queues[0] != "besteffort" {
+            // Unless scheduling best-effort queue, not taking into account the existing best-effort jobs.
+            scheduled_jobs.retain(|j| j.queue.as_ref() != "besteffort");
+        }
         initial_slot_set.split_slots_for_jobs_and_update_resources(&scheduled_jobs, true, None);
 
         // Scheduling

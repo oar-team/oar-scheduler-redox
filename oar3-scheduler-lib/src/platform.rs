@@ -5,7 +5,7 @@ use oar3_scheduler::scheduler::quotas::{QuotasConfig, QuotasMap, QuotasValue};
 use pyo3::ffi::c_str;
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};
-use pyo3::{Bound, PyAny, PyResult, Python};
+use pyo3::{Bound, IntoPyObjectExt, PyAny, PyResult, Python};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -74,16 +74,26 @@ impl<'p> Platform<'p> {
         py_session: &Bound<'p, PyAny>,
         py_config: &Bound<'p, PyAny>,
         py_queues: &Bound<'p, PyAny>,
-        py_job_security_time: &Bound<PyAny>,
     ) -> PyResult<Self> {
         let py_now = py_platform.getattr("get_time")?.call0()?;
         let now: i64 = py_now.extract()?;
+        let py_job_security_time_int: Bound<PyAny> = py_config
+            .get_item("SCHEDULER_JOB_SECURITY_TIME")?
+            .extract::<String>()?
+            .parse::<i64>()?
+            .into_bound_py_any(py_config.py())?;
 
         // Get the resource set
         let kwargs = PyDict::new(py_platform.py());
         kwargs.set_item("session", py_session)?;
         kwargs.set_item("config", py_config)?;
         let py_res_set: Bound<PyAny> = py_platform.getattr("resource_set")?.call((), Some(&kwargs))?;
+
+        // Get already scheduled jobs
+        let py_scheduled_jobs: Bound<PyAny> = py_platform
+            .getattr("get_scheduled_jobs")?
+            .call((py_session, &py_res_set, &py_job_security_time_int, py_now), None)?;
+        let py_scheduled_jobs = py_scheduled_jobs.downcast::<PyList>()?;
 
         // Get waiting jobs
         let kwargs = PyDict::new(py_platform.py());
@@ -98,7 +108,7 @@ impl<'p> Platform<'p> {
                 py_waiting_jobs_map.clone(),
                 py_waiting_jobs_ids,
                 py_res_set.clone(),
-                py_job_security_time,
+                py_job_security_time_int,
             ),
             None,
         )?;
@@ -106,8 +116,8 @@ impl<'p> Platform<'p> {
         Ok(Platform {
             now,
             platform_config: Rc::new(Self::build_platform_config(py_res_set.clone())?),
-            scheduled_jobs: Vec::new(),
-            waiting_jobs: Self::build_waiting_jobs(py_waiting_jobs_map.clone())?,
+            scheduled_jobs: Self::build_scheduled_jobs_from_list(py_scheduled_jobs.clone())?,
+            waiting_jobs: Self::build_waiting_jobs_from_map(py_waiting_jobs_map.clone())?,
             py_platform: py_platform.clone(),
             py_session: py_session.clone(),
             py_res_set,
@@ -178,7 +188,6 @@ impl<'p> Platform<'p> {
             .fold(ProcSet::new(), |acc, x| acc | x))
     }
     fn proc_set_to_python(py: Python<'p>, proc_set: &ProcSet) -> PyResult<Bound<'p, PyAny>> {
-
         let intervals = proc_set
             .ranges()
             .map(|r| PyList::new(py, [*r.start(), *r.end()]))
@@ -234,95 +243,108 @@ impl<'p> Platform<'p> {
         Ok(QuotasConfig::new(enabled, calendar, default_rules, tracked_job_types))
     }
 
-    fn build_waiting_jobs(py_jobs: Bound<PyDict>) -> PyResult<Vec<Job>> {
-        let mut jobs = Vec::new();
-        for (id, job) in py_jobs.iter() {
-            let name: Option<String> = job.getattr("name")?.extract()?;
-            let user: Option<String> = job.getattr("user")?.extract()?;
-            let project: Option<String> = job.getattr("project")?.extract()?;
-            let queue: String = job.getattr("queue_name")?.extract()?;
-            let types: HashMap<String, String> = job.getattr("types")?.extract()?;
-            let types: Vec<Box<str>> = types.into_iter().map(|(s1, s2)| format!("{}={}", s1, s2).into_boxed_str()).collect();
+    fn build_waiting_jobs_from_map(py_jobs_map: Bound<PyDict>) -> PyResult<Vec<Job>> {
+        // TODO: Handle Job Sorting calling oar.kao.kamelot.job_sorting(session, config, queues, now, waiting_jids, waiting_jobs, plt) -> ordered_waiting_jids
+        Ok(py_jobs_map
+            .iter()
+            .map(|(_id, py_job)| Self::build_job(&py_job))
+            .collect::<PyResult<Vec<Job>>>()?)
+    }
+    fn build_scheduled_jobs_from_list(py_jobs_list: Bound<PyList>) -> PyResult<Vec<Job>> {
+        Ok(py_jobs_list
+            .iter()
+            .map(|py_job| Self::build_job(&py_job))
+            .collect::<PyResult<Vec<Job>>>()?)
+    }
+    fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
+        let name: Option<String> = py_job.getattr("name")?.extract()?;
+        let user: Option<String> = py_job.getattr("user")?.extract()?;
+        let project: Option<String> = py_job.getattr("project")?.extract()?;
+        let queue: String = py_job.getattr("queue_name")?.extract()?;
+        let types: HashMap<String, String> = py_job.getattr("types")?.extract()?;
+        let types: Vec<Box<str>> = types.into_iter().map(|(s1, s2)| format!("{}={}", s1, s2).into_boxed_str()).collect();
 
-            let time_sharing: bool = job.getattr_opt("ts")?.map(|o| o.extract()).unwrap_or(Ok(false))?;
-            let time_sharing = if time_sharing {
-                let time_sharing_user_name: String = job.getattr("ts_user")?.extract()?;
-                let time_sharing_job_name: String = job.getattr("ts_name")?.extract()?;
-                Some(TimeSharingType::from_str(&time_sharing_user_name, &time_sharing_job_name))
-            } else {
-                None
-            };
+        let time_sharing: bool = py_job.getattr_opt("ts")?.map(|o| o.extract()).unwrap_or(Ok(false))?;
+        let time_sharing = if time_sharing {
+            let time_sharing_user_name: String = py_job.getattr("ts_user")?.extract()?;
+            let time_sharing_job_name: String = py_job.getattr("ts_name")?.extract()?;
+            Some(TimeSharingType::from_str(&time_sharing_user_name, &time_sharing_job_name))
+        } else {
+            None
+        };
 
-            // Moldables
-            let moldables: Vec<_> = job
-                .getattr("mld_res_rqts")?
-                .downcast::<PyList>()?
-                .iter()
-                .map(|moldable| {
-                    let moldable = moldable.downcast::<PyTuple>()?;
-                    let id: u32 = moldable.get_item(0)?.extract()?;
-                    let walltime: i64 = moldable.get_item(1)?.extract()?;
-                    let requests: Vec<HierarchyRequest> = moldable
-                        .get_item(2)?
-                        .downcast::<PyList>()?
-                        .iter()
-                        .map(|req| {
-                            let req = req.downcast::<PyTuple>()?;
-                            let level_nbs = req.get_item(0)?;
-                            let level_nbs = level_nbs
-                                .downcast::<PyList>()?
-                                .into_iter()
-                                .map(|level_nb_tuple| {
-                                    let level_nb_tuple = level_nb_tuple.downcast::<PyTuple>()?;
-                                    let level_name: String = level_nb_tuple.get_item(0)?.extract()?;
-                                    let level_nb: u32 = level_nb_tuple.get_item(1)?.extract()?;
-                                    Ok((level_name.into_boxed_str(), level_nb))
-                                })
-                                .collect::<PyResult<Vec<_>>>()?;
-                            let filter = Self::build_proc_set(&req.get_item(1)?)?;
+        // Moldables
+        let moldables: Vec<_> = py_job
+            .getattr("mld_res_rqts")?
+            .downcast::<PyList>()?
+            .iter()
+            .map(|moldable| Self::build_moldable(&moldable))
+            .collect::<PyResult<_>>()?;
 
-                            Ok(HierarchyRequest::new(filter, level_nbs))
-                        })
-                        .collect::<PyResult<Vec<_>>>()?;
-                    Ok(Moldable::new(id, walltime, HierarchyRequests::from_requests(requests)))
-                })
-                .collect::<PyResult<_>>()?;
+        let mut scheduled_data: Option<ScheduledJobData> = None;
+        if py_job.hasattr("start_time")? && py_job.hasattr("walltime")? {
+            let begin: Option<i64> = py_job.getattr("start_time")?.extract()?;
+            let walltime: Option<i64> = py_job.getattr("walltime")?.extract()?;
+            if let (Some(begin), Some(walltime)) = (begin, walltime)
+                && begin > 0
+                && walltime > 0
+            {
+                let end: i64 = begin + walltime - 1;
 
-            let mut scheduled_data: Option<ScheduledJobData> = None;
-            if job.hasattr("start_time")? && job.hasattr("walltime")? {
-                let begin: Option<i64> = job.getattr("start_time")?.extract()?;
-                let walltime: Option<i64> = job.getattr("walltime")?.extract()?;
-                if let (Some(begin), Some(walltime)) = (begin, walltime) && begin > 0 && walltime > 0 {
-                    let end: i64 = begin + walltime - 1;
+                let proc_set: ProcSet = Self::build_proc_set(&py_job.getattr("res_set")?)?;
 
-                    let proc_set: ProcSet = Self::build_proc_set(&job.getattr("res_set")?)?;
+                let moldables_id: u32 = py_job.getattr("moldable_id")?.extract()?;
+                let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
 
-                    let moldables_id: u32 = job.getattr("moldable_id")?.extract()?;
-                    let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
-
-                    scheduled_data = Some(ScheduledJobData {
-                        begin,
-                        end,
-                        proc_set,
-                        moldable_index,
-                    });
-                }
+                scheduled_data = Some(ScheduledJobData {
+                    begin,
+                    end,
+                    proc_set,
+                    moldable_index,
+                });
             }
-
-            jobs.push(Job {
-                id: id.extract::<u32>()?,
-                name: name.map(|n| n.into_boxed_str()),
-                user: user.map(|u| u.into_boxed_str()),
-                project: project.map(|p| p.into_boxed_str()),
-                queue: queue.into_boxed_str(),
-                types,
-                moldables,
-                scheduled_data,
-                quotas_hit_count: 0,
-                time_sharing,
-            });
         }
 
-        Ok(jobs)
+        Ok(Job {
+            id: py_job.getattr("id")?.extract::<u32>()?,
+            name: name.map(|n| n.into_boxed_str()),
+            user: user.map(|u| u.into_boxed_str()),
+            project: project.map(|p| p.into_boxed_str()),
+            queue: queue.into_boxed_str(),
+            types,
+            moldables,
+            scheduled_data,
+            quotas_hit_count: 0,
+            time_sharing,
+        })
+    }
+    fn build_moldable(py_moldable: &Bound<PyAny>) -> PyResult<Moldable> {
+        let id: u32 = py_moldable.get_item(0)?.extract()?;
+        let walltime: i64 = py_moldable.get_item(1)?.extract()?;
+
+        let requests: Vec<HierarchyRequest> = py_moldable
+            .get_item(2)?
+            .downcast::<PyList>()?
+            .iter()
+            .map(|req| {
+                let req = req.downcast::<PyTuple>()?;
+                let level_nbs = req.get_item(0)?;
+                let level_nbs = level_nbs
+                    .downcast::<PyList>()?
+                    .into_iter()
+                    .map(|level_nb_tuple| {
+                        let level_nb_tuple = level_nb_tuple.downcast::<PyTuple>()?;
+                        let level_name: String = level_nb_tuple.get_item(0)?.extract()?;
+                        let level_nb: u32 = level_nb_tuple.get_item(1)?.extract()?;
+                        Ok((level_name.into_boxed_str(), level_nb))
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                let filter = Self::build_proc_set(&req.get_item(1)?)?;
+
+                Ok(HierarchyRequest::new(filter, level_nbs))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+
+        Ok(Moldable::new(id, walltime, HierarchyRequests::from_requests(requests)))
     }
 }

@@ -1,7 +1,6 @@
 mod model_py;
 mod platform;
 use pyo3::prelude::*;
-use pyo3::types::PyInt;
 use oar3_scheduler::scheduler::kamelot;
 use crate::platform::Platform;
 

@@ -92,7 +92,7 @@ impl<'p> Platform<'p> {
         // Get already scheduled jobs
         let py_scheduled_jobs: Bound<PyAny> = py_platform
             .getattr("get_scheduled_jobs")?
-            .call((py_session, &py_res_set, &py_job_security_time_int, py_now), None)?;
+            .call((py_session, &py_res_set, &py_job_security_time_int, &py_now), None)?;
         let py_scheduled_jobs = py_scheduled_jobs.downcast::<PyList>()?;
 
         // Get waiting jobs
@@ -105,19 +105,40 @@ impl<'p> Platform<'p> {
         py_platform.getattr("get_data_jobs")?.call(
             (
                 py_session,
-                py_waiting_jobs_map.clone(),
-                py_waiting_jobs_ids,
-                py_res_set.clone(),
-                py_job_security_time_int,
+                &py_waiting_jobs_map,
+                &py_waiting_jobs_ids,
+                &py_res_set,
+                &py_job_security_time_int,
             ),
             None,
         )?;
+
+        // Sort waiting jobs
+        let py_sorted_waiting_job_ids = py_platform.py().import("oar.kao.kamelot")?.getattr("jobs_sorting")?.call1((
+            &py_session,
+            &py_config,
+            &py_queues,
+            &py_now,
+            &py_waiting_jobs_ids,
+            &py_waiting_jobs_map,
+            &py_platform,
+        ))?;
+        let sorted_waiting_job_ids: Vec<u32> = py_sorted_waiting_job_ids
+            .downcast::<PyList>()?
+            .iter()
+            .map(|x| x.extract::<u32>())
+            .collect::<PyResult<Vec<_>>>()?;
+        let waiting_jobs_map = Self::build_waiting_jobs_from_map(py_waiting_jobs_map.clone())?;
+        let waiting_jobs: Vec<Job> = sorted_waiting_job_ids
+            .iter()
+            .filter_map(|id| waiting_jobs_map.get(id).cloned())
+            .collect();
 
         Ok(Platform {
             now,
             platform_config: Rc::new(Self::build_platform_config(py_res_set.clone())?),
             scheduled_jobs: Self::build_scheduled_jobs_from_list(py_scheduled_jobs.clone())?,
-            waiting_jobs: Self::build_waiting_jobs_from_map(py_waiting_jobs_map.clone())?,
+            waiting_jobs,
             py_platform: py_platform.clone(),
             py_session: py_session.clone(),
             py_res_set,
@@ -243,12 +264,11 @@ impl<'p> Platform<'p> {
         Ok(QuotasConfig::new(enabled, calendar, default_rules, tracked_job_types))
     }
 
-    fn build_waiting_jobs_from_map(py_jobs_map: Bound<PyDict>) -> PyResult<Vec<Job>> {
-        // TODO: Handle Job Sorting calling oar.kao.kamelot.job_sorting(session, config, queues, now, waiting_jids, waiting_jobs, plt) -> ordered_waiting_jids
+    fn build_waiting_jobs_from_map(py_jobs_map: Bound<PyDict>) -> PyResult<HashMap<u32, Job>> {
         Ok(py_jobs_map
             .iter()
-            .map(|(_id, py_job)| Self::build_job(&py_job))
-            .collect::<PyResult<Vec<Job>>>()?)
+            .map(|(id, py_job)| -> PyResult<(u32, Job)> { Ok((id.extract::<u32>()?, Self::build_job(&py_job)?)) })
+            .collect::<PyResult<HashMap<u32, Job>>>()?)
     }
     fn build_scheduled_jobs_from_list(py_jobs_list: Bound<PyList>) -> PyResult<Vec<Job>> {
         Ok(py_jobs_list

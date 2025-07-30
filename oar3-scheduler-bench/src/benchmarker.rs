@@ -287,6 +287,11 @@ impl BenchmarkConfig {
                     BenchmarkTarget::RustFromPython => schedule_cycle_on_oar_python(&mut platform, queues, true),
                 };
 
+                // platform.get_scheduled_jobs().iter().for_each(|j| {
+                //     let width = 10;
+                //     println!("{}: {:>width$} -> {:>width$} | {}", j.id, j.begin().unwrap(), j.end().unwrap(), j.scheduled_data.clone().unwrap().proc_set);
+                // });
+
                 let quotas_hits = platform.get_scheduled_jobs().iter().map(|j| j.quotas_hit_count).sum::<u32>();
                 let gantt_width = platform
                     .get_scheduled_jobs()
@@ -322,7 +327,7 @@ impl BenchmarkConfig {
     }
 }
 
-fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> Vec<Job> {
+pub fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> Vec<Job> {
     let mut waiting_jobs: Vec<Job> = vec![];
     let last_remaining = jobs_count - ((2 * jobs_count / 5) * 2 + (jobs_count / 10));
     let mut jobs = match sample_type {

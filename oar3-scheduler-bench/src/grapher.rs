@@ -13,7 +13,7 @@ use plotters::style::RGBColor;
 pub fn graph_benchmark_result(prefix_name: String, benchmark: BenchmarkConfig, results: Vec<BenchmarkAverageResult>) {
     let mut series = Vec::with_capacity(6);
 
-    let is_python = matches!(benchmark.target, BenchmarkTarget::Python);
+    let is_python = !matches!(benchmark.target, BenchmarkTarget::Rust);
 
     series.push(Series::new(
         "Scheduling time (ms)",

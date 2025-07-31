@@ -2,16 +2,41 @@ use crate::models::{Job, JobAssignment, Moldable, ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::SlotSet;
 use auto_bench_fct::auto_bench_fct_hy;
-use log::warn;
+use indexmap::IndexMap;
+use log::{info, warn};
 use std::cmp::max;
 use std::collections::HashMap;
 
 /// Schedule loop with support for jobs container - can be recursive
-pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut Vec<Job>) {
-    waiting_jobs.into_iter().for_each(|job| {
+pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut IndexMap<u32, Job>) {
+    waiting_jobs.into_iter().for_each(|(job_id, job)| {
         let slot_set_name = "default".to_string();
-
         let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
+
+        // Check dependency
+        // Jobs should always be sorted in topological order according to the dependency tree (starting from the leaves)
+        if !job.dependencies.iter().all(|(dep_id, dep_state, dep_exit_code)| {
+            if dep_state.as_ref() == "Error" {
+                info!("Job {} has a dependency on job {} which is in error state, ignoring dependency.", job_id, dep_id);
+                return true;
+            }
+            if dep_state.as_ref() == "Waiting" {
+                // TODO
+                return true;
+                // determine endtime
+            }
+            if dep_state.as_ref() == "Terminated" && (*dep_exit_code == Some(0) || *dep_exit_code == None) {
+                return true;
+            }
+            false
+        }) {
+            info!("Skipping job {}: dependencies not satisfied.", job.id);
+            return;
+        }
+
+        // Check Container
+
+
         schedule_job(slot_set, job);
     });
 }

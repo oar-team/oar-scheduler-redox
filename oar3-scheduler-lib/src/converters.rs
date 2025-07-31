@@ -7,6 +7,7 @@ use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};
 use pyo3::{Bound, PyAny, PyResult, Python};
 use std::collections::HashMap;
+use indexmap::IndexMap;
 
 /// Builds a PlatformConfig Rust struct from a Python resource set.
 pub fn build_platform_config(py_res_set: Bound<PyAny>) -> PyResult<PlatformConfig> {
@@ -131,30 +132,23 @@ fn build_quotas_config(py: Python) -> PyResult<QuotasConfig> {
         .collect();
     Ok(QuotasConfig::new(enabled, calendar, default_rules, tracked_job_types))
 }
-
-/// Transforms a Python dictionary mapping the job ID to the job object into the same Rust mapping.
-pub fn build_jobs_from_map(py_jobs_map: Bound<PyDict>) -> PyResult<HashMap<u32, Job>> {
-    Ok(py_jobs_map
-        .iter()
-        .map(|(id, py_job)| -> PyResult<(u32, Job)> { Ok((id.extract::<u32>()?, build_job(&py_job)?)) })
-        .collect::<PyResult<HashMap<u32, Job>>>()?)
-}
-/// Transforms a Python list of jobs into a Rust vector of jobs.
-pub fn build_jobs_from_list(py_jobs_list: Bound<PyList>) -> PyResult<Vec<Job>> {
-    Ok(py_jobs_list
-        .iter()
-        .map(|py_job| build_job(&py_job))
-        .collect::<PyResult<Vec<Job>>>()?)
-}
 /// Transforms a Python job object into a Rust Job struct.
-fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
+pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
     let name: Option<String> = py_job.getattr("name")?.extract()?;
     let user: Option<String> = py_job.getattr("user")?.extract()?;
     let project: Option<String> = py_job.getattr("project")?.extract()?;
     let queue: String = py_job.getattr("queue_name")?.extract()?;
-    let types: HashMap<String, String> = py_job.getattr("types")?.extract()?;
-    let types: Vec<Box<str>> = types.into_iter().map(|(s1, s2)| format!("{}={}", s1, s2).into_boxed_str()).collect();
-
+    let types = py_job
+        .getattr("types")?
+        .extract::<HashMap<String, Option<String>>>()?
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                k.into_boxed_str(),
+                v.and_then(|s| if s.is_empty() { None } else { Some(s.clone().into_boxed_str()) }),
+            )
+        })
+        .collect::<HashMap<_, _>>();
     let time_sharing: bool = py_job.getattr_opt("ts")?.map(|o| o.extract()).unwrap_or(Ok(false))?;
     let time_sharing = if time_sharing {
         let time_sharing_user_name: String = py_job.getattr("ts_user")?.extract()?;
@@ -196,6 +190,20 @@ fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         }
     }
 
+    // Dependencies
+    let dependencies: Vec<(u32, Box<str>, Option<i32>)> = py_job
+        .getattr("deps")?
+        .downcast::<PyList>()?
+        .iter()
+        .map(|dep| {
+            let dep = dep.downcast::<PyTuple>()?;
+            let id: u32 = dep.get_item(0)?.extract()?;
+            let name: String = dep.get_item(1)?.extract()?;
+            let state: Option<i32> = dep.get_item(2)?.extract()?;
+            Ok((id, name.into_boxed_str(), state))
+        })
+        .collect::<PyResult<_>>()?;
+
     Ok(Job {
         id: py_job.getattr("id")?.extract::<u32>()?,
         name: name.map(|n| n.into_boxed_str()),
@@ -207,6 +215,7 @@ fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         assignment,
         quotas_hit_count: 0,
         time_sharing,
+        dependencies,
     })
 }
 /// Builds a Moldable Rust struct from a Python moldable object.

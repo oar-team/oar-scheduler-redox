@@ -3,6 +3,7 @@ mod grapher;
 mod python_caller;
 mod platform_mock;
 
+use indexmap::IndexMap;
 use crate::benchmarker::{get_sample_waiting_jobs, BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
 use crate::grapher::graph_benchmark_result;
 use crate::platform_mock::{generate_mock_platform_config, PlatformBenchMock};
@@ -48,7 +49,6 @@ async fn main() {
     print_bench_fct_results();
     print_bench_fct_hy_results();
     graph_benchmark_result("1_ts".to_string(), benchmark, results);
-
 }
 
 async fn detect_differences(seed: u64) -> bool {
@@ -115,11 +115,11 @@ async fn detect_differences(seed: u64) -> bool {
     false
 }
 
-fn display_job_comparison(waiting_jobs: &Vec<Job>, rust_scheduled: &Vec<Job>, python_scheduled: &Vec<Job>) {
+fn display_job_comparison(waiting_jobs: &IndexMap<u32, Job>, rust_scheduled: &Vec<Job>, python_scheduled: &Vec<Job>) {
     println!("\n=== JOB COMPARISON ===");
 
     println!("\nOriginal waiting jobs:");
-    for job in waiting_jobs {
+    for (_job_id, job) in waiting_jobs {
         println!("  Job {}: walltime={}, request={:?}", job.id, job.moldables[0].walltime, job.moldables[0].requests.0[0].level_nbs);
     }
 

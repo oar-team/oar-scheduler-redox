@@ -4,6 +4,7 @@ use crate::scheduler::hierarchy::HierarchyRequests;
 use crate::scheduler::scheduling;
 use crate::scheduler::slot::SlotSet;
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
+use indexmap::indexmap;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -48,7 +49,7 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
         .moldable(moldable2.clone())
         .build();
 
-    let mut jobs = vec![job_1, job_2, job_3, job_4, job_5];
+    let mut jobs = indexmap![1 => job_1, 2 => job_2, 3 => job_3, 4 => job_4, 5 => job_5];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = jobs[0].clone().assignment.unwrap();
     let j2 = jobs[1].clone().assignment.unwrap();

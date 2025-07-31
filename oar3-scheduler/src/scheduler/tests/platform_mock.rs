@@ -2,6 +2,7 @@ use crate::models::{Job, ProcSet};
 use crate::platform::{PlatformConfig, PlatformTrait, ResourceSet};
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::{QuotasConfig, QuotasValue};
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -9,7 +10,7 @@ use std::rc::Rc;
 pub struct PlatformBenchMock {
     platform_config: Rc<PlatformConfig>,
     scheduled_jobs: Vec<Job>,
-    waiting_jobs: Vec<Job>,
+    waiting_jobs: IndexMap<u32, Job>,
 }
 impl PlatformTrait for PlatformBenchMock {
     fn get_now(&self) -> i64 {
@@ -17,6 +18,9 @@ impl PlatformTrait for PlatformBenchMock {
     }
     fn get_max_time(&self) -> i64 {
         1_000_000_000
+    }
+    fn get_job_security_time(&self) -> i64 {
+        0
     }
 
     fn get_platform_config(&self) -> &Rc<PlatformConfig> {
@@ -26,13 +30,14 @@ impl PlatformTrait for PlatformBenchMock {
     fn get_scheduled_jobs(&self) -> &Vec<Job> {
         &self.scheduled_jobs
     }
-    fn get_waiting_jobs(&self) -> &Vec<Job> {
+    fn get_waiting_jobs(&self) -> &IndexMap<u32, Job> {
         &self.waiting_jobs
     }
 
-    fn save_assignments(&mut self, mut jobs: Vec<Job>) {
-        self.waiting_jobs.retain(|job| !jobs.iter().any(|j| j.id == job.id));
-        self.scheduled_jobs.append(&mut jobs);
+    fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
+        // Move assigned jobs from waiting map to scheduled vec
+        self.waiting_jobs.retain(|id, _job| !assigned_jobs.contains_key(id));
+        self.scheduled_jobs.extend(assigned_jobs.into_values());
     }
 }
 

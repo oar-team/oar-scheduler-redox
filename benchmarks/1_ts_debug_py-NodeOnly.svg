@@ -68,9 +68,9 @@ Python scheduler performance by number of jobs (Debug, Node only jobs)
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="215" x2="414" y2="215"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="210" x2="414" y2="210"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="205" x2="414" y2="205"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="201" x2="414" y2="201"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="196" x2="414" y2="196"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="191" x2="414" y2="191"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="200" x2="414" y2="200"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="195" x2="414" y2="195"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="190" x2="414" y2="190"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="186" x2="414" y2="186"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="181" x2="414" y2="181"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="176" x2="414" y2="176"/>
@@ -80,31 +80,31 @@ Python scheduler performance by number of jobs (Debug, Node only jobs)
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="156" x2="414" y2="156"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="151" x2="414" y2="151"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="146" x2="414" y2="146"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="142" x2="414" y2="142"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="137" x2="414" y2="137"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="132" x2="414" y2="132"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="127" x2="414" y2="127"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="122" x2="414" y2="122"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="117" x2="414" y2="117"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="141" x2="414" y2="141"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="136" x2="414" y2="136"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="131" x2="414" y2="131"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="126" x2="414" y2="126"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="121" x2="414" y2="121"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="116" x2="414" y2="116"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="112" x2="414" y2="112"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="107" x2="414" y2="107"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="102" x2="414" y2="102"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="97" x2="414" y2="97"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="92" x2="414" y2="92"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="87" x2="414" y2="87"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="83" x2="414" y2="83"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="78" x2="414" y2="78"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="73" x2="414" y2="73"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="68" x2="414" y2="68"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="63" x2="414" y2="63"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="58" x2="414" y2="58"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="53" x2="414" y2="53"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="48" x2="414" y2="48"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="43" x2="414" y2="43"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="38" x2="414" y2="38"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="82" x2="414" y2="82"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="77" x2="414" y2="77"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="72" x2="414" y2="72"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="67" x2="414" y2="67"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="62" x2="414" y2="62"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="57" x2="414" y2="57"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="52" x2="414" y2="52"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="47" x2="414" y2="47"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="42" x2="414" y2="42"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="37" x2="414" y2="37"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="33" x2="414" y2="33"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="28" x2="414" y2="28"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="24" x2="414" y2="24"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="35" y1="23" x2="414" y2="23"/>
 <text x="225" y="295" dy="-0.5ex" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 Number of scheduled jobs (single moldable)
 </text>
@@ -117,13 +117,13 @@ Number of scheduled jobs (single moldable)
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="264" x2="414" y2="264"/>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="240" x2="414" y2="240"/>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="215" x2="414" y2="215"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="191" x2="414" y2="191"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="190" x2="414" y2="190"/>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="166" x2="414" y2="166"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="142" x2="414" y2="142"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="117" x2="414" y2="117"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="141" x2="414" y2="141"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="116" x2="414" y2="116"/>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="92" x2="414" y2="92"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="68" x2="414" y2="68"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="43" x2="414" y2="43"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="67" x2="414" y2="67"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="35" y1="42" x2="414" y2="42"/>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="34,22 34,264 "/>
 <text x="25" y="264" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 0
@@ -137,34 +137,34 @@ Number of scheduled jobs (single moldable)
 2000
 </text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,215 34,215 "/>
-<text x="25" y="191" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<text x="25" y="190" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 3000
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,191 34,191 "/>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,190 34,190 "/>
 <text x="25" y="166" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 4000
 </text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,166 34,166 "/>
-<text x="25" y="142" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<text x="25" y="141" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 5000
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,142 34,142 "/>
-<text x="25" y="117" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,141 34,141 "/>
+<text x="25" y="116" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 6000
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,117 34,117 "/>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,116 34,116 "/>
 <text x="25" y="92" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 7000
 </text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,92 34,92 "/>
-<text x="25" y="68" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<text x="25" y="67" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 8000
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,68 34,68 "/>
-<text x="25" y="43" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,67 34,67 "/>
+<text x="25" y="42" dy="0.5ex" text-anchor="end" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 9000
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,43 34,43 "/>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="29,42 34,42 "/>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="35,265 414,265 "/>
 <text x="35" y="275" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 0
@@ -237,7 +237,7 @@ Number of scheduled jobs (single moldable)
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="415,22 420,22 "/>
 <polyline fill="none" opacity="1" stroke="#EF5350" stroke-width="1" points="35,265 109,253 184,241 258,229 333,229 407,212 "/>
 <polyline fill="none" opacity="1" stroke="#26C6DA" stroke-width="1" points="35,265 109,47 184,49 258,42 333,44 407,42 "/>
-<polyline fill="none" opacity="1" stroke="#0D47A1" stroke-width="1" points="35,264 109,256 183,234 257,191 332,139 406,81 "/>
+<polyline fill="none" opacity="1" stroke="#0D47A1" stroke-width="1" points="35,264 109,256 183,234 257,193 332,138 406,81 "/>
 <line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="33" y1="264" x2="37" y2="264"/>
 <line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="35" y1="264" x2="35" y2="264"/>
 <rect x="33" y="264" width="4" height="0" opacity="0.8" fill="none" stroke="#0D47A1"/>
@@ -256,18 +256,18 @@ Number of scheduled jobs (single moldable)
 <line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="181" y1="234" x2="185" y2="234"/>
 <line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="183" y1="234" x2="183" y2="234"/>
 <line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="181" y1="234" x2="185" y2="234"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="255" y1="191" x2="259" y2="191"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="257" y1="191" x2="257" y2="191"/>
-<rect x="255" y="191" width="4" height="0" opacity="0.8" fill="none" stroke="#0D47A1"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="255" y1="191" x2="259" y2="191"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="257" y1="191" x2="257" y2="191"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="255" y1="191" x2="259" y2="191"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="330" y1="139" x2="334" y2="139"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="332" y1="139" x2="332" y2="139"/>
-<rect x="330" y="139" width="4" height="0" opacity="0.8" fill="none" stroke="#0D47A1"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="330" y1="139" x2="334" y2="139"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="332" y1="139" x2="332" y2="139"/>
-<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="330" y1="139" x2="334" y2="139"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="255" y1="193" x2="259" y2="193"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="257" y1="193" x2="257" y2="193"/>
+<rect x="255" y="193" width="4" height="0" opacity="0.8" fill="none" stroke="#0D47A1"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="255" y1="193" x2="259" y2="193"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="257" y1="193" x2="257" y2="193"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="255" y1="193" x2="259" y2="193"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="330" y1="138" x2="334" y2="138"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="332" y1="138" x2="332" y2="138"/>
+<rect x="330" y="138" width="4" height="0" opacity="0.8" fill="none" stroke="#0D47A1"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="330" y1="138" x2="334" y2="138"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="332" y1="138" x2="332" y2="138"/>
+<line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="330" y1="138" x2="334" y2="138"/>
 <line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="404" y1="81" x2="408" y2="81"/>
 <line opacity="0.8" stroke="#0D47A1" stroke-width="1" x1="406" y1="81" x2="406" y2="81"/>
 <rect x="404" y="81" width="4" height="0" opacity="0.8" fill="none" stroke="#0D47A1"/>

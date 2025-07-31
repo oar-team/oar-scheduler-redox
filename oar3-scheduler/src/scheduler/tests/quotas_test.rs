@@ -5,6 +5,7 @@ use crate::scheduler::quotas::*;
 use crate::scheduler::scheduling;
 use crate::scheduler::slot::{Slot, SlotSet};
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
+use indexmap::indexmap;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -50,11 +51,11 @@ fn test_quotas_one_job_no_rules() {
         .user("user".into())
         .project("project".into())
         .queue("queue".into())
-        .single_type("type1".into())
+        .add_type_key("type1".into())
         .moldable(moldable)
         .build();
 
-    scheduling::schedule_jobs(&mut all_ss, &mut vec![job]);
+    scheduling::schedule_jobs(&mut all_ss, &mut indexmap![1 => job]);
 
     let ss = all_ss.get("default").unwrap();
 
@@ -93,11 +94,11 @@ fn test_quotas_one_job_rule_nb_res_1() {
         .user("user".into())
         .project("project".into())
         .queue("queue".into())
-        .single_type("type1".into())
+        .add_type_key("type1".into())
         .moldable(moldable)
         .build();
 
-    let mut jobs = vec![job];
+    let mut jobs = indexmap![1 => job];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
     println!("jobs: {:?}", jobs);
@@ -131,11 +132,11 @@ fn test_quotas_one_job_rule_nb_res_2() {
         .user("user".into())
         .project("project".into())
         .queue("queue".into())
-        .single_type("type1".into())
+        .add_type_key("type1".into())
         .moldable(moldable)
         .build();
 
-    let mut jobs = vec![job];
+    let mut jobs = indexmap![2 => job];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
     // With a quota of 64, the job should get scheduled on 64 cores
@@ -198,7 +199,7 @@ fn test_quotas_four_jobs_rule_1() {
         .queue("default".into())
         .moldable(moldable_j4)
         .build();
-    let mut jobs_new = vec![j3, j4];
+    let mut jobs_new = indexmap![3 => j3, 4 => j4];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j3 = &jobs_new[0];
     let j4 = &jobs_new[1];
@@ -256,7 +257,7 @@ fn test_quotas_three_jobs_rule_1() {
         .queue("default".into())
         .moldable(moldable_j3)
         .build();
-    let mut jobs_new = vec![j2, j3];
+    let mut jobs_new = indexmap![2 => j2, 3 => j3];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j2 = &jobs_new[0];
     let j3 = &jobs_new[1];
@@ -298,7 +299,7 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     // Job 2: user tutu, requests 2 nodes (should succeed, unlimited for others)
     let moldable_j2 = Moldable::new(8, 60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
     let j2 = JobBuilder::new(2).user("tutu".into()).queue("default".into()).moldable(moldable_j2).build();
-    let mut jobs = vec![j1, j2];
+    let mut jobs = indexmap![1 => j1, 2 => j2];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
     let j2 = &jobs[1];
@@ -333,17 +334,17 @@ fn test_quotas_two_jobs_job_type_proc() {
     let j1 = JobBuilder::new(1)
         .user("toto".into())
         .queue("default".into())
-        .single_type("yop".into())
+        .add_type_key("yop".into())
         .moldable(moldable_j1)
         .build();
     let moldable_j2 = Moldable::new(10, 50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));
     let j2 = JobBuilder::new(2)
         .user("toto".into())
         .queue("default".into())
-        .single_type("yop".into())
+        .add_type_key("yop".into())
         .moldable(moldable_j2)
         .build();
-    let mut jobs = vec![j1, j2];
+    let mut jobs = indexmap![1 => j1, 2 => j2];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
     let j2 = &jobs[1];

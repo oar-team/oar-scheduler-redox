@@ -1,18 +1,19 @@
-use crate::converters::{build_jobs_from_list, build_jobs_from_map, build_platform_config, proc_set_to_python};
+use crate::converters::{build_job, build_platform_config, proc_set_to_python};
+use indexmap::IndexMap;
 use oar3_scheduler::models::Job;
 use oar3_scheduler::platform::{PlatformConfig, PlatformTrait};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{Bound, IntoPyObjectExt, PyAny, PyResult};
-use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Rust Platform using Python objects and functions to interact with the OAR platform.
 pub struct Platform<'p> {
     now: i64,
+    job_security_time: i64,
     platform_config: Rc<PlatformConfig>,
     scheduled_jobs: Vec<Job>,
-    waiting_jobs: Vec<Job>,
+    waiting_jobs: IndexMap<u32, Job>,
     py_platform: Bound<'p, PyAny>,
     py_session: Bound<'p, PyAny>,
     py_res_set: Bound<'p, PyAny>,
@@ -26,18 +27,21 @@ impl PlatformTrait for Platform<'_> {
     fn get_max_time(&self) -> i64 {
         2i64.pow(31)
     }
+    fn get_job_security_time(&self) -> i64 {
+        self.job_security_time
+    }
     fn get_platform_config(&self) -> &Rc<PlatformConfig> {
         &self.platform_config
     }
     fn get_scheduled_jobs(&self) -> &Vec<Job> {
         &self.scheduled_jobs
     }
-    fn get_waiting_jobs(&self) -> &Vec<Job> {
+    fn get_waiting_jobs(&self) -> &IndexMap<u32, Job> {
         &self.waiting_jobs
     }
-    fn save_assignments(&mut self, jobs: Vec<Job>) {
+    fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
         // Update python scheduled jobs
-        Self::update_py_waiting_jobs_from_rs_jobs(self, &jobs).unwrap();
+        Self::save_assignments_python(self, &assigned_jobs).unwrap();
         // Save assign in the Python platform
         self.py_platform
             .getattr("save_assigns")
@@ -45,19 +49,17 @@ impl PlatformTrait for Platform<'_> {
             .call1((&self.py_session, &self.py_waiting_jobs_map, &self.py_res_set))
             .unwrap();
 
-        // Save jobs in the rust platform
-        self.waiting_jobs.retain(|job| !jobs.iter().any(|j| j.id == job.id));
-        self.scheduled_jobs.extend(jobs);
+        // Move assigned jobs from waiting map to scheduled vec
+        self.waiting_jobs.retain(|id, _job| !assigned_jobs.contains_key(id));
+        self.scheduled_jobs.extend(assigned_jobs.into_values());
     }
 }
 
 impl<'p> Platform<'p> {
-    
-    /// Updates the Python waiting jobs in `self.py_waiting_jobs_map` with the Rust assignments received through `save_assignments`.
-    fn update_py_waiting_jobs_from_rs_jobs(&self, jobs: &[Job]) -> PyResult<()> {
-        let jobs_map: HashMap<u32, &Job> = jobs.iter().map(|j| (j.id, j)).collect();
+    /// Updates the Python waiting jobs in `self.py_waiting_jobs_map` with the assignments from the Rust `assigned_jobs` parameter.
+    fn save_assignments_python(&self, assigned_jobs: &IndexMap<u32, Job>) -> PyResult<()> {
         for (py_job_id, py_job) in &self.py_waiting_jobs_map {
-            if let Some(job) = jobs_map.get(&py_job_id.extract::<u32>()?) {
+            if let Some(job) = assigned_jobs.get(&py_job_id.extract::<u32>()?) {
                 if let Some(sd) = &job.assignment {
                     py_job.setattr("start_time", sd.begin)?;
                     py_job.setattr("walltime", sd.end - sd.begin + 1)?;
@@ -85,6 +87,7 @@ impl<'p> Platform<'p> {
             .extract::<String>()?
             .parse::<i64>()?
             .into_bound_py_any(py_config.py())?;
+        let job_security_time = py_job_security_time_int.extract::<i64>()?;
 
         // Get the resource set
         let kwargs = PyDict::new(py_platform.py());
@@ -126,21 +129,21 @@ impl<'p> Platform<'p> {
             &py_waiting_jobs_map,
             &py_platform,
         ))?;
-        let sorted_waiting_job_ids: Vec<u32> = py_sorted_waiting_job_ids
+        let waiting_jobs: IndexMap<u32, Job> = py_sorted_waiting_job_ids
             .downcast::<PyList>()?
             .iter()
-            .map(|x| x.extract::<u32>())
-            .collect::<PyResult<Vec<_>>>()?;
-        let waiting_jobs_map = build_jobs_from_map(py_waiting_jobs_map.clone())?;
-        let waiting_jobs: Vec<Job> = sorted_waiting_job_ids
-            .iter()
-            .filter_map(|id| waiting_jobs_map.get(id).cloned())
-            .collect();
+            .map(|py_id| {
+                let id: u32 = py_id.extract()?;
+                let py_job = py_waiting_jobs_map.get_item(py_id)?.unwrap();
+                Ok((id, build_job(&py_job)?))
+            })
+            .collect::<PyResult<IndexMap<u32, Job>>>()?;
 
         Ok(Platform {
             now,
+            job_security_time,
             platform_config: Rc::new(build_platform_config(py_res_set.clone())?),
-            scheduled_jobs: build_jobs_from_list(py_scheduled_jobs.clone())?,
+            scheduled_jobs: py_scheduled_jobs.iter().map(|py_job| build_job(&py_job)).collect::<PyResult<Vec<Job>>>()?,
             waiting_jobs,
             py_platform: py_platform.clone(),
             py_session: py_session.clone(),

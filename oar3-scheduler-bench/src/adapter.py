@@ -43,9 +43,9 @@ class PlatformAdapter(Platform):
 
         # Compute jobs structure
         waiting_jobs = {}
-        for job in self.waiting_jobs_rs:
-            waiting_jobs[job['id']] = self.rs_job_to_py(job)
-        self.waiting_jobs = waiting_jobs, [job['id'] for job in self.waiting_jobs_rs], len(self.waiting_jobs_rs)
+        for job_id, job in self.waiting_jobs_rs:
+            waiting_jobs[job_id] = self.rs_job_to_py(job)
+        self.waiting_jobs = waiting_jobs, [job_id for job_id, _job in self.waiting_jobs_rs], len(self.waiting_jobs_rs)
 
         # Compute scheduled jobs structure (not available for now)
         self.scheduled_jobs = []

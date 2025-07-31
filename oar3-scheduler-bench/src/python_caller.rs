@@ -43,9 +43,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
         })
         .0;
 
-        let waiting_jobs = platform.get_waiting_jobs();
-        let waiting_jobs_map = waiting_jobs.iter().map(|job| (job.id, job.clone())).collect::<HashMap<u32, Job>>();
-        let mut assigned_jobs = Vec::with_capacity(waiting_jobs.len());
+        let mut waiting_jobs = platform.get_waiting_jobs().clone();
 
         // Gather scheduled jobs scheduling data to update rust objects
         let scheduled_jobs_py: Vec<Bound<PyDict>> = platform_py
@@ -69,7 +67,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
                 proc_set = proc_set | ProcSet::from_iter([start..=end]);
             }
 
-            let mut job = waiting_jobs_map.get(&id).cloned().unwrap();
+            let job = waiting_jobs.get_mut(&id).unwrap();
             job.quotas_hit_count = quotas_hit_count;
             job.assignment = Some(JobAssignment {
                 begin,
@@ -77,10 +75,9 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
                 proc_set,
                 moldable_index,
             });
-            assigned_jobs.push(job.clone());
         }
 
-        platform.save_assignments(assigned_jobs);
+        platform.save_assignments(waiting_jobs);
 
         Ok::<u32, PyErr>(time)
     })

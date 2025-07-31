@@ -2,6 +2,7 @@ use crate::models::ProcSet;
 use crate::models::{proc_set_to_python, Job};
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasConfig;
+use indexmap::IndexMap;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};
 #[cfg(feature = "pyo3")]
@@ -13,14 +14,18 @@ use std::rc::Rc;
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;
     fn get_max_time(&self) -> i64;
+    fn get_job_security_time(&self) -> i64;
     fn get_platform_config(&self) -> &Rc<PlatformConfig>;
     /// Returns already scheduled jobs (in higher priority queues), or advanced reservations.
     fn get_scheduled_jobs(&self) -> &Vec<Job>;
     /// Returns the jobs waiting to be scheduled.
-    fn get_waiting_jobs(&self) -> &Vec<Job>;
-    /// Save the scheduled jobs assignments back to the platform.
-    /// This function is called after scheduling jobs to save their assignments.
-    fn save_assignments(&mut self, jobs: Vec<Job>);
+    /// Jobs are sorted according to the sorting algorithm.
+    /// Using `IndexMap` to keep jobs ordered while still allowing O(1) access by job ID.
+    fn get_waiting_jobs(&self) -> &IndexMap<u32, Job>;
+    /// Save the scheduled jobs assignments.
+    /// This function is called after scheduling jobs to remove the assigned jobs from the waiting list,
+    /// to add them to the scheduled list, and to save them to the database
+    fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>);
 }
 
 #[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]

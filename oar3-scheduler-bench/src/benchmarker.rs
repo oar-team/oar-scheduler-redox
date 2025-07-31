@@ -15,6 +15,7 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
+use indexmap::IndexMap;
 
 #[derive(Clone)]
 pub struct BenchmarkResult {
@@ -327,10 +328,9 @@ impl BenchmarkConfig {
     }
 }
 
-pub fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> Vec<Job> {
-    let mut waiting_jobs: Vec<Job> = vec![];
+pub fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> IndexMap<u32, Job> {
     let last_remaining = jobs_count - ((2 * jobs_count / 5) * 2 + (jobs_count / 10));
-    let mut jobs = match sample_type {
+    let jobs = match sample_type {
         WaitingJobsSampleType::Normal => RandomJobGenerator {
             rand: StdRng::seed_from_u64(seed),
             count: 2 * jobs_count / 5,
@@ -542,8 +542,9 @@ pub fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: W
         }
         .generate_jobs(),
     };
-    waiting_jobs.append(&mut jobs);
-    waiting_jobs
+    jobs.into_iter()
+        .map(|j| (j.id, j))
+        .collect::<IndexMap<u32, Job>>()
 }
 struct RandomJobGeneratorMerged {
     generators: Vec<RandomJobGenerator>,
@@ -603,7 +604,7 @@ impl RandomJobGenerator {
             jobs.push(
                 JobBuilder::new(i as u32 + self.id_offset)
                     .moldable_auto(i as u32 + self.id_offset, walltime, HierarchyRequests::from_requests(vec![request]))
-                    .single_type(self.job_type.clone().into())
+                    .add_type_key(self.job_type.clone().into())
                     .build(),
             );
         }
@@ -620,10 +621,10 @@ impl RandomJobGenerator {
     }
 }
 
-fn count_cache_hits(waiting_jobs: &Vec<Job>) -> usize {
+fn count_cache_hits(waiting_jobs: &IndexMap<u32, Job>) -> usize {
     let mut cache = HashSet::new();
     let mut cache_hits = 0;
-    for job in waiting_jobs.iter() {
+    for (_job_id, job) in waiting_jobs.iter() {
         for moldable in job.moldables.iter() {
             let key = moldable.get_cache_key();
             if cache.contains(&key) {

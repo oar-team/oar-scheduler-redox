@@ -380,7 +380,7 @@ impl Quotas {
             .quotas_config
             .tracked_job_types
             .iter()
-            .filter(|t| &(***t) == "*" || job.types.contains(t))
+            .filter(|t| &(***t) == "*" || job.types.contains_key(*t))
             .collect::<Box<[&Box<str>]>>();
 
         let mut matched_users = vec!["*"];
@@ -414,12 +414,12 @@ impl Quotas {
 
     /// Finds the rule key that should be applied to `job` (i.e., the QuotasMapKey).
     /// The rule is found by looking at `Quotas::rules_tree` with the following key priority: named > '/' > '*'
-    /// Quotas rules only applies to the first job type in the `job.types` `Vec`.
+    /// Quotas rules only applies to the first job type key in the `job.types` `Vec`.
     /// It returns two keys, the first one being the same as the second one, but with the "/" replaced by the actual name, and the value QuotasValue (the limits).
     pub fn find_applicable_rule(&self, job: &Job) -> Option<(QuotasKey, QuotasKey, &QuotasValue)> {
         let key_queue = Some(job.queue.as_ref());
         let key_project = job.project.as_ref().map(|s| s.as_ref());
-        let key_job_type = Some(job.types.get(0).map(|s| s.as_ref()).unwrap_or("*"));
+        let key_job_type = Some(job.types.iter().next().map(|(k, v)| k.as_ref()).unwrap_or("*")); // TODO: job types is not ordered. How to take the first?
         let key_user = job.user.as_ref().map(|s| s.as_ref());
 
         let mut rule_key = None;

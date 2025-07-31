@@ -34,7 +34,8 @@ pub struct Job {
     pub queue: Box<str>,
     pub types: Vec<Box<str>>,
     pub moldables: Vec<Moldable>,
-    pub scheduled_data: Option<ScheduledJobData>,
+    /// The time interval and resources assigned to the job.
+    pub assignment: Option<JobAssignment>,
     /// Used for benchmarking the quotas hit count
     pub quotas_hit_count: u32,
     pub time_sharing: Option<TimeSharingType>,
@@ -42,7 +43,7 @@ pub struct Job {
 
 #[derive(Debug, Clone)]
 pub enum TimeSharingType {
-    /// timesharing=*,*
+    /// timesharing=\*,\*
     AllAll,
     /// timesharing=user,*
     UserAll,
@@ -67,7 +68,7 @@ impl TimeSharingType {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScheduledJobData {
+pub struct JobAssignment {
     pub begin: i64,
     pub end: i64,
     pub proc_set: ProcSet,
@@ -84,23 +85,23 @@ pub struct Moldable {
 
 impl Job {
     pub fn is_scheduled(&self) -> bool {
-        self.scheduled_data.is_some()
+        self.assignment.is_some()
     }
     pub fn begin(&self) -> Option<i64> {
-        if let Some(data) = &self.scheduled_data { Some(data.begin) } else { None }
+        if let Some(data) = &self.assignment { Some(data.begin) } else { None }
     }
     pub fn end(&self) -> Option<i64> {
-        if let Some(data) = &self.scheduled_data { Some(data.end) } else { None }
+        if let Some(data) = &self.assignment { Some(data.end) } else { None }
     }
     pub fn walltime(&self) -> Option<i64> {
-        if let Some(data) = &self.scheduled_data {
+        if let Some(data) = &self.assignment {
             Some(data.end - data.begin + 1)
         } else {
             None
         }
     }
     pub fn resource_count(&self) -> Option<u32> {
-        if let Some(data) = &self.scheduled_data {
+        if let Some(data) = &self.assignment {
             Some(data.proc_set.core_count())
         } else {
             None
@@ -116,7 +117,7 @@ pub struct JobBuilder {
     queue: Option<Box<str>>,
     types: Option<Vec<Box<str>>>,
     moldables: Vec<Moldable>,
-    scheduled_data: Option<ScheduledJobData>,
+    assignment: Option<JobAssignment>,
     time_sharing: Option<TimeSharingType>
 }
 impl JobBuilder {
@@ -129,7 +130,7 @@ impl JobBuilder {
             queue: None,
             types: None,
             moldables: vec![],
-            scheduled_data: None,
+            assignment: None,
             time_sharing: None,
         }
     }
@@ -173,8 +174,8 @@ impl JobBuilder {
         self.types = Some(types);
         self
     }
-    pub fn scheduled(mut self, scheduled_data: ScheduledJobData) -> Self {
-        self.scheduled_data = Some(scheduled_data);
+    pub fn assign(mut self, assignment: JobAssignment) -> Self {
+        self.assignment = Some(assignment);
         self
     }
     pub fn build(self) -> Job {
@@ -186,7 +187,7 @@ impl JobBuilder {
             queue: self.queue.unwrap_or_else(|| "default".into()),
             types: self.types.unwrap_or_default(),
             moldables: self.moldables,
-            scheduled_data: self.scheduled_data,
+            assignment: self.assignment,
             quotas_hit_count: 0,
             time_sharing: self.time_sharing,
         }
@@ -223,25 +224,25 @@ impl<'a> IntoPyObject<'a> for &Job {
         dict.set_item("types", self.types.iter().map(|s| s.as_ref()).collect::<Vec<_>>()).unwrap();
         dict.set_item("moldables", self.moldables.iter().enumerate().collect::<Vec<(usize, &Moldable)>>())
             .unwrap();
-        if let Some(scheduled_data) = &self.scheduled_data {
-            let scheduled_dict = PyDict::new(py);
-            scheduled_dict.set_item("begin", scheduled_data.begin).unwrap();
-            scheduled_dict.set_item("end", scheduled_data.end).unwrap();
-            scheduled_dict
-                .set_item("proc_set", proc_set_to_python(py, &scheduled_data.proc_set))
+        if let Some(assignment) = &self.assignment {
+            let assignment_dict = PyDict::new(py);
+            assignment_dict.set_item("begin", assignment.begin).unwrap();
+            assignment_dict.set_item("end", assignment.end).unwrap();
+            assignment_dict
+                .set_item("proc_set", proc_set_to_python(py, &assignment.proc_set))
                 .unwrap();
-            scheduled_dict.set_item("moldable_index", scheduled_data.moldable_index).unwrap();
-            dict.set_item("scheduled_data", scheduled_dict).unwrap();
+            assignment_dict.set_item("moldable_index", assignment.moldable_index).unwrap();
+            dict.set_item("assignment", assignment_dict).unwrap();
         } else {
-            dict.set_item("scheduled_data", py.None()).unwrap();
+            dict.set_item("assignment", py.None()).unwrap();
         }
         Ok(dict)
     }
 }
 
-impl ScheduledJobData {
-    pub fn new(begin: i64, end: i64, proc_set: ProcSet, moldable_index: usize) -> ScheduledJobData {
-        ScheduledJobData {
+impl JobAssignment {
+    pub fn new(begin: i64, end: i64, proc_set: ProcSet, moldable_index: usize) -> JobAssignment {
+        JobAssignment {
             begin,
             end,
             proc_set,

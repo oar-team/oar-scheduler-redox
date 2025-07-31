@@ -1,4 +1,4 @@
-use crate::models::{Job, JobBuilder, ScheduledJobData};
+use crate::models::{Job, JobAssignment, JobBuilder};
 use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slot::SlotSet;
@@ -27,7 +27,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
                     .user("pseudo_job".into())
                     .project("pseudo_job".into())
                     .queue("pseudo_job".into())
-                    .scheduled(ScheduledJobData::new(*time + 1, max_time, intervals.clone(), 0))
+                    .assign(JobAssignment::new(*time + 1, max_time, intervals.clone(), 0))
                     .build()
             })
             .collect::<Vec<Job>>();
@@ -49,7 +49,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
 
         // Save assignments
         let scheduled_jobs = waiting_jobs.into_iter().filter(|j| j.is_scheduled()).collect::<Vec<Job>>();
-        platform.set_scheduled_jobs(scheduled_jobs);
+        platform.save_assignments(scheduled_jobs);
 
         return slot_sets.get("default").unwrap().slot_count();
     }

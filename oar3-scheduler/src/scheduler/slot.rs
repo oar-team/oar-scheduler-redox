@@ -467,12 +467,12 @@ impl SlotSet {
     }
     /// See `SlotSet::split_slots_for_jobs_and_update_resources`.
     pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, do_update_quotas: bool, start_slot_id: Option<i32>) -> (i32, i32) {
-        let scheduled_data = job
-            .scheduled_data
+        let assignment = job
+            .assignment
             .as_ref()
             .expect("Job must be scheduled to split slots and update resources for it");
 
-        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(scheduled_data.begin, scheduled_data.end, start_slot_id);
+        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(assignment.begin, assignment.end, start_slot_id);
         self.iter()
             .between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
@@ -480,7 +480,7 @@ impl SlotSet {
             .iter()
             .for_each(|slot_id| {
                 let slot = self.slots.get_mut(&slot_id).unwrap();
-                let proc_set = &scheduled_data.proc_set;
+                let proc_set = &assignment.proc_set;
                 slot.sub_proc_set(proc_set);
 
                 match job.time_sharing {
@@ -493,7 +493,7 @@ impl SlotSet {
 
                 if self.platform_config.quotas_config.enabled && do_update_quotas {
                     slot.quotas
-                        .increment_for_job(job, self.end - self.begin + 1, scheduled_data.proc_set.core_count());
+                        .increment_for_job(job, self.end - self.begin + 1, assignment.proc_set.core_count());
                 }
             });
         (begin_slot_id, end_slot_id)

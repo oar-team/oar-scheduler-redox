@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::rc::Rc;
 use crate::models::{Job, ProcSet};
 use crate::platform::{PlatformConfig, PlatformTrait, ResourceSet};
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::{QuotasConfig, QuotasValue};
+use std::collections::HashMap;
+use std::rc::Rc;
 
 /// In mocking, the time unit is the minute.
 pub struct PlatformBenchMock {
@@ -30,7 +30,7 @@ impl PlatformTrait for PlatformBenchMock {
         &self.waiting_jobs
     }
 
-    fn set_scheduled_jobs(&mut self, mut jobs: Vec<Job>) {
+    fn save_assignments(&mut self, mut jobs: Vec<Job>) {
         self.waiting_jobs.retain(|job| !jobs.iter().any(|j| j.id == job.id));
         self.scheduled_jobs.append(&mut jobs);
     }

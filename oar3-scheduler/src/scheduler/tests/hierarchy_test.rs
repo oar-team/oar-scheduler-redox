@@ -1,6 +1,6 @@
-use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use crate::models::ProcSet;
 use crate::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
+use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use std::ops::RangeInclusive;
 
 #[allow(dead_code)]

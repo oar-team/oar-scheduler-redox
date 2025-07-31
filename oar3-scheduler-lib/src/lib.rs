@@ -1,4 +1,4 @@
-mod model_py;
+mod converters;
 mod platform;
 use pyo3::prelude::*;
 use oar3_scheduler::scheduler::kamelot;
@@ -12,6 +12,7 @@ fn oar3_scheduler_lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 /// Schedules the jobs from the platform and saves the assignments back to the platform.
+/// Should be called in external scheduler mode.
 #[pyfunction]
 fn schedule_cycle(
     py_session: Bound<PyAny>,
@@ -20,7 +21,7 @@ fn schedule_cycle(
     py_queues: Bound<PyAny>,
 ) -> PyResult<()> {
     // Extracting the platform (including the resource set, quotas config, and waiting jobs)
-    let mut platform = Platform::build_platform(&py_platform, &py_session, &py_config, &py_queues)?;
+    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, &py_queues)?;
 
     // Scheduling (Platform automatically calls py_platform.save_assigns upon saving scheduled jobs.)
     let queues: Vec<String> = py_queues.extract()?;

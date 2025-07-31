@@ -30,7 +30,7 @@ impl PlatformTrait for PlatformBenchMock {
         &self.waiting_jobs
     }
 
-    fn set_scheduled_jobs(&mut self, mut jobs: Vec<Job>) {
+    fn save_assignments(&mut self, mut jobs: Vec<Job>) {
         self.waiting_jobs.retain(|job| !jobs.iter().any(|j| j.id == job.id));
         self.scheduled_jobs.append(&mut jobs);
     }

@@ -50,11 +50,11 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
 
     let mut jobs = vec![job_1, job_2, job_3, job_4, job_5];
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
-    let j1 = jobs[0].clone().scheduled_data.unwrap();
-    let j2 = jobs[1].clone().scheduled_data.unwrap();
-    let j3 = jobs[2].clone().scheduled_data.unwrap();
-    let j4 = jobs[3].clone().scheduled_data.unwrap();
-    let j5 = jobs[4].clone().scheduled_data.unwrap();
+    let j1 = jobs[0].clone().assignment.unwrap();
+    let j2 = jobs[1].clone().assignment.unwrap();
+    let j3 = jobs[2].clone().assignment.unwrap();
+    let j4 = jobs[3].clone().assignment.unwrap();
+    let j5 = jobs[4].clone().assignment.unwrap();
 
     assert_eq!(j1.proc_set, ProcSet::from_iter(1..=16));
     assert_eq!(j1.begin, 0);

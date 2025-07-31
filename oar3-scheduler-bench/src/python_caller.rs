@@ -1,5 +1,5 @@
 use crate::benchmarker::measure_time;
-use oar3_scheduler::models::{Job, ProcSet, ScheduledJobData};
+use oar3_scheduler::models::{Job, ProcSet, JobAssignment};
 use oar3_scheduler::platform::PlatformTrait;
 use pyo3::ffi::c_str;
 use pyo3::prelude::*;
@@ -16,7 +16,7 @@ const ADAPTER_MODULE: &CStr = c_str!("adapter");
 const ADAPTER_FILE: &CStr = c_str!("adapter.py");
 const ADAPTER_CODE: &CStr = c_str!(include_str!("adapter.py"));
 
-// Returns (elapsed ms, slot count)
+/// Returns (elapsed ms, slot count)
 pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues: Vec<String>, use_rust: bool) -> (u32, usize) {
     let time = Python::with_gil(|py| {
         let sys = py.import("sys").unwrap();
@@ -71,7 +71,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
 
             let mut job = waiting_jobs_map.get(&id).cloned().unwrap();
             job.quotas_hit_count = quotas_hit_count;
-            job.scheduled_data = Some(ScheduledJobData {
+            job.assignment = Some(JobAssignment {
                 begin,
                 end,
                 proc_set,
@@ -80,7 +80,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
             assigned_jobs.push(job.clone());
         }
 
-        platform.set_scheduled_jobs(assigned_jobs);
+        platform.save_assignments(assigned_jobs);
 
         Ok::<u32, PyErr>(time)
     })
@@ -89,6 +89,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
     (time, 0)
 }
 
+/// Create a fake instance of the Python Configuration class
 fn create_config(py: Python) -> Bound<PyAny> {
     // Create a default Configuration instance
     let config_module = PyModule::import(py, "oar.lib.configuration").unwrap();
@@ -97,17 +98,19 @@ fn create_config(py: Python) -> Bound<PyAny> {
     config_class.call0().unwrap()
 }
 
+/// Create a Python PlatformAdapter instance from a Rust PlatformTrait
+/// PlatformAdapter will be responsible for mocking the Python Platform and report back the assignments to Rust.
 fn create_platform<T: PlatformTrait>(py: Python, platform: &T) -> Py<PyAny> {
     let platform_module = PyModule::import(py, "adapter").unwrap();
     let platform_class = platform_module.getattr("PlatformAdapter").unwrap();
 
     let platform = platform_to_dict(py, platform);
-
     let platform_instance = platform_class.call1((platform,)).unwrap();
-
     platform_instance.into()
 }
 
+/// Convert a PlatformTrait instance to a Python dictionary representation
+/// Used to instantiate the Python PlatformAdapter with the necessary data.
 pub fn platform_to_dict<'a, P: PlatformTrait>(py: Python<'a>, platform: &P) -> Bound<'a, PyDict> {
     let dict = PyDict::new(py);
 

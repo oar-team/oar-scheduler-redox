@@ -3,15 +3,15 @@ mod grapher;
 mod python_caller;
 mod platform_mock;
 
-use log::{info, LevelFilter};
-use oar3_scheduler::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
 use crate::benchmarker::{get_sample_waiting_jobs, BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
+use crate::grapher::graph_benchmark_result;
+use crate::platform_mock::{generate_mock_platform_config, PlatformBenchMock};
+use crate::python_caller::schedule_cycle_on_oar_python;
+use log::LevelFilter;
+use oar3_scheduler::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
 use oar3_scheduler::models::Job;
 use oar3_scheduler::platform::PlatformTrait;
 use oar3_scheduler::scheduler::kamelot::schedule_cycle;
-use crate::grapher::graph_benchmark_result;
-use crate::python_caller::schedule_cycle_on_oar_python;
-use crate::platform_mock::{PlatformBenchMock, generate_mock_platform_config};
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
@@ -31,7 +31,7 @@ async fn main() {
 
 
     let benchmark = BenchmarkConfig {
-        target: BenchmarkTarget::RustFromPython,
+        target: BenchmarkTarget::Python,
         sample_type: WaitingJobsSampleType::NodeOnly,
         cache: true,
         averaging: 1,
@@ -101,8 +101,8 @@ async fn detect_differences(seed: u64) -> bool {
         let rust_end = rust_job.end().unwrap_or(-1);
         let python_end = python_job.end().unwrap_or(-1);
 
-        let rust_procset = rust_job.scheduled_data.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string());
-        let python_procset = python_job.scheduled_data.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string());
+        let rust_procset = rust_job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string());
+        let python_procset = python_job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string());
 
         if rust_begin != python_begin || rust_end != python_end || rust_procset != python_procset {
             println!("DIFFERENCE DETECTED: Job {} has different scheduling data!", rust_job.id);
@@ -129,7 +129,7 @@ fn display_job_comparison(waiting_jobs: &Vec<Job>, rust_scheduled: &Vec<Job>, py
                  job.id,
                  job.begin().unwrap_or(-1),
                  job.end().unwrap_or(-1),
-                 job.scheduled_data.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string()));
+                 job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string()));
     }
 
     println!("\nPython scheduled jobs:");
@@ -138,6 +138,6 @@ fn display_job_comparison(waiting_jobs: &Vec<Job>, rust_scheduled: &Vec<Job>, py
                  job.id,
                  job.begin().unwrap_or(-1),
                  job.end().unwrap_or(-1),
-                 job.scheduled_data.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string()));
+                 job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string()));
     }
 }

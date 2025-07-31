@@ -289,20 +289,20 @@ impl BenchmarkConfig {
 
                 // platform.get_scheduled_jobs().iter().for_each(|j| {
                 //     let width = 10;
-                //     println!("{}: {:>width$} -> {:>width$} | {}", j.id, j.begin().unwrap(), j.end().unwrap(), j.scheduled_data.clone().unwrap().proc_set);
+                //     println!("{}: {:>width$} -> {:>width$} | {}", j.id, j.begin().unwrap(), j.end().unwrap(), j.assignment.clone().unwrap().proc_set);
                 // });
 
                 let quotas_hits = platform.get_scheduled_jobs().iter().map(|j| j.quotas_hit_count).sum::<u32>();
                 let gantt_width = platform
                     .get_scheduled_jobs()
                     .iter()
-                    .map(|j| j.scheduled_data.clone().unwrap().end)
+                    .map(|j| j.assignment.clone().unwrap().end)
                     .max()
                     .unwrap_or(0);
                 let optimal_gantt_width = (platform
                     .get_scheduled_jobs()
                     .iter()
-                    .map(|j| j.scheduled_data.clone().unwrap())
+                    .map(|j| j.assignment.clone().unwrap())
                     .map(|sd| sd.proc_set.core_count() as i64 * (sd.end - sd.begin + 1))
                     .sum::<i64>()
                     / res_count as i64) as u32;

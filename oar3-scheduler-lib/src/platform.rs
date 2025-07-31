@@ -1,14 +1,13 @@
-use oar3_scheduler::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData, TimeSharingType};
-use oar3_scheduler::platform::{PlatformConfig, PlatformTrait, ResourceSet};
-use oar3_scheduler::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
-use oar3_scheduler::scheduler::quotas::{QuotasConfig, QuotasMap, QuotasValue};
-use pyo3::ffi::c_str;
+use crate::converters::{build_jobs_from_list, build_jobs_from_map, build_platform_config, proc_set_to_python};
+use oar3_scheduler::models::Job;
+use oar3_scheduler::platform::{PlatformConfig, PlatformTrait};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
-use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};
-use pyo3::{Bound, IntoPyObjectExt, PyAny, PyResult, Python};
+use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::{Bound, IntoPyObjectExt, PyAny, PyResult};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// Rust Platform using Python objects and functions to interact with the OAR platform.
 pub struct Platform<'p> {
     now: i64,
     platform_config: Rc<PlatformConfig>,
@@ -36,7 +35,7 @@ impl PlatformTrait for Platform<'_> {
     fn get_waiting_jobs(&self) -> &Vec<Job> {
         &self.waiting_jobs
     }
-    fn set_scheduled_jobs(&mut self, jobs: Vec<Job>) {
+    fn save_assignments(&mut self, jobs: Vec<Job>) {
         // Update python scheduled jobs
         Self::update_py_waiting_jobs_from_rs_jobs(self, &jobs).unwrap();
         // Save assign in the Python platform
@@ -53,23 +52,27 @@ impl PlatformTrait for Platform<'_> {
 }
 
 impl<'p> Platform<'p> {
+    
+    /// Updates the Python waiting jobs in `self.py_waiting_jobs_map` with the Rust assignments received through `save_assignments`.
     fn update_py_waiting_jobs_from_rs_jobs(&self, jobs: &[Job]) -> PyResult<()> {
         let jobs_map: HashMap<u32, &Job> = jobs.iter().map(|j| (j.id, j)).collect();
         for (py_job_id, py_job) in &self.py_waiting_jobs_map {
             if let Some(job) = jobs_map.get(&py_job_id.extract::<u32>()?) {
-                if let Some(sd) = &job.scheduled_data {
+                if let Some(sd) = &job.assignment {
                     py_job.setattr("start_time", sd.begin)?;
                     py_job.setattr("walltime", sd.end - sd.begin + 1)?;
                     py_job.setattr("end_time", sd.end)?;
                     py_job.setattr("moldable_id", job.moldables[sd.moldable_index].id)?;
-                    py_job.setattr("res_set", Self::proc_set_to_python(py_job.py(), &sd.proc_set)?)?;
+                    py_job.setattr("res_set", proc_set_to_python(py_job.py(), &sd.proc_set)?)?;
                 }
             }
         }
         Ok(())
     }
 
-    pub fn build_platform(
+    /// Transforms a Python platform into a Rust Platform struct.
+    /// The Rust Platform will keep a reference to Python objects to be able to transfert data back to Python after scheduling.
+    pub fn from_python(
         py_platform: &Bound<'p, PyAny>,
         py_session: &Bound<'p, PyAny>,
         py_config: &Bound<'p, PyAny>,
@@ -128,7 +131,7 @@ impl<'p> Platform<'p> {
             .iter()
             .map(|x| x.extract::<u32>())
             .collect::<PyResult<Vec<_>>>()?;
-        let waiting_jobs_map = Self::build_waiting_jobs_from_map(py_waiting_jobs_map.clone())?;
+        let waiting_jobs_map = build_jobs_from_map(py_waiting_jobs_map.clone())?;
         let waiting_jobs: Vec<Job> = sorted_waiting_job_ids
             .iter()
             .filter_map(|id| waiting_jobs_map.get(id).cloned())
@@ -136,235 +139,13 @@ impl<'p> Platform<'p> {
 
         Ok(Platform {
             now,
-            platform_config: Rc::new(Self::build_platform_config(py_res_set.clone())?),
-            scheduled_jobs: Self::build_scheduled_jobs_from_list(py_scheduled_jobs.clone())?,
+            platform_config: Rc::new(build_platform_config(py_res_set.clone())?),
+            scheduled_jobs: build_jobs_from_list(py_scheduled_jobs.clone())?,
             waiting_jobs,
             py_platform: py_platform.clone(),
             py_session: py_session.clone(),
             py_res_set,
             py_waiting_jobs_map: py_waiting_jobs_map.clone(),
         })
-    }
-    fn build_platform_config(py_res_set: Bound<PyAny>) -> PyResult<PlatformConfig> {
-        Ok(PlatformConfig {
-            hour_size: 60 * 60, // Assuming 1 second resolution
-            cache_enabled: true,
-            quotas_config: Self::build_quotas_config(py_res_set.py())?,
-            resource_set: Self::build_resource_set(&py_res_set)?,
-        })
-    }
-
-    fn build_resource_set(py_res_set: &Bound<PyAny>) -> PyResult<ResourceSet> {
-        let py_default_intervals = py_res_set.getattr("roid_itvs")?;
-        let available_upto = py_res_set
-            .getattr("available_upto")?
-            .downcast::<PyDict>()?
-            .iter()
-            .map(|(k, v)| {
-                let time: i64 = k.extract()?;
-                let proc_set = Self::build_proc_set(&v)?;
-                Ok((time, proc_set))
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-
-        let mut unit_partition = None;
-        let partitions = py_res_set
-            .getattr("hierarchy")?
-            .downcast::<PyDict>()?
-            .iter()
-            .map(|(k, v)| {
-                let key: String = k.extract()?;
-                let value: Box<[ProcSet]> = Self::build_proc_sets(&v)?;
-                Ok((key.into_boxed_str(), value))
-            })
-            .collect::<PyResult<HashMap<_, _>>>()?
-            .into_iter()
-            .filter(|(name, res)| {
-                // If cores count is always 1, we can consider it a unit partition
-                if unit_partition.is_none() && res.into_iter().all(|proc_set| proc_set.core_count() == 1) {
-                    unit_partition = Some((*name).clone());
-                    return false;
-                }
-                true
-            })
-            .collect();
-
-        Ok(ResourceSet {
-            default_intervals: Self::build_proc_set(&py_default_intervals)?,
-            available_upto,
-            hierarchy: Hierarchy::new_defined(partitions, unit_partition),
-        })
-    }
-    fn build_proc_set(py_proc_set: &Bound<PyAny>) -> PyResult<ProcSet> {
-        Ok(py_proc_set
-            .py()
-            .eval(
-                c_str!("[(i.inf, i.sup) for i in list(p.intervals())]"),
-                Some(&[("p", py_proc_set)].into_py_dict(py_proc_set.py())?),
-                None,
-            )?
-            .extract::<Vec<(u32, u32)>>()?
-            .iter()
-            .map(|(inf, sup)| ProcSet::from_iter([*inf..=*sup]))
-            .fold(ProcSet::new(), |acc, x| acc | x))
-    }
-    fn proc_set_to_python(py: Python<'p>, proc_set: &ProcSet) -> PyResult<Bound<'p, PyAny>> {
-        let intervals = proc_set
-            .ranges()
-            .map(|r| PyList::new(py, [*r.start(), *r.end()]))
-            .collect::<PyResult<Vec<_>>>()?;
-        let intervals = PyTuple::new(py, intervals)?;
-
-        py.import("procset")?.getattr("ProcSet")?.call1(intervals)
-    }
-    fn build_proc_sets(py_proc_sets: &Bound<PyAny>) -> PyResult<Box<[ProcSet]>> {
-        Ok(py_proc_sets
-            .py()
-            .eval(
-                c_str!("[[(i.inf, i.sup) for i in list(p.intervals())] for p in ps]"),
-                Some(&[("ps", py_proc_sets)].into_py_dict(py_proc_sets.py())?),
-                None,
-            )?
-            .extract::<Vec<Vec<(u32, u32)>>>()?
-            .iter()
-            .map(|vec| {
-                vec.iter()
-                    .map(|(inf, sup)| ProcSet::from_iter([*inf..=*sup]))
-                    .fold(ProcSet::new(), |acc, x| acc | x)
-            })
-            .collect::<Box<[ProcSet]>>())
-    }
-
-    fn build_quotas_config(py: Python) -> PyResult<QuotasConfig> {
-        let py_quotas: Bound<PyAny> = py.import("oar.kao.quotas")?.getattr("Quotas")?;
-
-        let enabled: bool = py_quotas.getattr("enabled")?.extract()?;
-        let calendar = None; // Temporal quotas not implemented yet
-        let default_rules: QuotasMap = py_quotas
-            .getattr("default_rules")?
-            .downcast::<PyDict>()?
-            .iter()
-            .map(|(k, v)| {
-                // Extract the python tuple key and convert it to a tuple of boxed str.
-                let k = k.extract::<(String, String, String, String)>()?;
-                let key = (k.0.into_boxed_str(), k.1.into_boxed_str(), k.2.into_boxed_str(), k.3.into_boxed_str());
-                // Transform the value (list) to QuotasValue, replacing -1 with None and keeping other values as u32 or i64.
-                let v: Vec<Option<i64>> = v.extract::<Vec<i64>>()?.iter().map(|x| if x < &0 { None } else { Some(*x) }).collect();
-                let value: QuotasValue = QuotasValue::new(v[0].map(|i| i as u32), v[1].map(|i| i as u32), v[2]);
-                Ok((key, value))
-            })
-            .collect::<PyResult<QuotasMap>>()?;
-
-        let tracked_job_types: Box<[Box<str>]> = py_quotas
-            .getattr("job_types")?
-            .extract::<Vec<String>>()?
-            .iter()
-            .map(|s| s.clone().into_boxed_str())
-            .collect();
-        Ok(QuotasConfig::new(enabled, calendar, default_rules, tracked_job_types))
-    }
-
-    fn build_waiting_jobs_from_map(py_jobs_map: Bound<PyDict>) -> PyResult<HashMap<u32, Job>> {
-        Ok(py_jobs_map
-            .iter()
-            .map(|(id, py_job)| -> PyResult<(u32, Job)> { Ok((id.extract::<u32>()?, Self::build_job(&py_job)?)) })
-            .collect::<PyResult<HashMap<u32, Job>>>()?)
-    }
-    fn build_scheduled_jobs_from_list(py_jobs_list: Bound<PyList>) -> PyResult<Vec<Job>> {
-        Ok(py_jobs_list
-            .iter()
-            .map(|py_job| Self::build_job(&py_job))
-            .collect::<PyResult<Vec<Job>>>()?)
-    }
-    fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
-        let name: Option<String> = py_job.getattr("name")?.extract()?;
-        let user: Option<String> = py_job.getattr("user")?.extract()?;
-        let project: Option<String> = py_job.getattr("project")?.extract()?;
-        let queue: String = py_job.getattr("queue_name")?.extract()?;
-        let types: HashMap<String, String> = py_job.getattr("types")?.extract()?;
-        let types: Vec<Box<str>> = types.into_iter().map(|(s1, s2)| format!("{}={}", s1, s2).into_boxed_str()).collect();
-
-        let time_sharing: bool = py_job.getattr_opt("ts")?.map(|o| o.extract()).unwrap_or(Ok(false))?;
-        let time_sharing = if time_sharing {
-            let time_sharing_user_name: String = py_job.getattr("ts_user")?.extract()?;
-            let time_sharing_job_name: String = py_job.getattr("ts_name")?.extract()?;
-            Some(TimeSharingType::from_str(&time_sharing_user_name, &time_sharing_job_name))
-        } else {
-            None
-        };
-
-        // Moldables
-        let moldables: Vec<_> = py_job
-            .getattr("mld_res_rqts")?
-            .downcast::<PyList>()?
-            .iter()
-            .map(|moldable| Self::build_moldable(&moldable))
-            .collect::<PyResult<_>>()?;
-
-        let mut scheduled_data: Option<ScheduledJobData> = None;
-        if py_job.hasattr("start_time")? && py_job.hasattr("walltime")? {
-            let begin: Option<i64> = py_job.getattr("start_time")?.extract()?;
-            let walltime: Option<i64> = py_job.getattr("walltime")?.extract()?;
-            if let (Some(begin), Some(walltime)) = (begin, walltime)
-                && begin > 0
-                && walltime > 0
-            {
-                let end: i64 = begin + walltime - 1;
-
-                let proc_set: ProcSet = Self::build_proc_set(&py_job.getattr("res_set")?)?;
-
-                let moldables_id: u32 = py_job.getattr("moldable_id")?.extract()?;
-                let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
-
-                scheduled_data = Some(ScheduledJobData {
-                    begin,
-                    end,
-                    proc_set,
-                    moldable_index,
-                });
-            }
-        }
-
-        Ok(Job {
-            id: py_job.getattr("id")?.extract::<u32>()?,
-            name: name.map(|n| n.into_boxed_str()),
-            user: user.map(|u| u.into_boxed_str()),
-            project: project.map(|p| p.into_boxed_str()),
-            queue: queue.into_boxed_str(),
-            types,
-            moldables,
-            scheduled_data,
-            quotas_hit_count: 0,
-            time_sharing,
-        })
-    }
-    fn build_moldable(py_moldable: &Bound<PyAny>) -> PyResult<Moldable> {
-        let id: u32 = py_moldable.get_item(0)?.extract()?;
-        let walltime: i64 = py_moldable.get_item(1)?.extract()?;
-
-        let requests: Vec<HierarchyRequest> = py_moldable
-            .get_item(2)?
-            .downcast::<PyList>()?
-            .iter()
-            .map(|req| {
-                let req = req.downcast::<PyTuple>()?;
-                let level_nbs = req.get_item(0)?;
-                let level_nbs = level_nbs
-                    .downcast::<PyList>()?
-                    .into_iter()
-                    .map(|level_nb_tuple| {
-                        let level_nb_tuple = level_nb_tuple.downcast::<PyTuple>()?;
-                        let level_name: String = level_nb_tuple.get_item(0)?.extract()?;
-                        let level_nb: u32 = level_nb_tuple.get_item(1)?.extract()?;
-                        Ok((level_name.into_boxed_str(), level_nb))
-                    })
-                    .collect::<PyResult<Vec<_>>>()?;
-                let filter = Self::build_proc_set(&req.get_item(1)?)?;
-
-                Ok(HierarchyRequest::new(filter, level_nbs))
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-
-        Ok(Moldable::new(id, walltime, HierarchyRequests::from_requests(requests)))
     }
 }

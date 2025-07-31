@@ -1,10 +1,10 @@
-use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
-use crate::models::{JobBuilder, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData};
+use crate::models::{JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::quotas::*;
 use crate::scheduler::scheduling;
 use crate::scheduler::slot::{Slot, SlotSet};
+use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -103,7 +103,7 @@ fn test_quotas_one_job_rule_nb_res_1() {
     println!("jobs: {:?}", jobs);
 
     // With quota of 1, job should not get any resources
-    assert!(jobs[0].scheduled_data.is_none());
+    assert!(jobs[0].assignment.is_none());
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn test_quotas_one_job_rule_nb_res_2() {
     scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
     // With a quota of 64, the job should get scheduled on 64 cores
-    let scheduled = &jobs[0].scheduled_data;
+    let scheduled = &jobs[0].assignment;
     assert!(scheduled.is_some());
     let sched = scheduled.as_ref().unwrap();
     assert_eq!(sched.proc_set.core_count(), 64);
@@ -167,13 +167,13 @@ fn test_quotas_four_jobs_rule_1() {
     let job1 = JobBuilder::new(1)
         .user("toto".into())
         .queue("default".into())
-        .scheduled(ScheduledJobData::new(0, 19, ProcSet::from_iter(9..=24), 0))
+        .assign(JobAssignment::new(0, 19, ProcSet::from_iter(9..=24), 0))
         .build();
     let job2 = JobBuilder::new(2)
         .user("lulu".into())
         .project("yop".into())
         .queue("default".into())
-        .scheduled(ScheduledJobData::new(0, 49, ProcSet::from_iter(1..=8), 0))
+        .assign(JobAssignment::new(0, 49, ProcSet::from_iter(1..=8), 0))
         .build();
     let jobs = vec![&job1, &job2];
     // Insert scheduled jobs into slots
@@ -203,10 +203,10 @@ fn test_quotas_four_jobs_rule_1() {
     let j3 = &jobs_new[0];
     let j4 = &jobs_new[1];
     // Check results
-    assert!(j3.scheduled_data.is_some());
-    assert!(j4.scheduled_data.is_some());
-    let sched3 = j3.scheduled_data.as_ref().unwrap();
-    let sched4 = j4.scheduled_data.as_ref().unwrap();
+    assert!(j3.assignment.is_some());
+    assert!(j4.assignment.is_some());
+    let sched3 = j3.assignment.as_ref().unwrap();
+    let sched4 = j4.assignment.as_ref().unwrap();
     assert_eq!(sched3.begin, 20);
     assert_eq!(sched3.proc_set, ProcSet::from_iter(9..=16));
     assert_eq!(sched4.begin, 50);
@@ -232,7 +232,7 @@ fn test_quotas_three_jobs_rule_1() {
     let job = JobBuilder::new(1)
         .user("toto".into())
         .queue("default".into())
-        .scheduled(ScheduledJobData::new(50, 149, ProcSet::from_iter(17..=24), 0))
+        .assign(JobAssignment::new(50, 149, ProcSet::from_iter(17..=24), 0))
         .build();
     let jobs = vec![&job];
     let ss = all_ss.get_mut("default").unwrap();
@@ -261,10 +261,10 @@ fn test_quotas_three_jobs_rule_1() {
     let j2 = &jobs_new[0];
     let j3 = &jobs_new[1];
     // Check results
-    assert!(j2.scheduled_data.is_some());
-    assert!(j3.scheduled_data.is_some());
-    let sched2 = j2.scheduled_data.as_ref().unwrap();
-    let sched3 = j3.scheduled_data.as_ref().unwrap();
+    assert!(j2.assignment.is_some());
+    assert!(j3.assignment.is_some());
+    let sched2 = j2.assignment.as_ref().unwrap();
+    let sched3 = j3.assignment.as_ref().unwrap();
     assert_eq!(sched2.begin, 150);
     assert_eq!(sched2.proc_set, ProcSet::from_iter(1..=8));
     assert_eq!(sched3.begin, 0);
@@ -303,9 +303,9 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     let j1 = &jobs[0];
     let j2 = &jobs[1];
     // Check results
-    assert!(j1.scheduled_data.is_none(), "j1 should not be scheduled due to quotas");
-    assert!(j2.scheduled_data.is_some(), "j2 should be scheduled");
-    let sched2 = j2.scheduled_data.as_ref().unwrap();
+    assert!(j1.assignment.is_none(), "j1 should not be scheduled due to quotas");
+    assert!(j2.assignment.is_some(), "j2 should be scheduled");
+    let sched2 = j2.assignment.as_ref().unwrap();
     assert_eq!(sched2.proc_set, ProcSet::from_iter(1..=16));
 }
 
@@ -348,10 +348,10 @@ fn test_quotas_two_jobs_job_type_proc() {
     let j1 = &jobs[0];
     let j2 = &jobs[1];
     // Check results
-    assert!(j1.scheduled_data.is_some(), "j1 should be scheduled");
-    assert!(j2.scheduled_data.is_some(), "j2 should be scheduled");
-    let sched1 = j1.scheduled_data.as_ref().unwrap();
-    let sched2 = j2.scheduled_data.as_ref().unwrap();
+    assert!(j1.assignment.is_some(), "j1 should be scheduled");
+    assert!(j2.assignment.is_some(), "j2 should be scheduled");
+    let sched1 = j1.assignment.as_ref().unwrap();
+    let sched2 = j2.assignment.as_ref().unwrap();
     assert_eq!(sched1.begin, 0);
     assert_eq!(sched2.begin, 50);
 }

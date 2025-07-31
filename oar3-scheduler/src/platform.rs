@@ -2,35 +2,37 @@ use crate::models::ProcSet;
 use crate::models::{proc_set_to_python, Job};
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasConfig;
-use std::rc::Rc;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyDict, PyList};
 #[cfg(feature = "pyo3")]
 use pyo3::{pyclass, Bound, IntoPyObject, IntoPyObjectRef, PyErr, Python};
+use std::rc::Rc;
 
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;
     fn get_max_time(&self) -> i64;
-
     fn get_platform_config(&self) -> &Rc<PlatformConfig>;
-
+    /// Returns already scheduled jobs (in higher priority queues), or advanced reservations.
     fn get_scheduled_jobs(&self) -> &Vec<Job>;
+    /// Returns the jobs waiting to be scheduled.
     fn get_waiting_jobs(&self) -> &Vec<Job>;
-
-    fn set_scheduled_jobs(&mut self, jobs: Vec<Job>);
+    /// Save the scheduled jobs assignments back to the platform.
+    /// This function is called after scheduling jobs to save their assignments.
+    fn save_assignments(&mut self, jobs: Vec<Job>);
 }
 
 #[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]
 pub struct PlatformConfig {
     /// Size of an hour in units of time (e.g., 3600 for second resolution)
     pub hour_size: i64,
-    pub cache_enabled: bool, // Whether to use caching in scheduling algorithms, used in linked list algorithms only
+    pub cache_enabled: bool,
     pub resource_set: ResourceSet,
     pub quotas_config: QuotasConfig,
 }
 
+/// ResourceSet provide a resource description with the hierarchy of resources.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "pyo3-abi3-py38", pyclass(module = "oar3_scheduler_lib"))]
 pub struct ResourceSet {
@@ -39,6 +41,7 @@ pub struct ResourceSet {
     pub available_upto: Vec<(i64, ProcSet)>,
     pub hierarchy: Hierarchy,
 }
+
 #[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &ResourceSet {
     type Target = PyDict;

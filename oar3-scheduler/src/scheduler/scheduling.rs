@@ -1,4 +1,4 @@
-use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp, ScheduledJobData};
+use crate::models::{Job, JobAssignment, Moldable, ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::SlotSet;
 use auto_bench_fct::auto_bench_fct_hy;
@@ -50,7 +50,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
     });
 
     if let Some(chosen_moldable_index) = chosen_moldable_index {
-        job.scheduled_data = Some(ScheduledJobData::new(
+        job.assignment = Some(JobAssignment::new(
             chosen_begin.unwrap(),
             chosen_end.unwrap(),
             chosen_proc_set.unwrap(),

@@ -419,7 +419,7 @@ impl Quotas {
     pub fn find_applicable_rule(&self, job: &Job) -> Option<(QuotasKey, QuotasKey, &QuotasValue)> {
         let key_queue = Some(job.queue.as_ref());
         let key_project = job.project.as_ref().map(|s| s.as_ref());
-        let key_job_type = Some(job.types.iter().next().map(|(k, v)| k.as_ref()).unwrap_or("*")); // TODO: job types is not ordered. How to take the first?
+        let key_job_type = Some(job.types.iter().next().map(|(k, _v)| k.as_ref()).unwrap_or("*")); // TODO: job types is not ordered. How to take the first?
         let key_user = job.user.as_ref().map(|s| s.as_ref());
 
         let mut rule_key = None;

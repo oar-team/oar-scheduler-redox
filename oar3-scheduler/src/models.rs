@@ -110,6 +110,14 @@ impl Job {
             None
         }
     }
+    /// Returns true if the job can be scheduled using the cache.
+    pub fn can_use_cache(&self) -> bool {
+        self.time_sharing.is_none()
+    }
+    /// Returns true if the job assignment can be used to insert a cache entry.
+    pub fn can_set_cache(&self) -> bool {
+        self.time_sharing.is_none() && self.dependencies.is_empty()
+    }
 }
 
 pub struct JobBuilder {

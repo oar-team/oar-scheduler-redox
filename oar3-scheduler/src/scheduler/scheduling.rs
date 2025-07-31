@@ -8,37 +8,49 @@ use std::cmp::max;
 use std::collections::HashMap;
 
 /// Schedule loop with support for jobs container - can be recursive
-pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs: &mut IndexMap<u32, Job>) {
-    waiting_jobs.into_iter().for_each(|(job_id, job)| {
-        let slot_set_name = "default".to_string();
-        let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
-
-        // Check dependency
-        // Jobs should always be sorted in topological order according to the dependency tree (starting from the leaves)
-        if !job.dependencies.iter().all(|(dep_id, dep_state, dep_exit_code)| {
+pub fn schedule_jobs(slot_sets: &mut HashMap<String, SlotSet>, waiting_jobs_ro: &IndexMap<u32, Job>, waiting_jobs_mut: &mut IndexMap<u32, Job>) {
+    for (job_id, job) in waiting_jobs_mut.into_iter() {
+        // Check job dependencies
+        let mut min_begin: Option<i64> = None;
+        if !job.dependencies.iter().all(|(dep_job_id, dep_state, dep_exit_code)| {
             if dep_state.as_ref() == "Error" {
-                info!("Job {} has a dependency on job {} which is in error state, ignoring dependency.", job_id, dep_id);
+                info!(
+                    "Job {} has a dependency on job {} which is in error state, ignoring dependency.",
+                    job_id, dep_job_id
+                );
                 return true;
             }
             if dep_state.as_ref() == "Waiting" {
-                // TODO
-                return true;
-                // determine endtime
+                if let Some(dep_job) = waiting_jobs_ro.get(dep_job_id) {
+                    if let Some(dep_assignment) = &dep_job.assignment.as_ref() {
+                        min_begin = Some(min_begin.map_or(dep_assignment.end + 1, |min| min.max(dep_assignment.end + 1)));
+                        return true;
+                    } else {
+                        warn!(
+                            "Job {} has a dependency on job {} which has been sorted to be scheduled after. Please check the sorting algorithm.",
+                            job_id, dep_job_id
+                        );
+                    }
+                }
+                return false;
             }
             if dep_state.as_ref() == "Terminated" && (*dep_exit_code == Some(0) || *dep_exit_code == None) {
                 return true;
             }
             false
         }) {
-            info!("Skipping job {}: dependencies not satisfied.", job.id);
-            return;
+            info!("Job {} has unsatisfied dependencies and can't be scheduled.", job_id);
+            continue;
         }
 
-        // Check Container
+        // Manager container/inner job
+        let mut slot_set_name = "default".to_string();
+        // TODO: edit slot_set_name and setup slot set for container and inner jobs.
 
-
+        // Schedule job
+        let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
         schedule_job(slot_set, job);
-    });
+    }
 }
 
 /// According to a Job’s resources and a `SlotSet`, find the time and the resources to launch a job.
@@ -93,7 +105,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job) {
 #[auto_bench_fct_hy]
 pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable) -> Option<(i32, i32, ProcSet, u32)> {
     let mut iter = slot_set.iter();
-    if job.time_sharing.is_none()
+    if job.can_use_cache()
         && let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable)
     {
         iter = iter.start_at(cache_first_slot);
@@ -144,7 +156,7 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
             })
     });
 
-    if job.time_sharing.is_none() && slot_set.get_platform_config().cache_enabled {
+    if job.can_set_cache() && slot_set.get_platform_config().cache_enabled {
         if let Some(cache_first_slot_id) = cache_first_slot {
             slot_set.insert_cache_entry(moldable.get_cache_key(), cache_first_slot_id);
         }

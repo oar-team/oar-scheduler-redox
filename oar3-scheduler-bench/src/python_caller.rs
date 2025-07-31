@@ -1,12 +1,11 @@
 use crate::benchmarker::measure_time;
-use oar3_scheduler::models::{Job, ProcSet, JobAssignment};
+use oar3_scheduler::models::{JobAssignment, ProcSet};
 use oar3_scheduler::platform::PlatformTrait;
 use pyo3::ffi::c_str;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
-use std::collections::HashMap;
-use std::ffi::CStr;
 use pyo3::IntoPyObjectExt;
+use std::ffi::CStr;
 
 const PYTHON_MODULE_NAME: &str = "oar.kao.kamelot";
 const PYTHON_MODULE_DIR: &str = "/Users/clement/CodeIF/oar3/";

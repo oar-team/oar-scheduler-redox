@@ -7,7 +7,6 @@ use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};
 use pyo3::{Bound, PyAny, PyResult, Python};
 use std::collections::HashMap;
-use indexmap::IndexMap;
 
 /// Builds a PlatformConfig Rust struct from a Python resource set.
 pub fn build_platform_config(py_res_set: Bound<PyAny>) -> PyResult<PlatformConfig> {

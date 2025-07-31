@@ -6,7 +6,7 @@ use pyo3::prelude::{PyAnyMethods, PyListMethods, PyModule};
 #[cfg(feature = "pyo3")]
 use pyo3::types::{PyDict, PyList, PyTuple};
 #[cfg(feature = "pyo3")]
-use pyo3::{Bound, IntoPyObject, IntoPyObjectRef, PyAny, PyErr, Python};
+use pyo3::{Bound, IntoPyObject, PyAny, PyErr, Python};
 use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
 
@@ -41,7 +41,7 @@ pub struct Job {
     pub quotas_hit_count: u32,
     pub time_sharing: Option<TimeSharingType>,
     /// List of job dependencies, tuples of (job_id, state, exit_code)
-    pub dependencies: Vec<(u32, Box<str>, Option<i32>)>
+    pub dependencies: Vec<(u32, Box<str>, Option<i32>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -79,11 +79,12 @@ pub struct JobAssignment {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]
 pub struct Moldable {
     pub id: u32,
     pub walltime: i64,
     pub requests: HierarchyRequests,
+    /// Cache key is only calculated at initialization. If fields are changed, the cache key must be recalculated.
+    pub cache_key: Box<str>,
 }
 
 impl Job {
@@ -116,7 +117,7 @@ impl Job {
     }
     /// Returns true if the job assignment can be used to insert a cache entry.
     pub fn can_set_cache(&self) -> bool {
-        self.time_sharing.is_none() && self.dependencies.is_empty()
+        self.can_use_cache() && self.dependencies.is_empty()
     }
 }
 
@@ -129,7 +130,7 @@ pub struct JobBuilder {
     types: HashMap<Box<str>, Option<Box<str>>>,
     moldables: Vec<Moldable>,
     assignment: Option<JobAssignment>,
-    time_sharing: Option<TimeSharingType>
+    time_sharing: Option<TimeSharingType>,
 }
 impl JobBuilder {
     pub fn new(id: u32) -> Self {
@@ -233,19 +234,39 @@ impl<'a> IntoPyObject<'a> for &Job {
         }
 
         dict.set_item("queue", self.queue.clone().as_ref())?;
-        dict.set_item("types", self.types.iter().map(|(k, v)| (k.as_ref(), v.clone().map(|v| v.to_string()))).collect::<HashMap<&str, Option<String>>>())?;
+        dict.set_item(
+            "types",
+            self.types
+                .iter()
+                .map(|(k, v)| (k.as_ref(), v.clone().map(|v| v.to_string())))
+                .collect::<HashMap<&str, Option<String>>>(),
+        )?;
         dict.set_item("moldables", self.moldables.iter().enumerate().collect::<Vec<(usize, &Moldable)>>())?;
         if let Some(assignment) = &self.assignment {
             let assignment_dict = PyDict::new(py);
             assignment_dict.set_item("begin", assignment.begin)?;
             assignment_dict.set_item("end", assignment.end)?;
-            assignment_dict
-                .set_item("proc_set", proc_set_to_python(py, &assignment.proc_set))?;
+            assignment_dict.set_item("proc_set", proc_set_to_python(py, &assignment.proc_set))?;
             assignment_dict.set_item("moldable_index", assignment.moldable_index)?;
             dict.set_item("assignment", assignment_dict)?;
         } else {
             dict.set_item("assignment", py.None())?;
         }
+        Ok(dict)
+    }
+}
+#[cfg(feature = "pyo3")]
+impl<'a> IntoPyObject<'a> for &Moldable {
+    type Target = PyDict;
+    type Output = Bound<'a, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
+        let dict = PyDict::new(py);
+        dict.set_item("id", &self.id)?;
+        dict.set_item("walltime", &self.walltime)?;
+        dict.set_item("requests", &self.requests)?;
+        dict.set_item("cache_key", &self.cache_key.to_string())?;
         Ok(dict)
     }
 }
@@ -266,10 +287,12 @@ impl JobAssignment {
 
 impl Moldable {
     pub fn new(id: u32, walltime: i64, requests: HierarchyRequests) -> Moldable {
-        Moldable { id, walltime, requests }
-    }
-    pub fn get_cache_key(&self) -> String {
-        format!("{}-{}", self.walltime, self.requests.get_cache_key())
+        Moldable {
+            cache_key: format!("{}-{}", walltime, requests.get_cache_key()).into(),
+            id,
+            walltime,
+            requests,
+        }
     }
 }
 

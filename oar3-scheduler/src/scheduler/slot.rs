@@ -150,7 +150,8 @@ pub struct SlotSet {
     last_id: i32,  // id of the last slot in the list
     next_id: i32,  // next available id
     slots: HashMap<i32, Slot>,
-    cache: HashMap<String, i32>, // Stores a slot id for a given moldable cache key, allowing to start again at this slot if multiple moldable have the same cache key, i.e., are identical.
+    /// Stores a slot id for a given moldable cache key, allowing to start again at this slot if multiple moldable have the same cache key, i.e., are identical.
+    cache: HashMap<Box<str>, i32>,
     platform_config: Rc<PlatformConfig>,
 }
 impl Debug for SlotSet {
@@ -286,9 +287,9 @@ impl SlotSet {
     /// If there is a cache hit with this moldable, returns the slot id of the last slot iterated over for this cache key.
     /// If there is no cache hit, returns None.
     pub fn get_cache_first_slot(&self, moldable: &Moldable) -> Option<i32> {
-        self.cache.get(&moldable.get_cache_key()).cloned()
+        self.cache.get(&moldable.cache_key).cloned()
     }
-    pub fn insert_cache_entry(&mut self, key: String, slot_id: i32) {
+    pub fn insert_cache_entry(&mut self, key: Box<str>, slot_id: i32) {
         self.cache.insert(key, slot_id);
     }
 
@@ -601,6 +602,10 @@ impl<'a> SlotIterator<'a> {
     pub fn end_at(mut self, end_id: i32) -> SlotIterator<'a> {
         self.end = Some(end_id);
         self
+    }
+    /// Peek at the next slot without moving the iterator
+    pub fn peek(&self) -> Option<&'a Slot> {
+        Some(self.slots.get(&self.begin?)?)
     }
     /// Create an iterator that iterates with a minimum slot width.
     /// See [`SlotWidthIterator`].

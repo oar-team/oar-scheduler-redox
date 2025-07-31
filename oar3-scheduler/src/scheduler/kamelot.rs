@@ -46,7 +46,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
         initial_slot_set.split_slots_for_jobs_and_update_resources(&scheduled_jobs, true, None);
 
         // Scheduling
-        let mut slot_sets = HashMap::from([("default".to_string(), initial_slot_set)]);
+        let mut slot_sets = HashMap::from([("default".into(), initial_slot_set)]);
         schedule_jobs(&mut slot_sets, waiting_jobs_ro, &mut waiting_jobs_mut);
 
         // Save assignments

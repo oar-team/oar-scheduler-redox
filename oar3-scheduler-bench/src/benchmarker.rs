@@ -626,11 +626,10 @@ fn count_cache_hits(waiting_jobs: &IndexMap<u32, Job>) -> usize {
     let mut cache_hits = 0;
     for (_job_id, job) in waiting_jobs.iter() {
         for moldable in job.moldables.iter() {
-            let key = moldable.get_cache_key();
-            if cache.contains(&key) {
+            if cache.contains(&moldable.cache_key) {
                 cache_hits += 1;
             } else {
-                cache.insert(key);
+                cache.insert(moldable.cache_key.clone());
             }
         }
     }

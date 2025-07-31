@@ -39,7 +39,7 @@ fn test_quotas_one_job_no_rules() {
     let available = platform_config.resource_set.default_intervals.clone();
     let slot = Slot::new(Rc::clone(&platform_config), 1, None, None, 0, 1000, available.clone(), None);
     let ss = SlotSet::from_slot(slot);
-    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
 
     let moldable = Moldable::new(
         0,
@@ -83,7 +83,7 @@ fn test_quotas_one_job_rule_nb_res_1() {
 
     let available = platform_config.resource_set.default_intervals.clone();
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000);
-    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
 
     let moldable = Moldable::new(
         1,
@@ -121,7 +121,7 @@ fn test_quotas_one_job_rule_nb_res_2() {
 
     let available = platform_config.resource_set.default_intervals.clone();
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000);
-    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
 
     let moldable = Moldable::new(
         2,
@@ -163,7 +163,7 @@ fn test_quotas_four_jobs_rule_1() {
     let platform_config = Rc::new(platform_config);
     let available = platform_config.resource_set.default_intervals.clone();
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 10000);
-    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
 
     // The first two jobs are already scheduled
     let job1 = JobBuilder::new(1)
@@ -228,7 +228,7 @@ fn test_quotas_three_jobs_rule_1() {
     let platform_config = Rc::new(platform_config);
     let available = platform_config.resource_set.default_intervals.clone();
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 10000);
-    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
 
     // First job is already scheduled
     let job = JobBuilder::new(1)
@@ -292,7 +292,7 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
 
     // SlotSet with a single slot [0,100] with all procs
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 100);
-    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
 
     // Job 1: user toto, requests 2 nodes (should be denied, only 1 proc allowed)
     let moldable_j1 = Moldable::new(7, 60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
@@ -328,7 +328,7 @@ fn test_quotas_two_jobs_job_type_proc() {
     let platform_config = Rc::new(platform_config);
     // SlotSet with a single slot [0,100] with all procs
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 100);
-    let mut all_ss = HashMap::from([("default".to_string(), ss)]);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
 
     // Both jobs have job_type "yop", request 1 node each, walltime 50
     let moldable_j1 = Moldable::new(9, 50, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]));

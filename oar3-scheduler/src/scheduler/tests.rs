@@ -10,3 +10,5 @@ mod platform_mock;
 mod time_sharing_test;
 #[cfg(test)]
 mod dependencies_test;
+#[cfg(test)]
+mod container_test;

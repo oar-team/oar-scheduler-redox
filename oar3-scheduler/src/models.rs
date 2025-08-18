@@ -162,12 +162,24 @@ impl JobBuilder {
         self.time_sharing = Some(ts_type);
         self
     }
+    pub fn time_sharing_opt(mut self, time_sharing: Option<TimeSharingType>) -> Self {
+        self.time_sharing = time_sharing;
+        self
+    }
     pub fn name(mut self, name: Box<str>) -> Self {
         self.name = Some(name);
         self
     }
+    pub fn name_opt(mut self, name: Option<Box<str>>) -> Self {
+        self.name = name;
+        self
+    }
     pub fn user(mut self, user: Box<str>) -> Self {
         self.user = Some(user);
+        self
+    }
+    pub fn user_opt(mut self, user: Option<Box<str>>) -> Self {
+        self.user = user;
         self
     }
     pub fn project(mut self, project: Box<str>) -> Self {

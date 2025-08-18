@@ -153,7 +153,7 @@ pub fn test_split_slots() {
     let mut ss = get_test_slot_set();
     let scheduled_job_data = JobAssignment::new(5, 14, ProcSet::from_iter([4..=6]), 0);
     let job = JobBuilder::new(1).assign(scheduled_job_data).build();
-    ss.split_slots_for_job_and_update_resources(&job, true, None);
+    ss.split_slots_for_job_and_update_resources(&job, true, true, None);
 
     assert_eq!(ss.slot_at(4, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=32]));
     assert_eq!(ss.slot_at(5, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=3, 7..=32]));

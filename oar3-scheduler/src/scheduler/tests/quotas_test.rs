@@ -180,7 +180,7 @@ fn test_quotas_four_jobs_rule_1() {
     let jobs = vec![&job1, &job2];
     // Insert scheduled jobs into slots
     let ss = all_ss.get_mut("default").unwrap();
-    ss.split_slots_for_jobs_and_update_resources(&jobs, true, None);
+    ss.split_slots_for_jobs_and_update_resources(&jobs, true, true, None);
 
     // Now schedule two more jobs
     let moldable_j3 = Moldable::new(
@@ -238,7 +238,7 @@ fn test_quotas_three_jobs_rule_1() {
         .build();
     let jobs = vec![&job];
     let ss = all_ss.get_mut("default").unwrap();
-    ss.split_slots_for_jobs_and_update_resources(&jobs, true, None);
+    ss.split_slots_for_jobs_and_update_resources(&jobs, true, true, None);
 
     // Now schedule two more jobs
     let moldable_j2 = Moldable::new(

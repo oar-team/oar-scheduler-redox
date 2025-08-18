@@ -1,4 +1,4 @@
-use crate::models::{Job, JobAssignment, Moldable, ProcSet, ProcSetCoresOp};
+use crate::models::{Job, JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::{Slot, SlotSet};
 use auto_bench_fct::auto_bench_fct_hy;
@@ -6,6 +6,7 @@ use indexmap::IndexMap;
 use log::{error, info, warn};
 use std::cmp::max;
 use std::collections::HashMap;
+use std::ops::Bound;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs_ro: &IndexMap<u32, Job>, waiting_jobs_mut: &mut IndexMap<u32, Job>) {
@@ -43,42 +44,13 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs_ro
             continue;
         }
 
-        // Manager inner job
-        let mut slot_set_name: Box<str> = "default".into();
-        if job.types.contains_key("inner".into()) {
-            slot_set_name = job.types["inner".into()].clone().unwrap();
-        }
-        if !slot_sets.contains_key(&slot_set_name) {
-            error!("Job {} need to be scheduled in non-existing slot set {}", job_id, slot_set_name);
-            continue;
-        }
-
         // Schedule job
-        let slot_set = slot_sets.get_mut(&slot_set_name).expect("SlotSet not found");
+        let slot_set = get_job_slot_set(slot_sets, job).expect("SlotSet not found");
         schedule_job(slot_set, job, min_begin);
 
-        // Manage container job
+        // Manage container jobs
         if job.types.contains_key("container".into()) {
-            slot_set_name = if job.types.get("container".into()).unwrap().is_none() {
-                format!("{}", job_id).into_boxed_str()
-            } else {
-                job.types["container".into()].clone().unwrap()
-            };
-
-            if let Some(assignment) = &job.assignment {
-                if !slot_sets.contains_key(&slot_set_name) {
-                    let platform_config = slot_sets["default"].get_platform_config().clone();
-                    let proc_set = assignment.proc_set.clone();
-                    // TODO: find why assignment.end should be subtracted by job_security_time. Pass job_security_time into PlatformConfig for easy access.
-                    let slot = Slot::new(platform_config, 1, None, None, assignment.begin, assignment.end, proc_set, None);
-                    // TODO: find what to do with time sharing and place holder in the children slot set of a container jobs.
-                    slot_sets.insert(slot_set_name.clone(), SlotSet::from_slot(slot));
-                }else {
-                    // Make the container slot set to grow with the new resources. Assuming no inner job has been scheduled yet.
-                    // TODO: Do it.
-                }
-            }
-
+            update_container_job_slot_set(slot_sets, job);
         }
     }
 }
@@ -124,7 +96,7 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job, min_begin: Option<i64
             chosen_moldable_index,
         ));
         job.quotas_hit_count = total_quotas_hit_count;
-        slot_set.split_slots_for_job_and_update_resources(&job, true, chosen_slot_id_left);
+        slot_set.split_slots_for_job_and_update_resources(&job, true, true, chosen_slot_id_left);
     } else {
         warn!("Warning: no node found for job {:?}", job);
         slot_set.to_table().printstd();
@@ -153,10 +125,10 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
             if start_slot.begin() < min_begin {
                 let (_left_slot_id, right_slot_id) = slot_set.find_and_split_at(min_begin, true);
                 iter = slot_set.iter().start_at(right_slot_id);
-            }else {
+            } else {
                 iter = iter.start_at(start_slot.id());
             }
-        }else if min_begin > slot_set.end() {
+        } else if min_begin > slot_set.end() {
             return None; // No slots available after the minimum begin time
         }
     }
@@ -213,4 +185,75 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
     }
 
     res
+}
+
+
+/// Returns the slot set for a job using get_job_slot_set_name.
+pub fn get_job_slot_set<'s>(slot_sets: &'s mut HashMap<Box<str>, SlotSet>, job: &Job) -> Option<&'s mut SlotSet> {
+    let slot_set_name = get_job_slot_set_name(job);
+    if !slot_sets.contains_key(&slot_set_name) {
+        error!(
+                "Job {} can't be scheduled, slot set {} is missing. Skip it for this round.",
+                job.id, slot_set_name
+            );
+        return None;
+    }
+    Some(slot_sets.get_mut(&slot_set_name).unwrap())
+}
+/// Returns the slot set name for a job.
+/// The slot set name is determined by the job's "inner" type, or defaults to "default".
+pub fn get_job_slot_set_name<'s>(job: &Job) -> Box<str> {
+    let mut slot_set_name: Box<str> = "default".into();
+    // Manage inner jobs
+    if job.types.contains_key("inner".into()) {
+        slot_set_name = job.types["inner".into()].clone().unwrap();
+    }
+    slot_set_name
+}
+
+/// Creates or updates the child slot set of a container job.
+/// The child slot set is named after the job's "container" type, or defaults to the job ID.
+/// Support having multiple container jobs with the same children slot set.
+pub fn update_container_job_slot_set(slot_sets: &mut HashMap<Box<str>, SlotSet>, job: &Job) {
+    assert!(job.types.contains_key("container"));
+
+    let default_slot_set = slot_sets.get("default".into()).expect("Default SlotSet not found");
+
+    let inner_slot_set_name = job
+        .types
+        .get("container".into())
+        .map(|name| name.clone())
+        .unwrap()
+        .unwrap_or(format!("{}", job.id).into_boxed_str());
+
+    if let Some(assignment) = &job.assignment {
+        let platform_config = default_slot_set.get_platform_config().clone();
+        if !slot_sets.contains_key(&inner_slot_set_name) {
+            // Create a new slot set for the inner jobs.
+            let inner_slot = Slot::new(
+                platform_config.clone(),
+                1,
+                None,
+                None,
+                default_slot_set.begin(),
+                default_slot_set.end(),
+                ProcSet::new(),
+                None,
+            );
+            slot_sets.insert(inner_slot_set_name.clone(), SlotSet::from_slot(inner_slot));
+        }
+        // Increment the resources of the slot set using a pseudo job.
+        let pseudo_job = JobBuilder::new(0)
+            .name_opt(job.name.clone())
+            .user_opt(job.user.clone())
+            .time_sharing_opt(job.time_sharing.clone())
+            .assign(JobAssignment::new(
+                assignment.begin,
+                assignment.end - platform_config.job_security_time, // Removing the security time added by get_data_jobs.
+                assignment.proc_set.clone(),
+                0,
+            ))
+            .build();
+        slot_sets.get_mut(&inner_slot_set_name).unwrap().split_slots_for_job_and_update_resources(&pseudo_job, false, false, None);
+    }
 }

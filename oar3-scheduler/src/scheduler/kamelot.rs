@@ -1,9 +1,10 @@
 use crate::models::{Job, JobAssignment, JobBuilder};
 use crate::platform::PlatformTrait;
-use crate::scheduler::scheduling::schedule_jobs;
+use crate::scheduler::scheduling::{get_job_slot_set_name, schedule_jobs};
 use crate::scheduler::slot::SlotSet;
 use indexmap::IndexMap;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::rc::Rc;
 
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -> usize {
@@ -34,7 +35,10 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
             })
             .collect::<Vec<Job>>();
         pseudo_jobs.sort_by_key(|j| j.begin().unwrap());
-        initial_slot_set.split_slots_for_jobs_and_update_resources(&pseudo_jobs.iter().collect(), false, None);
+        initial_slot_set.split_slots_for_jobs_and_update_resources(&pseudo_jobs.iter().collect(), false, true, None);
+
+        // Initialize slot sets map
+        let mut slot_sets = HashMap::from([("default".into(), initial_slot_set)]);
 
         // Place already scheduled jobs, advanced reservations and jobs from higher priority queues
         let mut scheduled_jobs = platform.get_scheduled_jobs().iter().collect::<Vec<&Job>>();
@@ -43,10 +47,22 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
             // Unless scheduling best-effort queue, not taking into account the existing best-effort jobs.
             scheduled_jobs.retain(|j| j.queue.as_ref() != "besteffort");
         }
-        initial_slot_set.split_slots_for_jobs_and_update_resources(&scheduled_jobs, true, None);
+        let mut slot_set_jobs: HashMap<Box<str>, Vec<&Job>> = HashMap::new();
+        scheduled_jobs.into_iter().for_each(|job| {
+            let slot_set_name = get_job_slot_set_name(job);
+            slot_set_jobs
+                .entry(slot_set_name)
+                .and_modify(|vec| {
+                    vec.push(job);
+                })
+                .or_insert(vec![job]);
+        });
+        for (slot_set_name, jobs) in slot_set_jobs {
+            let slot_set = slot_sets.get_mut(&slot_set_name).expect(format!("Slot set {} does not exist", slot_set_name).as_str());
+            slot_set.split_slots_for_jobs_and_update_resources(&jobs, true, true, None);
+        }
 
         // Scheduling
-        let mut slot_sets = HashMap::from([("default".into(), initial_slot_set)]);
         schedule_jobs(&mut slot_sets, waiting_jobs_ro, &mut waiting_jobs_mut);
 
         // Save assignments

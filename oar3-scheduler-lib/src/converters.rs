@@ -9,9 +9,10 @@ use pyo3::{Bound, PyAny, PyResult, Python};
 use std::collections::HashMap;
 
 /// Builds a PlatformConfig Rust struct from a Python resource set.
-pub fn build_platform_config(py_res_set: Bound<PyAny>) -> PyResult<PlatformConfig> {
+pub fn build_platform_config(py_res_set: Bound<PyAny>, job_security_time: i64) -> PyResult<PlatformConfig> {
     Ok(PlatformConfig {
         hour_size: 60 * 60, // Assuming 1 second resolution
+        job_security_time,
         cache_enabled: true,
         quotas_config: build_quotas_config(py_res_set.py())?,
         resource_set: build_resource_set(&py_res_set)?,

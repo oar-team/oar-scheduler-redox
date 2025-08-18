@@ -365,6 +365,10 @@ impl Quotas {
     /// Increment the Quotas counters for a job.
     /// The job does not need to be scheduled yet, hence the slot width (end - begin + 1) and resource_count are provided.
     pub fn increment_for_job(&mut self, job: &Job, slot_width: i64, resource_count: u32) {
+        if job.types.contains_key("container") {
+            // TODO: Are really container jobs not accounted in quotas?
+            return;
+        }
         let resources = resource_count;
         let running_jobs = 1;
         let resources_times = slot_width * resources as i64;

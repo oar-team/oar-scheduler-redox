@@ -19,9 +19,6 @@ impl PlatformTrait for PlatformBenchMock {
     fn get_max_time(&self) -> i64 {
         1_000_000_000
     }
-    fn get_job_security_time(&self) -> i64 {
-        0
-    }
 
     fn get_platform_config(&self) -> &Rc<PlatformConfig> {
         &self.platform_config
@@ -45,6 +42,7 @@ impl PlatformTrait for PlatformBenchMock {
 pub fn generate_mock_platform_config(cache_enabled: bool, res_count: u32, switch_size: u32, node_size: u32, cpu_size: u32, quotas_enable: bool) -> PlatformConfig {
     PlatformConfig {
         hour_size: 60,
+        job_security_time: 0,
         cache_enabled,
         resource_set: generate_mock_resource_set(res_count, switch_size, node_size, cpu_size),
         quotas_config: generate_mock_quotas_config(quotas_enable, res_count),

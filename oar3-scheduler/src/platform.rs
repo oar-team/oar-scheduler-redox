@@ -14,7 +14,6 @@ use std::rc::Rc;
 pub trait PlatformTrait {
     fn get_now(&self) -> i64;
     fn get_max_time(&self) -> i64;
-    fn get_job_security_time(&self) -> i64;
     fn get_platform_config(&self) -> &Rc<PlatformConfig>;
     /// Returns already scheduled jobs (in higher priority queues), or advanced reservations.
     fn get_scheduled_jobs(&self) -> &Vec<Job>;
@@ -32,6 +31,7 @@ pub trait PlatformTrait {
 pub struct PlatformConfig {
     /// Size of an hour in units of time (e.g., 3600 for second resolution)
     pub hour_size: i64,
+    pub job_security_time: i64,
     pub cache_enabled: bool,
     pub resource_set: ResourceSet,
     pub quotas_config: QuotasConfig,

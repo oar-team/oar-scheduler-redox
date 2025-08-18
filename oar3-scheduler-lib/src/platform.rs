@@ -10,7 +10,6 @@ use std::rc::Rc;
 /// Rust Platform using Python objects and functions to interact with the OAR platform.
 pub struct Platform<'p> {
     now: i64,
-    job_security_time: i64,
     platform_config: Rc<PlatformConfig>,
     scheduled_jobs: Vec<Job>,
     waiting_jobs: IndexMap<u32, Job>,
@@ -26,9 +25,6 @@ impl PlatformTrait for Platform<'_> {
     }
     fn get_max_time(&self) -> i64 {
         2i64.pow(31)
-    }
-    fn get_job_security_time(&self) -> i64 {
-        self.job_security_time
     }
     fn get_platform_config(&self) -> &Rc<PlatformConfig> {
         &self.platform_config
@@ -141,8 +137,7 @@ impl<'p> Platform<'p> {
 
         Ok(Platform {
             now,
-            job_security_time,
-            platform_config: Rc::new(build_platform_config(py_res_set.clone())?),
+            platform_config: Rc::new(build_platform_config(py_res_set.clone(), job_security_time)?),
             scheduled_jobs: py_scheduled_jobs.iter().map(|py_job| build_job(&py_job)).collect::<PyResult<Vec<Job>>>()?,
             waiting_jobs,
             py_platform: py_platform.clone(),

@@ -467,7 +467,7 @@ impl SlotSet {
         (begin_slot_id, end_slot_id)
     }
     /// See `SlotSet::split_slots_for_jobs_and_update_resources`.
-    pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, do_update_quotas: bool, start_slot_id: Option<i32>) -> (i32, i32) {
+    pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, do_update_quotas: bool, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
         let assignment = job
             .assignment
             .as_ref()
@@ -482,8 +482,18 @@ impl SlotSet {
             .for_each(|slot_id| {
                 let slot = self.slots.get_mut(&slot_id).unwrap();
                 let proc_set = &assignment.proc_set;
-                slot.sub_proc_set(proc_set);
+                if sub_resources {
+                    slot.sub_proc_set(proc_set);
+                    if self.platform_config.quotas_config.enabled && do_update_quotas {
+                        slot.quotas
+                            .increment_for_job(job, self.end - self.begin + 1, assignment.proc_set.core_count());
+                    }
+                } else {
+                    slot.add_proc_set(proc_set);
+                    // Quotas are not updated when adding resources
+                }
 
+                // A time-sharing entry is added even if adding resources.
                 match job.time_sharing {
                     None => {}
                     Some(TimeSharingType::AllAll) => slot.add_time_sharing_entry(&"*".into(), &"*".into(), proc_set),
@@ -492,22 +502,20 @@ impl SlotSet {
                     Some(TimeSharingType::UserName) => slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &job.name.clone().unwrap_or("".into()), proc_set),
                 }
 
-                if self.platform_config.quotas_config.enabled && do_update_quotas {
-                    slot.quotas
-                        .increment_for_job(job, self.end - self.begin + 1, assignment.proc_set.core_count());
-                }
+
             });
         (begin_slot_id, end_slot_id)
     }
 
     /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
     /// Also subtracts slot resources, and increment quotas counters for the jobs.
-    /// If `sub_resources` is true, the resources are subtracted from the slots. Otherwise, they are added.
-    /// If `do_update_quotas` is true, the quotas are also updated for the jobs.
+    /// - If `sub_resources` is true, the resources are subtracted from the slots. Otherwise, they are added.
+    /// - If `do_update_quotas` is true, the quotas are also updated for the jobs.
+    ///
     /// Pseudo jobs (for proc_set availability) should sub resources with `do_update_quotas` set to `false`.
-    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<&Job>, do_update_quotas: bool, mut start_slot_id: Option<i32>) {
+    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<&Job>, do_update_quotas: bool, sub_resources: bool, mut start_slot_id: Option<i32>) {
         for job in jobs {
-            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, do_update_quotas, start_slot_id);
+            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, do_update_quotas, sub_resources, start_slot_id);
             start_slot_id = Some(begin_slot_id);
         }
     }

@@ -287,6 +287,7 @@ impl From<QuotasMap> for QuotasTree {
 
 trait QuotasTreeNodeTrait {
     fn first_valid_key(&self, key: Option<&str>) -> Option<Box<str>>;
+    fn first_valid_key_multiple(&self, keys: &[&Box<str>]) -> Option<Box<str>>;
 }
 impl<T> QuotasTreeNodeTrait for HashMap<Box<str>, T> {
     /// Finds the first valid key in a QuotasTreeMap HashMap of a specific level.
@@ -320,6 +321,34 @@ impl<T> QuotasTreeNodeTrait for HashMap<Box<str>, T> {
                 None
             }
         })
+    }
+    fn first_valid_key_multiple(&self, keys: &[&Box<str>]) -> Option<Box<str>> {
+        let mut has_all = false;
+        let mut has_any = false;
+        let valid_key = self.keys()
+            .into_iter()
+            .find(|k| {
+                if keys.contains(k) {
+                    return true;
+                }
+                if !has_all && k.as_ref() == "*" {
+                    has_all = true;
+                }
+                if !has_any && k.as_ref() == "/" {
+                    has_any = true;
+                }
+                false
+            });
+        if let Some(key) = valid_key {
+            return Some(key.clone());
+        }
+        if has_any {
+            Some("/".into())
+        } else if has_all {
+            Some("*".into())
+        } else {
+            None
+        }
     }
 }
 
@@ -418,12 +447,13 @@ impl Quotas {
 
     /// Finds the rule key that should be applied to `job` (i.e., the QuotasMapKey).
     /// The rule is found by looking at `Quotas::rules_tree` with the following key priority: named > '/' > '*'
-    /// Quotas rules only applies to the first job type key in the `job.types` `Vec`.
+    /// Quotas rules are checked against all `job.types` keys, but as the map keys are not ordered,
+    /// it will lead to undefined behavior if there are quotas rules for different job types and jobs that have these job types at the same time.
     /// It returns two keys, the first one being the same as the second one, but with the "/" replaced by the actual name, and the value QuotasValue (the limits).
     pub fn find_applicable_rule(&self, job: &Job) -> Option<(QuotasKey, QuotasKey, &QuotasValue)> {
         let key_queue = Some(job.queue.as_ref());
         let key_project = job.project.as_ref().map(|s| s.as_ref());
-        let key_job_type = Some(job.types.iter().next().map(|(k, _v)| k.as_ref()).unwrap_or("*")); // TODO: job types is not ordered. How to take the first?
+        let key_job_types = job.types.iter().map(|(k, _v)| k).collect::<Box<[&Box<str>]>>();
         let key_user = job.user.as_ref().map(|s| s.as_ref());
 
         let mut rule_key = None;
@@ -433,7 +463,7 @@ impl Quotas {
             let map = self.rules_tree.0.get(&key_queue).unwrap();
             if let Some(key_project) = map.first_valid_key(key_project) {
                 let map = map.get(&key_project).unwrap();
-                if let Some(key_job_type) = map.first_valid_key(key_job_type) {
+                if let Some(key_job_type) = map.first_valid_key_multiple(key_job_types.as_ref()) {
                     let map = map.get(&key_job_type).unwrap();
                     if let Some(key_user) = map.first_valid_key(key_user) {
                         rule_value = map.get(&key_user);

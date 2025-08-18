@@ -50,7 +50,7 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
         .build();
 
     let mut jobs = indexmap![1 => job_1, 2 => job_2, 3 => job_3, 4 => job_4, 5 => job_5];
-    scheduling::schedule_jobs(&mut all_ss, &jobs.clone(), &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = jobs[0].clone().assignment.unwrap();
     let j2 = jobs[1].clone().assignment.unwrap();
     let j3 = jobs[2].clone().assignment.unwrap();

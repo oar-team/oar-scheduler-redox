@@ -6,14 +6,15 @@ use indexmap::IndexMap;
 use log::{error, info, warn};
 use std::cmp::max;
 use std::collections::HashMap;
-use std::ops::Bound;
 
 /// Schedule loop with support for jobs container - can be recursive
-pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs_ro: &IndexMap<u32, Job>, waiting_jobs_mut: &mut IndexMap<u32, Job>) {
-    for (job_id, job) in waiting_jobs_mut.into_iter() {
+pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &mut IndexMap<u32, Job>) {
+    let job_ids = waiting_jobs.keys().into_iter().cloned().collect::<Box<[u32]>>();
+    for job_id in job_ids {
         // Check job dependencies
+        let dependencies = waiting_jobs.get(&job_id).unwrap().dependencies.clone();
         let mut min_begin: Option<i64> = None;
-        if !job.dependencies.iter().all(|(dep_job_id, dep_state, dep_exit_code)| {
+        if !dependencies.iter().all(|(dep_job_id, dep_state, dep_exit_code)| {
             if dep_state.as_ref() == "Error" {
                 info!(
                     "Job {} has a dependency on job {} which is in error state, ignoring dependency.",
@@ -22,14 +23,14 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs_ro
                 return true;
             }
             if dep_state.as_ref() == "Waiting" {
-                if let Some(dep_job) = waiting_jobs_ro.get(dep_job_id) {
+                if let Some(dep_job) = waiting_jobs.get(dep_job_id) {
                     if let Some(dep_assignment) = &dep_job.assignment.as_ref() {
                         min_begin = Some(min_begin.map_or(dep_assignment.end + 1, |min| min.max(dep_assignment.end + 1)));
                         return true;
                     } else {
                         warn!(
-                            "Job {} has a dependency on job {} which has been sorted to be scheduled after. Please check the sorting algorithm.",
-                            job_id, dep_job_id
+                            "Job {} has a dependency on job {} which has not been scheduled. Please review the sorting algorithm and check that job {} has been scheduled correctly.",
+                            job_id, dep_job_id, dep_job_id
                         );
                     }
                 }
@@ -45,6 +46,7 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs_ro
         }
 
         // Schedule job
+        let job = waiting_jobs.get_mut(&job_id).unwrap();
         let slot_set = get_job_slot_set(slot_sets, job).expect("SlotSet not found");
         schedule_job(slot_set, job, min_begin);
 
@@ -114,14 +116,13 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
         iter = iter.start_at(cache_first_slot);
     }
     // Start at the minimum begin time if specified
-    let cache_end = iter.peek().map(|s| s.end()).unwrap_or(slot_set.begin());
+    let cache_begin = iter.peek().map(|s| s.begin()).unwrap_or(slot_set.begin());
     if let Some(min_begin) = min_begin
-        && min_begin > cache_end
+        && min_begin > cache_begin
     {
         if let Some(start_slot) = slot_set.slot_at(min_begin, iter.peek().map(|s| s.id())) {
             // If min_begin is not the beginning of a slot, we need to split the current slot at min_begin
             // (can occur if the job is not in the same slot set as its dependencies).
-            // TODO: Test this edge case
             if start_slot.begin() < min_begin {
                 let (_left_slot_id, right_slot_id) = slot_set.find_and_split_at(min_begin, true);
                 iter = slot_set.iter().start_at(right_slot_id);
@@ -187,15 +188,14 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
     res
 }
 
-
 /// Returns the slot set for a job using get_job_slot_set_name.
 pub fn get_job_slot_set<'s>(slot_sets: &'s mut HashMap<Box<str>, SlotSet>, job: &Job) -> Option<&'s mut SlotSet> {
     let slot_set_name = get_job_slot_set_name(job);
     if !slot_sets.contains_key(&slot_set_name) {
         error!(
-                "Job {} can't be scheduled, slot set {} is missing. Skip it for this round.",
-                job.id, slot_set_name
-            );
+            "Job {} can't be scheduled, slot set {} is missing. Skip it for this round.",
+            job.id, slot_set_name
+        );
         return None;
     }
     Some(slot_sets.get_mut(&slot_set_name).unwrap())
@@ -254,6 +254,9 @@ pub fn update_container_job_slot_set(slot_sets: &mut HashMap<Box<str>, SlotSet>,
                 0,
             ))
             .build();
-        slot_sets.get_mut(&inner_slot_set_name).unwrap().split_slots_for_job_and_update_resources(&pseudo_job, false, false, None);
+        slot_sets
+            .get_mut(&inner_slot_set_name)
+            .unwrap()
+            .split_slots_for_job_and_update_resources(&pseudo_job, false, false, None);
     }
 }

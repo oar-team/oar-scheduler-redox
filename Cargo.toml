@@ -4,7 +4,6 @@ members = ["oar3-scheduler", "oar3-scheduler-bench", "oar3-scheduler-lib"]
 
 [profile.release]
 lto = "fat"
-compiler-units = 1
 opt-level = "z"
 panic = "abort"
 strip = "debuginfo"

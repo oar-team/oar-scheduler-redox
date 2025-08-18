@@ -404,8 +404,8 @@ impl SlotSet {
         self.increment_next_id();
         (new_slot_id, slot_id)
     }
-    /// Find the slot containing the given time and split it before or after the time. See `Self::split_at`.
-    #[allow(dead_code)]
+    /// Find the slot containing the given time and split it right before `time`,
+    /// creating a new slot before or after the time depending on `before`. See `Self::split_at`.
     pub fn find_and_split_at(&mut self, time: i64, before: bool) -> (i32, i32) {
         let slot = self.slot_at(time, None);
         if let Some(slot) = slot {

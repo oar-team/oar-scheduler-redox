@@ -18,3 +18,6 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0"
 pyo3 = { version = "0.25", optional = true }
 auto_bench_fct = { version = "1", features = ["log"] }
+
+[dev-dependencies]
+env_logger = "0.11.8"

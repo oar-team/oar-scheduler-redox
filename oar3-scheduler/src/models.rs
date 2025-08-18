@@ -131,6 +131,7 @@ pub struct JobBuilder {
     moldables: Vec<Moldable>,
     assignment: Option<JobAssignment>,
     time_sharing: Option<TimeSharingType>,
+    dependencies: Vec<(u32, Box<str>, Option<i32>)>,
 }
 impl JobBuilder {
     pub fn new(id: u32) -> Self {
@@ -144,6 +145,7 @@ impl JobBuilder {
             moldables: vec![],
             assignment: None,
             time_sharing: None,
+            dependencies: Vec::new(),
         }
     }
     pub fn moldable_auto(mut self, id: u32, walltime: i64, requests: HierarchyRequests) -> Self {
@@ -202,6 +204,13 @@ impl JobBuilder {
         self.assignment = Some(assignment);
         self
     }
+    pub fn add_dependency(mut self, dep_job_id: u32, dep_job_state: Box<str>, dep_job_exit_code: Option<i32>) -> Self {
+        self.dependencies.push((dep_job_id, dep_job_state, dep_job_exit_code));
+        self
+    }
+    pub fn add_valid_dependency(self, dep_job_id: u32) -> Self {
+        self.add_dependency(dep_job_id, "Waiting".into(), None)
+    }
     pub fn build(self) -> Job {
         Job {
             id: self.id,
@@ -214,7 +223,7 @@ impl JobBuilder {
             assignment: self.assignment,
             quotas_hit_count: 0,
             time_sharing: self.time_sharing,
-            dependencies: vec![],
+            dependencies: self.dependencies,
         }
     }
 }

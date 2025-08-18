@@ -56,7 +56,7 @@ fn test_quotas_one_job_no_rules() {
         .build();
 
     let jobs = &mut indexmap![1 => job];
-    scheduling::schedule_jobs(&mut all_ss, &jobs.clone(), jobs);
+    scheduling::schedule_jobs(&mut all_ss, jobs);
 
     let ss = all_ss.get("default").unwrap();
 
@@ -100,7 +100,7 @@ fn test_quotas_one_job_rule_nb_res_1() {
         .build();
 
     let mut jobs = indexmap![1 => job];
-    scheduling::schedule_jobs(&mut all_ss, &jobs.clone(), &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
     println!("jobs: {:?}", jobs);
 
@@ -138,7 +138,7 @@ fn test_quotas_one_job_rule_nb_res_2() {
         .build();
 
     let mut jobs = indexmap![2 => job];
-    scheduling::schedule_jobs(&mut all_ss, &jobs.clone(), &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
 
     // With a quota of 64, the job should get scheduled on 64 cores
     let scheduled = &jobs[0].assignment;
@@ -201,7 +201,7 @@ fn test_quotas_four_jobs_rule_1() {
         .moldable(moldable_j4)
         .build();
     let mut jobs_new = indexmap![3 => j3, 4 => j4];
-    scheduling::schedule_jobs(&mut all_ss, &jobs_new.clone(), &mut jobs_new);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j3 = &jobs_new[0];
     let j4 = &jobs_new[1];
     // Check results
@@ -259,7 +259,7 @@ fn test_quotas_three_jobs_rule_1() {
         .moldable(moldable_j3)
         .build();
     let mut jobs_new = indexmap![2 => j2, 3 => j3];
-    scheduling::schedule_jobs(&mut all_ss, &jobs_new.clone(), &mut jobs_new);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs_new);
     let j2 = &jobs_new[0];
     let j3 = &jobs_new[1];
     // Check results
@@ -301,7 +301,7 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     let moldable_j2 = Moldable::new(8, 60, HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("cpus".into(), 2)])]));
     let j2 = JobBuilder::new(2).user("tutu".into()).queue("default".into()).moldable(moldable_j2).build();
     let mut jobs = indexmap![1 => j1, 2 => j2];
-    scheduling::schedule_jobs(&mut all_ss, &jobs.clone(), &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
     let j2 = &jobs[1];
     // Check results
@@ -346,7 +346,7 @@ fn test_quotas_two_jobs_job_type_proc() {
         .moldable(moldable_j2)
         .build();
     let mut jobs = indexmap![1 => j1, 2 => j2];
-    scheduling::schedule_jobs(&mut all_ss, &jobs.clone(), &mut jobs);
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
     let j1 = &jobs[0];
     let j2 = &jobs[1];
     // Check results

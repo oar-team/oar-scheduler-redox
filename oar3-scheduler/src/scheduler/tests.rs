@@ -8,3 +8,5 @@ mod quotas_test;
 mod platform_mock;
 #[cfg(test)]
 mod time_sharing_test;
+#[cfg(test)]
+mod dependencies_test;

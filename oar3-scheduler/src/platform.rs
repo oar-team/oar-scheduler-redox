@@ -1,5 +1,6 @@
-use crate::models::ProcSet;
-use crate::models::{proc_set_to_python, Job};
+#[cfg(feature = "pyo3")]
+use crate::models::proc_set_to_python;
+use crate::models::{Job, ProcSet};
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasConfig;
 use indexmap::IndexMap;

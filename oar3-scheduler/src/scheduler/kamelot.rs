@@ -4,7 +4,6 @@ use crate::scheduler::scheduling::{get_job_slot_set_name, schedule_jobs};
 use crate::scheduler::slot::SlotSet;
 use indexmap::IndexMap;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::rc::Rc;
 
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -> usize {
@@ -12,10 +11,9 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
     let max_time = platform.get_max_time();
 
     let platform_config = platform.get_platform_config();
-    let waiting_jobs_ro = platform.get_waiting_jobs();
-    let mut waiting_jobs_mut = waiting_jobs_ro.clone();
+    let mut waiting_jobs = platform.get_waiting_jobs().clone();
 
-    if waiting_jobs_mut.len() > 0 {
+    if waiting_jobs.len() > 0 {
         let mut initial_slot_set = SlotSet::from_platform_config(Rc::clone(platform_config), now, max_time);
 
         // Resource availability (available_upto field) is integrated through pseudo jobs
@@ -63,10 +61,10 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
         }
 
         // Scheduling
-        schedule_jobs(&mut slot_sets, waiting_jobs_ro, &mut waiting_jobs_mut);
+        schedule_jobs(&mut slot_sets, &mut waiting_jobs);
 
         // Save assignments
-        let assigned_jobs = waiting_jobs_mut
+        let assigned_jobs = waiting_jobs
             .into_iter()
             .filter(|(_id, job)| job.assignment.is_some())
             .collect::<IndexMap<u32, Job>>();

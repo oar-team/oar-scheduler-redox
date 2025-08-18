@@ -874,6 +874,7 @@ name = "oar3-scheduler"
 version = "0.1.0"
 dependencies = [
  "auto_bench_fct",
+ "env_logger",
  "indexmap",
  "log",
  "prettytable-rs",

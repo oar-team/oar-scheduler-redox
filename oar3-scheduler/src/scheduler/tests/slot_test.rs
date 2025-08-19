@@ -170,6 +170,27 @@ pub fn test_split_slots() {
 }
 
 #[test]
+pub fn test_split_slots_outside() {
+    let mut ss = get_test_slot_set();
+    let scheduled_job_data = JobAssignment::new(-5, 14, ProcSet::from_iter([4..=6]), 0);
+    let job = JobBuilder::new(1).assign(scheduled_job_data).build();
+    ss.split_slots_for_job_and_update_resources(&job, true, true, None);
+
+    assert_eq!(ss.slot_at(4, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=3, 7..=32]));
+    assert_eq!(ss.slot_at(5, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=3, 7..=32]));
+    assert_eq!(ss.slot_at(9, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=3, 7..=32]));
+    assert_eq!(
+        ss.slot_at(10, None).unwrap().proc_set().clone(),
+        ProcSet::from_iter([1..=3, 7..=16, 28..=32])
+    );
+    assert_eq!(
+        ss.slot_at(14, None).unwrap().proc_set().clone(),
+        ProcSet::from_iter([1..=3, 7..=16, 28..=32])
+    );
+    assert_eq!(ss.slot_at(15, None).unwrap().proc_set().clone(), ProcSet::from_iter([1..=16, 28..=32]));
+}
+
+#[test]
 pub fn test_intersect_slots_intervals() {
     let ss = get_test_slot_set();
     assert_eq!(ss.intersect_slots_intervals(1, 2, None, None, &PlaceholderType::None), ProcSet::from_iter([1..=16, 28..=32]));

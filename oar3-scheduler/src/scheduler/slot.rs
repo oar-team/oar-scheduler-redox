@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::iter::Iterator;
 use std::rc::Rc;
-use log::warn;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -150,11 +149,9 @@ impl Slot {
     /// This will declare that jobs with `placeholder` set to [`PlaceholderType::Placeholder(name)`] can no longer use the `proc_set` resources in
     /// this slot as they are no longer available (used by a scheduled job with `placeholder` set to [`PlaceholderType::Allow(name)`]).
     pub fn sub_placeholder_entry(&mut self, name: &Box<str>, proc_set: &ProcSet) {
-        self.placeholder_proc_sets
-            .entry(name.clone())
-            .and_modify(|p| {
-                *p = p.clone() - proc_set;
-            });
+        self.placeholder_proc_sets.entry(name.clone()).and_modify(|p| {
+            *p = p.clone() - proc_set;
+        });
     }
 }
 
@@ -437,21 +434,29 @@ impl SlotSet {
     }
 
     /// Finds the slot containing `begin`, and the slot containing `end`. Returns their ids.
-    ///     /// If start_slot_id is not None, it will be used to find faster the slot of begin and end by not looping through all the slots.
-    /// Equivalent to calling two times `Self::slot_id_at`.
+    /// If `begin` is before the first slot, it will return the first slot.
+    /// If `end` is after the last slot, it will return the last slot.
+    /// If `begin` is after the end slot, or `end` is before the begin slot, it will return None.
+    /// If `start_slot_id` is not [`None`], it will be used to find faster the slot of begin and end by not looping through all the slots.
+    /// Equivalent to calling two times [`Self::slot_id_at`].
     #[allow(dead_code)]
     pub fn get_encompassing_range(&self, begin: i64, end: i64, start_slot_id: Option<i32>) -> Option<(&Slot, &Slot)> {
-        if let Some(begin_slot) = self.slot_at(begin, start_slot_id) {
-            if let Some(end_slot) = self.slot_at(end, Some(begin_slot.id)) {
-                return Some((begin_slot, end_slot));
-            }
-        }
-        None
+        let begin_slot_opt = if begin < self.begin {
+            self.first_slot()
+        } else {
+            self.slot_at(begin, start_slot_id)
+        };
+        let end_slot_opt = if end > self.end {
+            self.last_slot()
+        } else {
+            self.slot_at(end, begin_slot_opt.map(|b| b.id))
+        };
+        begin_slot_opt.zip(end_slot_opt)
     }
 
     /// Find the slot right before begin, and the slot right after end. Returns their ids.
     /// If start_slot_id is not None, it will be used to find faster the slot of `begin` and end by not looping through all the slots.
-    /// Equivalent to calling two times `Self::slot_id_at`, and getting the previous/next ids.
+    /// Equivalent to calling two times [`Self::slot_id_at`], and getting the previous/next ids.
     #[allow(dead_code)]
     pub fn get_encompassing_range_strict(&self, begin: i64, end: i64, start_slot_id: Option<i32>) -> Option<(&Slot, &Slot)> {
         match self.get_encompassing_range(begin, end, start_slot_id).map(|(s1, s2)| (s1.prev, s2.next)) {
@@ -466,14 +471,12 @@ impl SlotSet {
     /// Splits the slots to make them fit a job at time `begin..=end`. Create new slots on the outside of the range.
     /// If start_slot_id is not None, it will be used to find faster the slots of the range by not looping through all the slots.
     /// Returns the first and last slot ids in which the range can fit, and then in which the job can be scheduled.
-    pub fn split_slots_for_range(&mut self, begin: i64, end: i64, start_slot_id: Option<i32>) -> (i32, i32) {
+    pub fn split_slots_for_range(&mut self, begin: i64, end: i64, start_slot_id: Option<i32>) -> Option<(i32, i32)> {
         let (begin_slot, end_slot) = if let Some(slots) = self.get_encompassing_range(begin, end, start_slot_id) {
             slots
         } else {
-            panic!(
-                "SlotSet::split_slots_for_job: no encompassing range found: no slot found at time {} or {}",
-                begin, end
-            );
+            // Nothing to split as the [begin, end] range is disjoint from the slotset.
+            return None;
         };
         let begin_slot_id = begin_slot.id;
         let end_slot_id = end_slot.id;
@@ -485,16 +488,28 @@ impl SlotSet {
         if end_slot_end > end {
             self.split_at(end_slot_id, end + 1, false);
         }
-        (begin_slot_id, end_slot_id)
+        Some((begin_slot_id, end_slot_id))
     }
-    /// See `SlotSet::split_slots_for_jobs_and_update_resources`.
-    pub fn split_slots_for_job_and_update_resources(&mut self, job: &Job, do_update_quotas: bool, sub_resources: bool, start_slot_id: Option<i32>) -> (i32, i32) {
+    /// See [`SlotSet::split_slots_for_jobs_and_update_resources`].
+    /// Returns None if the job is outside of the slotset.
+    pub fn split_slots_for_job_and_update_resources(
+        &mut self,
+        job: &Job,
+        do_update_quotas: bool,
+        sub_resources: bool,
+        start_slot_id: Option<i32>,
+    ) -> Option<(i32, i32)> {
         let assignment = job
             .assignment
             .as_ref()
             .expect("Job must be scheduled to split slots and update resources for it");
 
-        let (begin_slot_id, end_slot_id) = self.split_slots_for_range(assignment.begin, assignment.end, start_slot_id);
+        let (begin_slot_id, end_slot_id) = match self.split_slots_for_range(assignment.begin, assignment.end, start_slot_id) {
+            Some(slots) => slots,
+            None => {
+                return None;
+            }
+        };
         self.iter()
             .between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
@@ -520,7 +535,9 @@ impl SlotSet {
                     Some(TimeSharingType::AllAll) => slot.add_time_sharing_entry(&"*".into(), &"*".into(), proc_set),
                     Some(TimeSharingType::AllName) => slot.add_time_sharing_entry(&"*".into(), &job.name.clone().unwrap_or("".into()), proc_set),
                     Some(TimeSharingType::UserAll) => slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &"*".into(), proc_set),
-                    Some(TimeSharingType::UserName) => slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &job.name.clone().unwrap_or("".into()), proc_set),
+                    Some(TimeSharingType::UserName) => {
+                        slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &job.name.clone().unwrap_or("".into()), proc_set)
+                    }
                 }
                 // A placeholder entry is added even if adding resources.
                 match &job.placeholder {
@@ -534,9 +551,8 @@ impl SlotSet {
                     }
                     _ => {}
                 }
-
             });
-        (begin_slot_id, end_slot_id)
+        Some((begin_slot_id, end_slot_id))
     }
 
     /// Splits the slots to make them fit the jobs. `jobs` must be sorted by start time.
@@ -545,9 +561,21 @@ impl SlotSet {
     /// - If `do_update_quotas` is true, the quotas are also updated for the jobs.
     ///
     /// Pseudo jobs (for proc_set availability) should sub resources with `do_update_quotas` set to `false`.
-    pub fn split_slots_for_jobs_and_update_resources(&mut self, jobs: &Vec<&Job>, do_update_quotas: bool, sub_resources: bool, mut start_slot_id: Option<i32>) {
+    pub fn split_slots_for_jobs_and_update_resources(
+        &mut self,
+        jobs: &Vec<&Job>,
+        do_update_quotas: bool,
+        sub_resources: bool,
+        mut start_slot_id: Option<i32>,
+    ) {
         for job in jobs {
-            let (begin_slot_id, _end_slot_id) = self.split_slots_for_job_and_update_resources(job, do_update_quotas, sub_resources, start_slot_id);
+            let (begin_slot_id, _end_slot_id) =
+                match self.split_slots_for_job_and_update_resources(job, do_update_quotas, sub_resources, start_slot_id) {
+                    Some(slots) => slots,
+                    None => {
+                        continue;
+                    }
+                };
             start_slot_id = Some(begin_slot_id);
         }
     }
@@ -556,7 +584,14 @@ impl SlotSet {
     /// Take into account the time-shared procsets if `ts_user_name` and `ts_job_name` are [`Some`].
     /// Take into account the placeholder procsets if ph is [`PlaceholderType::Allow`].
     #[auto_bench_fct_hy]
-    pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32, ts_user_name: Option<&Box<str>>, ts_job_name: Option<&Box<str>>, ph: &PlaceholderType) -> ProcSet {
+    pub fn intersect_slots_intervals(
+        &self,
+        begin_slot_id: i32,
+        end_slot_id: i32,
+        ts_user_name: Option<&Box<str>>,
+        ts_job_name: Option<&Box<str>>,
+        ph: &PlaceholderType,
+    ) -> ProcSet {
         self.iter()
             .between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| {

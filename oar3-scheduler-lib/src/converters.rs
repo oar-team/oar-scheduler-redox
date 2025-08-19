@@ -158,8 +158,19 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         None
     };
 
-    // TODO: convert placeholder
-    let placeholder = PlaceholderType::None;
+    // NO_PLACEHOLDER = 0 ; PLACEHOLDER = 1 ; ALLOW = 2
+    let placeholder_type = py_job.getattr("ph")
+        .map_or(Ok(0), |ph| {
+            ph.extract::<i32>()
+                .map_err(|_| pyo3::exceptions::PyTypeError::new_err("Invalid placeholder type"))
+        })?;
+
+    let placeholder = match placeholder_type {
+        0 => PlaceholderType::None,
+        1 => PlaceholderType::Allow(py_job.getattr("ph_name")?.extract::<String>()?.into_boxed_str()),
+        2 => PlaceholderType::Placeholder(py_job.getattr("ph_name")?.extract::<String>()?.into_boxed_str()),
+        _ => return Err(pyo3::exceptions::PyValueError::new_err("Invalid placeholder type value")),
+    };
 
     // Moldables
     let moldables: Vec<_> = py_job

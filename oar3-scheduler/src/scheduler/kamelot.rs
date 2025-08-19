@@ -5,6 +5,7 @@ use crate::scheduler::slot::SlotSet;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::rc::Rc;
+use log::info;
 
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -> usize {
     let now = platform.get_now();
@@ -12,6 +13,14 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
 
     let platform_config = platform.get_platform_config();
     let mut waiting_jobs = platform.get_waiting_jobs().clone();
+
+    // Print state
+    info!("Scheduling cycle started at time {} with {} scheduled jobs and {} waiting jobs and the queues: {:?}", now, platform.get_scheduled_jobs().len(), waiting_jobs.len(), queues);
+    info!("ResourceSet: {:?}", platform_config.resource_set);
+    info!("Quotas Config: {:?}", platform_config.quotas_config);
+    info!("job_security_time: {} | hour_size: {} | cache_enabled: {}", platform_config.job_security_time, platform_config.hour_size, platform_config.cache_enabled);
+    // info!("Scheduled jobs: {:?}", platform.get_scheduled_jobs());
+    // info!("Waiting jobs: {:?}", waiting_jobs);
 
     if waiting_jobs.len() > 0 {
         let mut initial_slot_set = SlotSet::from_platform_config(Rc::clone(platform_config), now, max_time);

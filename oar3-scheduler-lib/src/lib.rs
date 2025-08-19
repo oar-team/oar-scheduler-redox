@@ -1,5 +1,7 @@
 mod converters;
 mod platform;
+
+use log::LevelFilter;
 use pyo3::prelude::*;
 use oar3_scheduler::scheduler::kamelot;
 use crate::platform::Platform;
@@ -7,7 +9,13 @@ use crate::platform::Platform;
 /// Python module declaration
 #[pymodule]
 fn oar3_scheduler_lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(schedule_cycle, m)?)?;
+    m.add_function(wrap_pyfunction!(schedule_cycle, m).unwrap()).unwrap();
+
+
+    env_logger::Builder::new()
+        .filter(None, LevelFilter::Info)
+        .init();
+
     Ok(())
 }
 
@@ -21,10 +29,10 @@ fn schedule_cycle(
     py_queues: Bound<PyAny>,
 ) -> PyResult<()> {
     // Extracting the platform (including the resource set, quotas config, and waiting jobs)
-    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, &py_queues)?;
+    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, &py_queues).unwrap();
 
     // Scheduling (Platform automatically calls py_platform.save_assigns upon saving scheduled jobs.)
-    let queues: Vec<String> = py_queues.extract()?;
+    let queues: Vec<String> = py_queues.extract().unwrap();
     kamelot::schedule_cycle(&mut platform, queues);
 
     Ok(())

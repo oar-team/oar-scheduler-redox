@@ -110,27 +110,27 @@ pub fn schedule_job(slot_set: &mut SlotSet, job: &mut Job, min_begin: Option<i64
 pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Moldable, min_begin: Option<i64>) -> Option<(i32, i32, ProcSet, u32)> {
     let mut iter = slot_set.iter();
     // Start at cache if available
-    if job.can_use_cache()
-        && let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable)
-    {
-        iter = iter.start_at(cache_first_slot);
+    if job.can_use_cache() {
+        if let Some(cache_first_slot) = slot_set.get_cache_first_slot(moldable) {
+            iter = iter.start_at(cache_first_slot);
+        }
     }
     // Start at the minimum begin time if specified
     let cache_begin = iter.peek().map(|s| s.begin()).unwrap_or(slot_set.begin());
-    if let Some(min_begin) = min_begin
-        && min_begin > cache_begin
-    {
-        if let Some(start_slot) = slot_set.slot_at(min_begin, iter.peek().map(|s| s.id())) {
-            // If min_begin is not the beginning of a slot, we need to split the current slot at min_begin
-            // (can occur if the job is not in the same slot set as its dependencies).
-            if start_slot.begin() < min_begin {
-                let (_left_slot_id, right_slot_id) = slot_set.find_and_split_at(min_begin, true);
-                iter = slot_set.iter().start_at(right_slot_id);
-            } else {
-                iter = iter.start_at(start_slot.id());
+    if let Some(min_begin) = min_begin {
+        if min_begin > cache_begin {
+            if let Some(start_slot) = slot_set.slot_at(min_begin, iter.peek().map(|s| s.id())) {
+                // If min_begin is not the beginning of a slot, we need to split the current slot at min_begin
+                // (can occur if the job is not in the same slot set as its dependencies).
+                if start_slot.begin() < min_begin {
+                    let (_left_slot_id, right_slot_id) = slot_set.find_and_split_at(min_begin, true);
+                    iter = slot_set.iter().start_at(right_slot_id);
+                } else {
+                    iter = iter.start_at(start_slot.id());
+                }
+            } else if min_begin > slot_set.end() {
+                return None; // No slots available after the minimum begin time
             }
-        } else if min_begin > slot_set.end() {
-            return None; // No slots available after the minimum begin time
         }
     }
 

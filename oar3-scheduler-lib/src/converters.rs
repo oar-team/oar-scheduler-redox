@@ -170,23 +170,22 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
     if py_job.hasattr("start_time")? && py_job.hasattr("walltime")? {
         let begin: Option<i64> = py_job.getattr("start_time")?.extract()?;
         let walltime: Option<i64> = py_job.getattr("walltime")?.extract()?;
-        if let (Some(begin), Some(walltime)) = (begin, walltime)
-            && begin > 0
-            && walltime > 0
-        {
-            let end: i64 = begin + walltime - 1;
+        if let (Some(begin), Some(walltime)) = (begin, walltime) {
+            if begin > 0 && walltime > 0 {
+                let end: i64 = begin + walltime - 1;
 
-            let proc_set: ProcSet = build_proc_set(&py_job.getattr("res_set")?)?;
+                let proc_set: ProcSet = build_proc_set(&py_job.getattr("res_set")?)?;
 
-            let moldables_id: u32 = py_job.getattr("moldable_id")?.extract()?;
-            let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
+                let moldables_id: u32 = py_job.getattr("moldable_id")?.extract()?;
+                let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
 
-            assignment = Some(JobAssignment {
-                begin,
-                end,
-                proc_set,
-                moldable_index,
-            });
+                assignment = Some(JobAssignment {
+                    begin,
+                    end,
+                    proc_set,
+                    moldable_index,
+                });
+            }
         }
     }
 

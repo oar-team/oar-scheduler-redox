@@ -32,7 +32,7 @@ async fn main() {
 
 
     let benchmark = BenchmarkConfig {
-        target: BenchmarkTarget::RustFromPython,
+        target: BenchmarkTarget::Rust,
         sample_type: WaitingJobsSampleType::NodeOnly,
         cache: true,
         averaging: 1,

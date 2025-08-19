@@ -300,8 +300,10 @@ impl<T> QuotasTreeNodeTrait for HashMap<Box<str>, T> {
             .keys()
             .into_iter()
             .find(|k| {
-                if let Some(key) = key && k.as_ref() == key {
-                    return true;
+                if let Some(key) = key {
+                    if k.as_ref() == key {
+                        return true;
+                    }
                 }
                 if !has_all && k.as_ref() == "*" {
                     has_all = true;
@@ -478,12 +480,16 @@ impl Quotas {
             if key_queue.as_ref() == "/" {
                 *key_queue = job.queue.clone().into();
             }
-            if let Some(project) = &job.project && key_project.as_ref() == "/" {
-                *key_project = project.clone().into();
+            if let Some(project) = &job.project {
+                if key_project.as_ref() == "/" {
+                    *key_project = project.clone().into();
+                }
             }
             // "/" is not available for job types
-            if let Some(user) = &job.user && key_user.as_ref() == "/" {
-                *key_user = user.clone().into();
+            if let Some(user) = &job.user {
+                if key_user.as_ref() == "/" {
+                    *key_user = user.clone().into();
+                }
             }
 
             return Some((rule_key_counter.unwrap(), rule_key.unwrap(), rule_value.unwrap()));

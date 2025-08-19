@@ -80,6 +80,11 @@ import oar3_scheduler_lib
 oar3_scheduler_lib.schedule_cycle(session, config, platform, queues)
 ```
 
+# Notes
+- A job is subject to a single quota rule. The rule to be applied is the one that matches the job with the maximum specificity.
+  If the job has two or more types and quotas are defined for booth types, the behavior is undefined.
+- Container jobs are subject to quotas limitations, but they never increment the quotas counters.
+
 # License
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
 See the [LICENSE.md](LICENSE.md) file for details.

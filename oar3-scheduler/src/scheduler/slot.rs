@@ -1,4 +1,4 @@
-use crate::models::{Job, Moldable, ProcSet, ProcSetCoresOp, TimeSharingType};
+use crate::models::{Job, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
 use crate::platform::PlatformConfig;
 use crate::scheduler::quotas::Quotas;
 use auto_bench_fct::auto_bench_fct_hy;
@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::iter::Iterator;
 use std::rc::Rc;
+use log::warn;
 
 /// A slot is a time interval storing the available resources described as a ProcSet.
 /// The time interval is [b, e] (b and e included, in epoch seconds).
@@ -24,8 +25,9 @@ pub struct Slot {
     /// Stores taken intervals that can be shared with the user and the job.
     /// It is the complementary of the original `ts_itvs` of the python scheduler, which lists the occupied intervals without the shareable ones.
     /// Mapping: (user_name or *) -> (job name or *) -> ProcSet
-    time_shared_proc_set: HashMap<Box<str>, HashMap<Box<str>, ProcSet>>,
-    // placeholder_proc_set: HashMap<String, ProcSet>,
+    time_shared_proc_sets: HashMap<Box<str>, HashMap<Box<str>, ProcSet>>,
+    /// Stores intervals reserved by [`PlaceholderType::Placeholder`] jobs not yet used by [`PlaceholderType::Allow`] jobs
+    placeholder_proc_sets: HashMap<Box<str>, ProcSet>,
 }
 impl Debug for Slot {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -57,8 +59,8 @@ impl Slot {
             end,
             quotas: quotas.unwrap_or(Quotas::new(platform_config.clone())),
             platform_config,
-            time_shared_proc_set: HashMap::new(),
-            //placeholder_proc_set: HashMap::new(),
+            time_shared_proc_sets: HashMap::new(),
+            placeholder_proc_sets: HashMap::new(),
         }
     }
 
@@ -109,31 +111,50 @@ impl Slot {
         )
     }
 
-    /// Returns the proc_set of the slot, taking into account the time-sharing for the given user and job names.
-    /// Meaning that the time-shared proc_set of the user and job name is added to the proc_set of the slot to give the available resources for the job.
-    pub fn get_proc_set_with_time_sharing(&self, user_name: &Box<str>, job_name: &Box<str>) -> ProcSet {
+    /// Returns the time-shareable procset for this slot for the given user and job names.
+    pub fn get_time_sharing_proc_set(&self, user_name: &Box<str>, job_name: &Box<str>) -> ProcSet {
         if let Some(map) = self
-            .time_shared_proc_set
+            .time_shared_proc_sets
             .get("*".into())
-            .or_else(|| self.time_shared_proc_set.get(user_name))
+            .or_else(|| self.time_shared_proc_sets.get(user_name))
         {
             if let Some(proc_set) = map.get("*".into()).or_else(|| map.get(job_name)) {
-                return self.proc_set.clone() | proc_set.clone();
+                return proc_set.clone();
             }
         }
-        self.proc_set.clone()
+        ProcSet::new()
     }
 
     /// Updates the `time_shared_proc_set` adding an entry for the user and job names.
     /// user_name and job_name can either be a user and job name, or be `*`.
     /// This will declare that jobs with the given user and job names can use the proc_set resources in this slot even if they are not in `self.proc_set`.
     pub fn add_time_sharing_entry(&mut self, user_name: &Box<str>, job_name: &Box<str>, proc_set: &ProcSet) {
-        self.time_shared_proc_set
+        self.time_shared_proc_sets
             .entry(user_name.clone())
             .or_insert(HashMap::new())
             .entry(job_name.clone())
-            .and_modify(|p| *p = p.clone() | proc_set)
+            .and_modify(|p| *p |= proc_set)
             .or_insert(proc_set.clone());
+    }
+
+    /// Updates the `placeholder_proc_sets` adding an entry for the given name.
+    /// This will declare that jobs with `placeholder` set to [`PlaceholderType::Placeholder(name)`] can use the `proc_set` resources in this slot,
+    /// even if they are not in `self.proc_set`.
+    pub fn add_placeholder_entry(&mut self, name: &Box<str>, proc_set: &ProcSet) {
+        self.placeholder_proc_sets
+            .entry(name.clone())
+            .and_modify(|p| *p |= proc_set)
+            .or_insert(proc_set.clone());
+    }
+    /// Updates the `placeholder_proc_sets` removing the `proc_set` from the entry for the given name.
+    /// This will declare that jobs with `placeholder` set to [`PlaceholderType::Placeholder(name)`] can no longer use the `proc_set` resources in
+    /// this slot as they are no longer available (used by a scheduled job with `placeholder` set to [`PlaceholderType::Allow(name)`]).
+    pub fn sub_placeholder_entry(&mut self, name: &Box<str>, proc_set: &ProcSet) {
+        self.placeholder_proc_sets
+            .entry(name.clone())
+            .and_modify(|p| {
+                *p = p.clone() - proc_set;
+            });
     }
 }
 
@@ -501,7 +522,18 @@ impl SlotSet {
                     Some(TimeSharingType::UserAll) => slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &"*".into(), proc_set),
                     Some(TimeSharingType::UserName) => slot.add_time_sharing_entry(&job.user.clone().unwrap_or("".into()), &job.name.clone().unwrap_or("".into()), proc_set),
                 }
-
+                // A placeholder entry is added even if adding resources.
+                match &job.placeholder {
+                    PlaceholderType::Placeholder(name) => {
+                        slot.add_placeholder_entry(name, proc_set);
+                    }
+                    PlaceholderType::Allow(name) => {
+                        if sub_resources {
+                            slot.sub_placeholder_entry(name, proc_set);
+                        }
+                    }
+                    _ => {}
+                }
 
             });
         (begin_slot_id, end_slot_id)
@@ -521,26 +553,25 @@ impl SlotSet {
     }
 
     /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive)
+    /// Take into account the time-shared procsets if `ts_user_name` and `ts_job_name` are [`Some`].
+    /// Take into account the placeholder procsets if ph is [`PlaceholderType::Allow`].
     #[auto_bench_fct_hy]
-    pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
-        self.iter()
-            .between(begin_slot_id, end_slot_id)
-            .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| acc & slot.proc_set())
-    }
-    /// Returns the intersection of all the slots’ intervals between begin_slot_id and end_slot_id (inclusive).
-    /// Take into account the time-sharing for the given user and job names.
-    #[auto_bench_fct_hy]
-    pub fn intersect_slots_intervals_with_time_sharing(
-        &self,
-        begin_slot_id: i32,
-        end_slot_id: i32,
-        user_name: &Box<str>,
-        job_name: &Box<str>,
-    ) -> ProcSet {
+    pub fn intersect_slots_intervals(&self, begin_slot_id: i32, end_slot_id: i32, ts_user_name: Option<&Box<str>>, ts_job_name: Option<&Box<str>>, ph: &PlaceholderType) -> ProcSet {
         self.iter()
             .between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| {
-                acc & slot.get_proc_set_with_time_sharing(&user_name, &job_name)
+                let mut slot_proc_set = slot.proc_set().clone();
+                // Check time-sharing
+                if let Some((user_name, job_name)) = ts_user_name.zip(ts_job_name) {
+                    slot_proc_set |= slot.get_time_sharing_proc_set(user_name, job_name);
+                }
+                // Check placeholder
+                if let PlaceholderType::Allow(name) = ph {
+                    if let Some(ph_proc_set) = slot.placeholder_proc_sets.get(name) {
+                        slot_proc_set |= ph_proc_set;
+                    }
+                }
+                acc & slot_proc_set
             })
     }
     #[allow(dead_code)]

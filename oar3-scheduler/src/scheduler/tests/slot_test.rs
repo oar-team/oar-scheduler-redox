@@ -1,4 +1,4 @@
-use crate::models::{JobAssignment, JobBuilder, ProcSet};
+use crate::models::{JobAssignment, JobBuilder, PlaceholderType, ProcSet};
 use crate::scheduler::slot::{Slot, SlotSet};
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use std::collections::HashMap;
@@ -172,7 +172,7 @@ pub fn test_split_slots() {
 #[test]
 pub fn test_intersect_slots_intervals() {
     let ss = get_test_slot_set();
-    assert_eq!(ss.intersect_slots_intervals(1, 2), ProcSet::from_iter([1..=16, 28..=32]));
-    assert_eq!(ss.intersect_slots_intervals(2, 2), ProcSet::from_iter([1..=16, 28..=32]));
-    assert_eq!(ss.intersect_slots_intervals(1, 3), ProcSet::from_iter([1..=8, 30..=32]));
+    assert_eq!(ss.intersect_slots_intervals(1, 2, None, None, &PlaceholderType::None), ProcSet::from_iter([1..=16, 28..=32]));
+    assert_eq!(ss.intersect_slots_intervals(2, 2, None, None, &PlaceholderType::None), ProcSet::from_iter([1..=16, 28..=32]));
+    assert_eq!(ss.intersect_slots_intervals(1, 3, None, None, &PlaceholderType::None), ProcSet::from_iter([1..=8, 30..=32]));
 }

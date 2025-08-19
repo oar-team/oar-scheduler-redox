@@ -40,6 +40,7 @@ pub struct Job {
     /// Used for benchmarking the quotas hit count
     pub quotas_hit_count: u32,
     pub time_sharing: Option<TimeSharingType>,
+    pub placeholder: PlaceholderType,
     /// List of job dependencies, tuples of (job_id, state, exit_code)
     pub dependencies: Vec<(u32, Box<str>, Option<i32>)>,
 }
@@ -67,6 +68,27 @@ impl TimeSharingType {
                 TimeSharingType::AllAll // Default to AllAll if invalid
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlaceholderType {
+    /// Mark the job as a placeholder and name it by the String parameter,
+    /// meaning it is not a real job but a placeholder for other jobs to be scheduled on its resources.
+    Placeholder(Box<str>),
+    /// Allow the job to use the resources of the placeholder referenced by the String parameter.
+    Allow(Box<str>),
+    None,
+}
+impl PlaceholderType {
+    pub fn is_placeholder(&self) -> bool {
+        matches!(self, PlaceholderType::Placeholder(_))
+    }
+    pub fn is_allow(&self) -> bool {
+        matches!(self, PlaceholderType::Allow(_))
+    }
+    pub fn is_none(&self) -> bool {
+        matches!(self, PlaceholderType::None)
     }
 }
 
@@ -113,7 +135,7 @@ impl Job {
     }
     /// Returns true if the job can be scheduled using the cache.
     pub fn can_use_cache(&self) -> bool {
-        self.time_sharing.is_none()
+        self.time_sharing.is_none() && self.placeholder.is_none()
     }
     /// Returns true if the job assignment can be used to insert a cache entry.
     pub fn can_set_cache(&self) -> bool {
@@ -131,6 +153,7 @@ pub struct JobBuilder {
     moldables: Vec<Moldable>,
     assignment: Option<JobAssignment>,
     time_sharing: Option<TimeSharingType>,
+    placeholder: PlaceholderType,
     dependencies: Vec<(u32, Box<str>, Option<i32>)>,
 }
 impl JobBuilder {
@@ -145,6 +168,7 @@ impl JobBuilder {
             moldables: vec![],
             assignment: None,
             time_sharing: None,
+            placeholder: PlaceholderType::None,
             dependencies: Vec::new(),
         }
     }
@@ -166,6 +190,10 @@ impl JobBuilder {
     }
     pub fn time_sharing_opt(mut self, time_sharing: Option<TimeSharingType>) -> Self {
         self.time_sharing = time_sharing;
+        self
+    }
+    pub fn placeholder(mut self, placeholder: PlaceholderType) -> Self {
+        self.placeholder = placeholder;
         self
     }
     pub fn name(mut self, name: Box<str>) -> Self {
@@ -223,6 +251,7 @@ impl JobBuilder {
             assignment: self.assignment,
             quotas_hit_count: 0,
             time_sharing: self.time_sharing,
+            placeholder: self.placeholder,
             dependencies: self.dependencies,
         }
     }

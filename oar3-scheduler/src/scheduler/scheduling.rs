@@ -143,16 +143,11 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
     let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
         count += 1;
 
-        let available_resources = if job.time_sharing.is_some() {
-            slot_set.intersect_slots_intervals_with_time_sharing(
-                left_slot.id(),
-                right_slot.id(),
-                &job.user.clone().unwrap_or("".into()),
-                &job.name.clone().unwrap_or("".into()),
-            )
-        } else {
-            slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id())
-        };
+        let empty: Box<str> = "".into();
+        let (ts_user_name, ts_job_name) = job.time_sharing.as_ref().map_or((None, None), |_| {
+            (Some(job.user.as_ref().unwrap_or(&empty)), Some(job.name.as_ref().unwrap_or(&empty)))
+        });
+        let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id(), ts_user_name, ts_job_name, &job.placeholder);
 
         // Finding resources according to hierarchy request
         slot_set
@@ -246,7 +241,8 @@ pub fn update_container_job_slot_set(slot_sets: &mut HashMap<Box<str>, SlotSet>,
         let pseudo_job = JobBuilder::new(0)
             .name_opt(job.name.clone())
             .user_opt(job.user.clone())
-            .time_sharing_opt(job.time_sharing.clone())
+            // .time_sharing_opt(job.time_sharing.clone()) Do not apply the time-sharing to the available slots of the children slot set
+            // .placeholder(job.placeholder.clone()) Do not apply the placeholder to the available slots of the children slot set
             .assign(JobAssignment::new(
                 assignment.begin,
                 assignment.end - platform_config.job_security_time, // Removing the security time added by get_data_jobs.

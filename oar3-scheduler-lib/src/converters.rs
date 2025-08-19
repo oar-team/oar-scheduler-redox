@@ -1,4 +1,4 @@
-use oar3_scheduler::models::{Job, JobAssignment, Moldable, ProcSet, ProcSetCoresOp, TimeSharingType};
+use oar3_scheduler::models::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
 use oar3_scheduler::platform::{PlatformConfig, ResourceSet};
 use oar3_scheduler::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use oar3_scheduler::scheduler::quotas::{QuotasConfig, QuotasMap, QuotasValue};
@@ -158,6 +158,9 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         None
     };
 
+    // TODO: convert placeholder
+    let placeholder = PlaceholderType::None;
+
     // Moldables
     let moldables: Vec<_> = py_job
         .getattr("mld_res_rqts")?
@@ -214,6 +217,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         assignment,
         quotas_hit_count: 0,
         time_sharing,
+        placeholder,
         dependencies,
     })
 }

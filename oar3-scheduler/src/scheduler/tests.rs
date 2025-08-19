@@ -12,3 +12,5 @@ mod time_sharing_test;
 mod dependencies_test;
 #[cfg(test)]
 mod container_test;
+#[cfg(test)]
+mod placeholder_test;

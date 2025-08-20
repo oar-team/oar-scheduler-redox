@@ -172,14 +172,19 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         _ => return Err(pyo3::exceptions::PyValueError::new_err("Invalid placeholder type value")),
     };
 
-    // Moldables
-    let moldables: Vec<_> = py_job
-        .getattr("mld_res_rqts").unwrap()
-        .downcast::<PyList>().unwrap()
-        .iter()
-        .map(|moldable| build_moldable(&moldable))
-        .collect::<PyResult<_>>().unwrap();
+    // Moldables (scheduled jobs do not have mdl_res_rqts defined)
+    let moldables: Vec<_> = if py_job.hasattr("mld_res_rqts").unwrap() {
+        py_job
+            .getattr("mld_res_rqts").unwrap()
+            .downcast::<PyList>().unwrap()
+            .iter()
+            .map(|moldable| build_moldable(&moldable))
+            .collect::<PyResult<_>>().unwrap()
+    }else {
+        Vec::new()
+    };
 
+    // Assignment
     let mut assignment: Option<JobAssignment> = None;
     if py_job.hasattr("start_time").unwrap() && py_job.hasattr("walltime").unwrap() {
         let begin: Option<i64> = py_job.getattr("start_time").unwrap().extract().unwrap();
@@ -203,8 +208,9 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         }
     }
 
-    // Dependencies
-    let dependencies: Vec<(u32, Box<str>, Option<i32>)> = py_job
+    // Dependencies (scheduled jobs do not have mdl_res_rqts defined)
+    let dependencies: Vec<(u32, Box<str>, Option<i32>)> = if py_job.hasattr("deps").unwrap() {
+        py_job
         .getattr("deps").unwrap()
         .downcast::<PyList>().unwrap()
         .iter()
@@ -215,7 +221,10 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
             let state: Option<i32> = dep.get_item(2).unwrap().extract().unwrap();
             Ok((id, name.into_boxed_str(), state))
         })
-        .collect::<PyResult<_>>().unwrap();
+        .collect::<PyResult<_>>().unwrap()
+    } else {
+        Vec::new()
+    };
 
     Ok(Job {
         id: py_job.getattr("id").unwrap().extract::<u32>().unwrap(),

@@ -1,5 +1,5 @@
 use crate::converters::{build_job, build_platform_config, proc_set_to_python};
-use indexmap::IndexMap;
+use indexmap::{indexmap, IndexMap};
 use oar_scheduler_core::models::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
@@ -159,6 +159,13 @@ impl Platform {
         let py_waiting_jobs_map = py_waiting_jobs_tuple.downcast::<PyTuple>().unwrap().get_item(0).unwrap();
         let py_waiting_jobs_map = py_waiting_jobs_map.downcast::<PyDict>().unwrap();
         self.py_waiting_jobs_map = Some(py_waiting_jobs_map.clone().unbind());
+
+        // Not calling `get_data_jobs` if there are no waiting jobs (otherwise, `get_data_jobs` will fail).
+        if py_waiting_jobs_map.len() == 0 {
+            self.waiting_jobs = Some(indexmap![]);
+            return;
+        }
+
         let py_waiting_jobs_ids = py_waiting_jobs_tuple.downcast::<PyTuple>().unwrap().get_item(1).unwrap();
         self.py_platform
             .getattr(py, "get_data_jobs")

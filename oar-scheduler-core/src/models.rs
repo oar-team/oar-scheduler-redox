@@ -133,6 +133,15 @@ impl Job {
             None
         }
     }
+    pub fn slot_set_name(&self) -> Box<str> {
+        let mut slot_set_name: Box<str> = "default".into();
+        // Manage inner jobs
+        if self.types.contains_key("inner".into()) {
+            slot_set_name = self.types["inner".into()].clone().unwrap();
+        }
+        slot_set_name
+    }
+
     /// Returns true if the job can be scheduled using the cache.
     pub fn can_use_cache(&self) -> bool {
         self.time_sharing.is_none() && self.placeholder.is_none()

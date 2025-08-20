@@ -27,8 +27,8 @@ impl PlatformTrait for PlatformBenchMock {
     fn get_scheduled_jobs(&self) -> &Vec<Job> {
         &self.scheduled_jobs
     }
-    fn get_waiting_jobs(&self) -> &IndexMap<u32, Job> {
-        &self.waiting_jobs
+    fn get_waiting_jobs(&self) -> IndexMap<u32, Job> {
+        self.waiting_jobs.clone()
     }
 
     fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {

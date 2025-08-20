@@ -16,12 +16,15 @@ pub trait PlatformTrait {
     fn get_now(&self) -> i64;
     fn get_max_time(&self) -> i64;
     fn get_platform_config(&self) -> &Rc<PlatformConfig>;
+
     /// Returns already scheduled jobs (in higher priority queues), or advanced reservations.
     fn get_scheduled_jobs(&self) -> &Vec<Job>;
-    /// Returns the jobs waiting to be scheduled.
-    /// Jobs are sorted according to the sorting algorithm.
+
+    /// Returns the jobs waiting to be scheduled for the provided queues.
+    /// Jobs should be sorted according to the meta-scheduler sorting algorithm.
     /// Using `IndexMap` to keep jobs ordered while still allowing O(1) access by job ID.
-    fn get_waiting_jobs(&self) -> &IndexMap<u32, Job>;
+    fn get_waiting_jobs(&self) -> IndexMap<u32, Job>;
+
     /// Save the scheduled jobs assignments.
     /// This function is called after scheduling jobs to remove the assigned jobs from the waiting list,
     /// to add them to the scheduled list, and to save them to the database

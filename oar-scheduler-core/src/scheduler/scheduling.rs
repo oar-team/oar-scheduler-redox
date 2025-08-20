@@ -185,7 +185,7 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
 
 /// Returns the slot set for a job using get_job_slot_set_name.
 pub fn get_job_slot_set<'s>(slot_sets: &'s mut HashMap<Box<str>, SlotSet>, job: &Job) -> Option<&'s mut SlotSet> {
-    let slot_set_name = get_job_slot_set_name(job);
+    let slot_set_name = job.slot_set_name();
     if !slot_sets.contains_key(&slot_set_name) {
         error!(
             "Job {} can't be scheduled, slot set {} is missing. Skip it for this round.",
@@ -194,16 +194,6 @@ pub fn get_job_slot_set<'s>(slot_sets: &'s mut HashMap<Box<str>, SlotSet>, job: 
         return None;
     }
     Some(slot_sets.get_mut(&slot_set_name).unwrap())
-}
-/// Returns the slot set name for a job.
-/// The slot set name is determined by the job's "inner" type, or defaults to "default".
-pub fn get_job_slot_set_name<'s>(job: &Job) -> Box<str> {
-    let mut slot_set_name: Box<str> = "default".into();
-    // Manage inner jobs
-    if job.types.contains_key("inner".into()) {
-        slot_set_name = job.types["inner".into()].clone().unwrap();
-    }
-    slot_set_name
 }
 
 /// Creates or updates the child slot set of a container job.

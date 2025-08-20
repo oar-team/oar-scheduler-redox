@@ -8,7 +8,7 @@ use crate::platform::Platform;
 
 /// Python module declaration
 #[pymodule]
-fn oar_scheduler_core_lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn oar_scheduler_redox(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schedule_cycle, m).unwrap()).unwrap();
 
 

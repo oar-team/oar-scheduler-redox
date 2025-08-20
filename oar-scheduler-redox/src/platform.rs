@@ -90,7 +90,7 @@ impl Platform {
 
     /// Transforms a Python platform into a Rust Platform struct.
     /// The Rust Platform will keep a reference to Python objects to be able to transfert data back to Python after scheduling.
-    pub fn from_python(py_platform: &Bound<PyAny>, py_session: &Bound<PyAny>, py_config: &Bound<PyAny>) -> PyResult<Self> {
+    pub fn from_python(py_platform: &Bound<PyAny>, py_session: &Bound<PyAny>, py_config: &Bound<PyAny>, py_scheduled_jobs: Option<&Bound<PyAny>>) -> PyResult<Self> {
         let py_now = py_platform.getattr("get_time").unwrap().call0().unwrap();
         let now: i64 = py_now.extract().unwrap();
         let py_job_security_time: Bound<PyAny> = py_config
@@ -116,11 +116,16 @@ impl Platform {
         let py_res_set: Bound<PyAny> = py_platform.getattr("resource_set").unwrap().call((), Some(&kwargs)).unwrap();
 
         // Get already scheduled jobs
-        let py_scheduled_jobs: Bound<PyAny> = py_platform
-            .getattr("get_scheduled_jobs")
-            .unwrap()
-            .call((py_session, &py_res_set, &py_job_security_time_int, &py_now), None)
-            .unwrap();
+
+        let py_scheduled_jobs = if let Some(py_scheduled_jobs) = py_scheduled_jobs {
+            py_scheduled_jobs.clone()
+        }else {
+            py_platform
+                .getattr("get_scheduled_jobs")
+                .unwrap()
+                .call((py_session, &py_res_set, &py_job_security_time_int, &py_now), None)
+                .unwrap()
+        };
         let py_scheduled_jobs = py_scheduled_jobs.downcast::<PyList>().unwrap();
 
         Ok(Platform {

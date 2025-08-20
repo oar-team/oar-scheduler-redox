@@ -1,7 +1,7 @@
-use oar3_scheduler::models::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
-use oar3_scheduler::platform::{PlatformConfig, ResourceSet};
-use oar3_scheduler::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
-use oar3_scheduler::scheduler::quotas::{QuotasConfig, QuotasMap, QuotasValue};
+use oar_scheduler_core::models::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
+use oar_scheduler_core::platform::{PlatformConfig, ResourceSet};
+use oar_scheduler_core::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
+use oar_scheduler_core::scheduler::quotas::{QuotasConfig, QuotasMap, QuotasValue};
 use pyo3::ffi::c_str;
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};

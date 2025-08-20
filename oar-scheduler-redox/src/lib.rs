@@ -3,12 +3,12 @@ mod platform;
 
 use log::LevelFilter;
 use pyo3::prelude::*;
-use oar3_scheduler::scheduler::kamelot;
+use oar_scheduler_core::scheduler::kamelot;
 use crate::platform::Platform;
 
 /// Python module declaration
 #[pymodule]
-fn oar3_scheduler_lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn oar_scheduler_core_lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(schedule_cycle, m).unwrap()).unwrap();
 
 

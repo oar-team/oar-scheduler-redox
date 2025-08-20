@@ -40,7 +40,7 @@ pub struct PlatformConfig {
 
 /// ResourceSet provide a resource description with the hierarchy of resources.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "pyo3-abi3-py38", pyclass(module = "oar3_scheduler_lib"))]
+#[cfg_attr(feature = "pyo3-abi3-py38", pyclass(module = "oar_scheduler_redox"))]
 pub struct ResourceSet {
     pub default_intervals: ProcSet,
     /// For each `ProcSet`, the time until which it is available. Integrated through pseudo jobs.

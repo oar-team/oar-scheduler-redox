@@ -9,10 +9,10 @@ use crate::grapher::graph_benchmark_result;
 use crate::platform_mock::{generate_mock_platform_config, PlatformBenchMock};
 use crate::python_caller::schedule_cycle_on_oar_python;
 use log::LevelFilter;
-use oar3_scheduler::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
-use oar3_scheduler::models::Job;
-use oar3_scheduler::platform::PlatformTrait;
-use oar3_scheduler::scheduler::kamelot::schedule_cycle;
+use oar_scheduler_core::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
+use oar_scheduler_core::models::Job;
+use oar_scheduler_core::platform::PlatformTrait;
+use oar_scheduler_core::scheduler::kamelot::schedule_cycle;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
@@ -32,7 +32,7 @@ async fn main() {
 
 
     let benchmark = BenchmarkConfig {
-        target: BenchmarkTarget::Python,
+        target: BenchmarkTarget::RustFromPython,
         sample_type: WaitingJobsSampleType::NodeOnly,
         cache: true,
         averaging: 1,

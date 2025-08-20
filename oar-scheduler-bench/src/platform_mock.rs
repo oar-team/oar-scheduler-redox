@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use indexmap::IndexMap;
-use oar3_scheduler::models::{Job, ProcSet};
-use oar3_scheduler::platform::{PlatformConfig, PlatformTrait, ResourceSet};
-use oar3_scheduler::scheduler::hierarchy::Hierarchy;
-use oar3_scheduler::scheduler::quotas::{QuotasConfig, QuotasValue};
+use oar_scheduler_core::models::{Job, ProcSet};
+use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait, ResourceSet};
+use oar_scheduler_core::scheduler::hierarchy::Hierarchy;
+use oar_scheduler_core::scheduler::quotas::{QuotasConfig, QuotasValue};
 
 /// In mocking, the time unit is the minute.
 pub struct PlatformBenchMock {

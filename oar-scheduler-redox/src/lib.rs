@@ -94,14 +94,17 @@ fn schedule_cycle_internal(platform: Bound<PlatformHandle>, slot_sets: Bound<Slo
     let mut platform = platform_handle_ref.inner.borrow_mut();
     let slot_sets_handle_ref = slot_sets.borrow();
     let mut slot_sets = slot_sets_handle_ref.inner.borrow_mut();
+    let queues: Vec<String> = py_queues.extract()?;
 
 
     // Loading the waiting jobs from the python platform into the rust platform for these specific queues
     platform.load_waiting_jobs(&py_queues);
 
-    // TODO: insert scheduled besteffort jobs if py_queues = ['besteffort'].
+    // Insert scheduled besteffort jobs if py_queues = ['besteffort'].
+    if queues.len() == 1 && queues[0] == "besteffort" {
+        kamelot::add_already_scheduled_jobs_to_slot_set(&mut *slot_sets, &mut *platform, true, false);
+    }
 
-    let queues: Vec<String> = py_queues.extract()?;
     kamelot::internal_schedule_cycle(&mut *platform, &mut *slot_sets, queues);
     Ok(())
 }

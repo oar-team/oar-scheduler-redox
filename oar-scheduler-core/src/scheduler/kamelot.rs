@@ -65,7 +65,7 @@ where
     // Initialize slot sets map
     let mut slot_sets = HashMap::from([("default".into(), initial_slot_set)]);
     // Place already scheduled jobs, advanced reservations and jobs from higher priority queues
-    add_already_scheduled_jobs_to_slot_set(&mut slot_sets, platform, allow_besteffort);
+    add_already_scheduled_jobs_to_slot_set(&mut slot_sets, platform, allow_besteffort, true);
 
     slot_sets
 }
@@ -91,15 +91,22 @@ fn slot_set_integrate_resource_availability(max_time: i64, available_upto: &Vec<
 }
 
 /// Inserts the scheduled_jobs of the platform into the slot_sets.
-fn add_already_scheduled_jobs_to_slot_set<T>(slot_sets: &mut HashMap<Box<str>, SlotSet>, platform: &T, allow_besteffort: bool)
+/// If `allow_besteffort` is true, the besteffort jobs are inserted.
+/// If `allow_other` is true, the non-besteffort jobs are inserted.
+pub fn add_already_scheduled_jobs_to_slot_set<T>(slot_sets: &mut HashMap<Box<str>, SlotSet>, platform: &T, allow_besteffort: bool, allow_other: bool)
 where
     T: PlatformTrait,
 {
     let mut scheduled_jobs = platform.get_scheduled_jobs().iter().collect::<Vec<&Job>>();
     scheduled_jobs.sort_by_key(|j| j.begin().unwrap());
-    if !allow_besteffort {
-        // Unless scheduling best-effort queue, not taking into account the existing best-effort jobs.
+    if allow_besteffort && !allow_other {
+        // Retain only besteffort jobs
+        scheduled_jobs.retain(|j| j.queue.as_ref() == "besteffort");
+    }else if !allow_besteffort && allow_other {
+        // Retain only non-besteffort jobs
         scheduled_jobs.retain(|j| j.queue.as_ref() != "besteffort");
+    }else if !allow_besteffort && !allow_other {
+        return;
     }
     let mut slot_set_jobs: HashMap<Box<str>, Vec<&Job>> = HashMap::new();
     scheduled_jobs.into_iter().for_each(|job| {

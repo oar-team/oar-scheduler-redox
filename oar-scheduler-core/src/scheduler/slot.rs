@@ -522,7 +522,7 @@ impl SlotSet {
                     slot.sub_proc_set(proc_set);
                     if self.platform_config.quotas_config.enabled && do_update_quotas {
                         slot.quotas
-                            .increment_for_job(job, self.end - self.begin + 1, assignment.proc_set.core_count());
+                            .increment_for_job(job, slot.end - slot.begin + 1, assignment.proc_set.core_count());
                     }
                 } else {
                     slot.add_proc_set(proc_set);

@@ -3,7 +3,7 @@ mod platform;
 
 use crate::platform::Platform;
 use indexmap::IndexMap;
-use log::{info, warn, LevelFilter};
+use log::{warn, LevelFilter};
 use oar_scheduler_core::models::{Job, JobAssignment, ProcSetCoresOp};
 use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_core::scheduler::slot::SlotSet;
@@ -124,8 +124,6 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
     let job_handling = PyModule::import(py, "oar.lib.job_handling").expect("Could not import job_handling");
     let slot_sets_handle_ref = slot_sets.borrow();
     let mut slot_sets = slot_sets_handle_ref.inner.borrow_mut();
-    let py_session = platform.get_py_session().bind(py).clone();
-    let py_config = platform.get_py_config().bind(py).clone();
 
     // Load jobs to schedule for the queue
     platform.load_waiting_jobs(&py_queue, Some(&"toSchedule".to_string()));
@@ -143,6 +141,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
 
         // Check if reservation is too old
         let mut start_time = job.advance_reservation_start_time.unwrap();
+        let end_time = start_time + moldable.walltime - 1;
         if now > start_time + moldable.walltime {
             set_job_resa_not_scheduled(&job_handling, &platform, job.id, "Reservation expired and couldn't be started.");
             continue;
@@ -153,7 +152,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
         let ss_name = job.slot_set_name();
         let slot_set = slot_sets.get_mut(&*ss_name).expect("SlotSet not found");
 
-        let effective_end = start_time + moldable.walltime - 1 - job_security_time;
+        let effective_end = end_time - job_security_time;
         let (left_slot_id, right_slot_id) = match slot_set.get_encompassing_range(start_time, effective_end, None) {
             Some((s1, s2)) => (s1.id(), s2.id()),
             None => {
@@ -178,14 +177,14 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
 
         if let Some(proc_set) = res {
             if slot_set.get_platform_config().quotas_config.enabled {
-                let slots = slot_set.iter().between(left_slot_id, right_slot_id).collect::<Vec<_>>();
-                if let Some((_msg, _rule, _limit)) = quotas::check_slots_quotas(slots, &job, proc_set.core_count()) {
+                let slots = slot_set.iter().between(left_slot_id, right_slot_id);
+                if let Some((_msg, _rule, _limit)) = quotas::check_slots_quotas(slots, &job, start_time, end_time, proc_set.core_count()) {
                     set_job_resa_scheduled(&job_handling, &platform, job.id, Some("This AR cannot run: quotas exceeded"));
                     continue;
                 }
             }
 
-            job.assignment = Some(JobAssignment::new(start_time, start_time + moldable.walltime - 1, proc_set, 0));
+            job.assignment = Some(JobAssignment::new(start_time, end_time, proc_set, 0));
             slot_set.split_slots_for_job_and_update_resources(&job, true, true, None);
             set_job_resa_scheduled(&job_handling, &platform, job.id, None);
             assigned_jobs.insert(job.id, job);

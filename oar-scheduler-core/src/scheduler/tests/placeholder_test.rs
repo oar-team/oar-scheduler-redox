@@ -1,13 +1,12 @@
 use crate::models::*;
+use crate::platform::PlatformConfig;
+use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::scheduling::*;
 use crate::scheduler::slot::*;
-use crate::platform::PlatformConfig;
-use indexmap::{indexmap, IndexMap};
+use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
+use indexmap::indexmap;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
-use crate::scheduler::scheduling;
-use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 
 fn setup_platform() -> Rc<PlatformConfig> {
     let platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);

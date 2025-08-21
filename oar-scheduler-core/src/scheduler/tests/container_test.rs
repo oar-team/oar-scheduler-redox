@@ -129,7 +129,7 @@ fn test_inner_job_in_two_overlapping_containers_same_slotset_name() {
     assert!(j_c2.assignment.is_some());
     assert!(j_inner.assignment.is_some());
     let sched_c1 = j_c1.assignment.as_ref().unwrap();
-    let sched_r1 = j_r1.assignment.as_ref().unwrap();
+    let _sched_r1 = j_r1.assignment.as_ref().unwrap();
     let sched_c2 = j_c2.assignment.as_ref().unwrap();
     let sched_inner = j_inner.assignment.as_ref().unwrap();
 

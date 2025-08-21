@@ -163,8 +163,10 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
 
                 // Checking quotas
                 if slot_set.get_platform_config().quotas_config.enabled {
-                    let slots = slot_set.iter().between(left_slot.id(), right_slot.id()).collect::<Vec<_>>();
-                    if let Some((msg, rule, limit)) = quotas::check_slots_quotas(slots, job, result.2.core_count()) {
+                    let slots = slot_set.iter().between(left_slot.id(), right_slot.id());
+                    let start = left_slot.begin();
+                    let end = start + moldable.walltime - 1;
+                    if let Some((msg, rule, limit)) = quotas::check_slots_quotas(slots, job, start, end, result.2.core_count()) {
                         info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
                         quotas_hit_count += 1;
                         return None; // Skip this slot if quotas check fails

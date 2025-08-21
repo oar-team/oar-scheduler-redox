@@ -1,6 +1,6 @@
 use crate::models::Job;
 use crate::platform::PlatformConfig;
-use crate::scheduler::slot::Slot;
+use crate::scheduler::slot::SlotIterator;
 use auto_bench_fct::auto_bench_fct_hy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::PyDictMethods;
@@ -508,20 +508,23 @@ impl Quotas {
     }
 }
 
-/// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
+/// The job does not need to be scheduled yet; hence the start time, end time and resource_count are provided.
+/// `slots` are the encompassing slots for the job.
 /// Returns Some if quotas are exceeded, with a description, the rule key, and the limit value.
-pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
+pub fn check_slots_quotas<'s>(slots: SlotIterator, job: &Job, start: i64, end: i64, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     let mut slots_quotas: HashMap<i32, (Quotas, i64)> = HashMap::new();
+
     // Combine in slot_quotas all quotas with the total duration they cover, grouped by rules_id.
     for slot in slots {
         let quotas = slot.quotas();
+        let used_width =  slot.end().min(end) - slot.begin().max(start) + 1;
         slots_quotas
             .entry(quotas.rules_id)
             .and_modify(|(q, duration)| {
                 q.combine(&quotas);
-                *duration += slot.end() - slot.begin() + 1;
+                *duration += used_width;
             })
-            .or_insert((quotas.clone(), slot.end() - slot.begin() + 1));
+            .or_insert((quotas.clone(), used_width));
     }
     check_quotas(slots_quotas, job, resource_count)
 }

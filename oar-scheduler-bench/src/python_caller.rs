@@ -36,7 +36,6 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
                     platform_py.clone_ref(py),
                     now,
                     PyList::new(py, ["default"]).unwrap(),
-                    use_rust,
                 ))
                 .unwrap();
         })

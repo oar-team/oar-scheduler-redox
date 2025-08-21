@@ -6,6 +6,7 @@ use indexmap::IndexMap;
 use log::{error, info, warn};
 use std::cmp::max;
 use std::collections::HashMap;
+use crate::HOOKS_HANDLER;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &mut IndexMap<u32, Job>) {
@@ -48,7 +49,13 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &
         // Schedule job
         let job = waiting_jobs.get_mut(&job_id).unwrap();
         let slot_set = get_job_slot_set(slot_sets, job).expect("SlotSet not found");
-        schedule_job(slot_set, job, min_begin);
+
+        HOOKS_HANDLER.with(|hh| {
+            if !hh.hook_assign_job(slot_set, job, min_begin) {
+                schedule_job(slot_set, job, min_begin);
+            }
+        });
+
 
         // Manage container jobs
         if job.types.contains_key("container".into()) {

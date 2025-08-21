@@ -24,8 +24,8 @@ Rust scheduler implementation for OAR3
 
 - [x] Expose the Rust scheduler as a Python library
 - [x] Support external mode (convert platform: jobs, config, resources set, etc.)
-- [ ] Support mixed mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
-- [ ] Support plugins / document how would they be implemented in Python or Rust. 
+- [x] Support mixed mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
+- [-] Support plugins / document how would they be implemented in Python or Rust. 
 - [ ] Support internal mode (convert slotset objects from Python to Rust and from Rust to Python)
 
 # Crates & How to build/run

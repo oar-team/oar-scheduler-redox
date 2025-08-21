@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-bench/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-core/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-redox/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-hooks/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/oar3-rust-macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

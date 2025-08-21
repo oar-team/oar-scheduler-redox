@@ -1,0 +1,8 @@
+[package]
+name = "oar-scheduler-hooks"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+oar-scheduler-core = { path = "../oar-scheduler-core" }
+log = "0.4.27"

@@ -11,6 +11,7 @@ use oar_scheduler_core::scheduler::{kamelot, quotas};
 use pyo3::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use oar_scheduler_core::HooksHandler;
 
 /// Python module declaration
 #[pymodule]
@@ -22,6 +23,9 @@ fn oar_scheduler_redox(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(check_reservation_jobs, m).unwrap()).unwrap();
 
     env_logger::Builder::new().filter(None, LevelFilter::Info).init();
+
+    // Register plugin hooks from the oar-scheduler-hooks crate into the oar-scheduler-core crate
+    oar_scheduler_core::set_hooks_handler(oar_scheduler_hooks::Hooks::new());
 
     Ok(())
 }

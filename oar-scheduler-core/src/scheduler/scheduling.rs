@@ -1,3 +1,4 @@
+use crate::hooks::get_hooks_manager;
 use crate::models::{Job, JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::{Slot, SlotSet};
@@ -6,7 +7,6 @@ use indexmap::IndexMap;
 use log::{error, info, warn};
 use std::cmp::max;
 use std::collections::HashMap;
-use crate::HOOKS_HANDLER;
 
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &mut IndexMap<u32, Job>) {
@@ -50,12 +50,9 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &
         let job = waiting_jobs.get_mut(&job_id).unwrap();
         let slot_set = get_job_slot_set(slot_sets, job).expect("SlotSet not found");
 
-        HOOKS_HANDLER.with(|hh| {
-            if !hh.hook_assign_job(slot_set, job, min_begin) {
-                schedule_job(slot_set, job, min_begin);
-            }
-        });
-
+        if !get_hooks_manager().hook_assign(slot_set, job, min_begin) {
+            schedule_job(slot_set, job, min_begin);
+        }
 
         // Manage container jobs
         if job.types.contains_key("container".into()) {
@@ -149,37 +146,46 @@ pub fn find_slots_for_moldable(slot_set: &mut SlotSet, job: &Job, moldable: &Mol
     let mut count = 0;
     let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
         count += 1;
+        let left_slot_id = left_slot.id();
+        let right_slot_id = right_slot.id();
+        let left_slot_begin = left_slot.begin();
 
         let empty: Box<str> = "".into();
         let (ts_user_name, ts_job_name) = job.time_sharing.as_ref().map_or((None, None), |_| {
             (Some(job.user.as_ref().unwrap_or(&empty)), Some(job.name.as_ref().unwrap_or(&empty)))
         });
-        let available_resources = slot_set.intersect_slots_intervals(left_slot.id(), right_slot.id(), ts_user_name, ts_job_name, &job.placeholder);
+        let available_resources = slot_set.intersect_slots_intervals(left_slot_id, right_slot_id, ts_user_name, ts_job_name, &job.placeholder);
 
-        // Finding resources according to hierarchy request
-        slot_set
-            .get_platform_config()
-            .resource_set
-            .hierarchy
-            .request(&available_resources, &moldable.requests)
-            .map(|proc_set| (left_slot.id(), right_slot.id(), proc_set))
-            .and_then(|result| {
+        // Finding resources according to hook or hierarchy request
+        {
+            if let Some(res) = get_hooks_manager().hook_find(slot_set, job, moldable, min_begin, available_resources.clone()) {
+                res
+            }else {
+                slot_set
+                    .get_platform_config()
+                    .resource_set
+                    .hierarchy
+                    .request(&available_resources, &moldable.requests)
+            }
+        }.and_then(|proc_set| {
                 if cache_first_slot.is_none() {
                     cache_first_slot = Some(left_slot.id());
                 }
 
                 // Checking quotas
                 if slot_set.get_platform_config().quotas_config.enabled {
-                    let slots = slot_set.iter().between(left_slot.id(), right_slot.id());
-                    let start = left_slot.begin();
-                    let end = start + moldable.walltime - 1;
-                    if let Some((msg, rule, limit)) = quotas::check_slots_quotas(slots, job, start, end, result.2.core_count()) {
-                        info!("Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}", job.id, msg, rule, limit);
+                    let slots = slot_set.iter().between(left_slot_id, right_slot_id);
+                    let end = left_slot_begin + moldable.walltime - 1;
+                    if let Some((msg, rule, limit)) = quotas::check_slots_quotas(slots, job, left_slot_begin, end, proc_set.core_count()) {
+                        info!(
+                            "Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}",
+                            job.id, msg, rule, limit
+                        );
                         quotas_hit_count += 1;
                         return None; // Skip this slot if quotas check fails
                     }
                 }
-                Some((result.0, result.1, result.2, quotas_hit_count))
+                Some((left_slot_id, right_slot_id, proc_set, quotas_hit_count))
             })
     });
 

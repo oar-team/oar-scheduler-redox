@@ -25,10 +25,19 @@ Rust scheduler implementation for OAR3
 - [x] Expose the Rust scheduler as a Python library
 - [x] Support external mode (convert platform: jobs, config, resources set, etc.)
 - [x] Support mixed mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
-- [-] Support plugins / document how would they be implemented in Python or Rust. 
+- [x] Rust hooks support (plugins developed in Rust) 
 - [ ] Support internal mode (convert slotset objects from Python to Rust and from Rust to Python)
 
 # Crates & How to build/run
+
+## Dependency tree
+```mermaid
+graph TD;
+    oar-scheduler-redox --> oar-scheduler-core
+    oar-scheduler-redox --> oar-scheduler-hooks
+    oar-scheduler-hooks --> oar-scheduler-core
+    oar-scheduler-bench --> oar-scheduler-core
+```
 
 ## Crate oar-scheduler-core
 
@@ -97,6 +106,26 @@ import oar_scheduler_redox
 
 oar_scheduler_redox.schedule_cycle(session, config, platform, queues)
 ```
+
+## Crate oar-scheduler-hooks
+
+This crate allows sysadmins to define rust functions (hooks) that are called by the scheduler at specific points in the scheduling process, allowing to overwrite default behavior.
+
+As shown in the dependency tree, this crate should keep a fixed structure exposing the struct `Hooks` with a `pub fn new() -> Option<Self>` function, and implementing the trait `HooksHandler`. This way `oar-scheduler-redox` will be able to initialize the struct and call a function of `oar-scheduler-core` to register the hooks.
+
+The `new` function of `Hooks` is called at the beginning of the process, and can return `None` to disable the hook system.
+Hook functions return either a `bool` or an `Option<T>`. If `false` or `None` is returned, the default behavior is applied. If `true` or `Some(value)` is returned, the default behavior is overridden.
+
+### Available hooks
+
+- `assign`: Overrides the job assignment logic for a single job on a given slotset.
+- `find`: Overrides the resources request evaluation logic.
+
+Look at `oar-scheduler-core/hooks.rs` for more details on the available hooks and their usage.
+
+### Creating custom hooks
+
+Either clone the repository and edit directly the `oar-scheduler-hooks` crate, or create a new crate with the same structure as `oar-scheduler-hooks`, and replace the `oar-scheduler-hooks` dependency in `oar-scheduler-redox/Cargo.toml` with your custom crate.
 
 # Notes
 

@@ -43,6 +43,8 @@ pub struct Job {
     pub placeholder: PlaceholderType,
     /// List of job dependencies, tuples of (job_id, state, exit_code)
     pub dependencies: Vec<(u32, Box<str>, Option<i32>)>,
+    /// Attribute used to store the start time of advance reservation jobs.
+    pub advance_reservation_start_time: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -164,6 +166,7 @@ pub struct JobBuilder {
     time_sharing: Option<TimeSharingType>,
     placeholder: PlaceholderType,
     dependencies: Vec<(u32, Box<str>, Option<i32>)>,
+    advance_reservation_start_time: Option<i64>,
 }
 impl JobBuilder {
     pub fn new(id: u32) -> Self {
@@ -179,6 +182,7 @@ impl JobBuilder {
             time_sharing: None,
             placeholder: PlaceholderType::None,
             dependencies: Vec::new(),
+            advance_reservation_start_time: None,
         }
     }
     pub fn moldable_auto(mut self, id: u32, walltime: i64, requests: HierarchyRequests) -> Self {
@@ -248,6 +252,10 @@ impl JobBuilder {
     pub fn add_valid_dependency(self, dep_job_id: u32) -> Self {
         self.add_dependency(dep_job_id, "Waiting".into(), None)
     }
+    pub fn set_advance_reservation_start_time(mut self, start_time: i64) -> Self {
+        self.advance_reservation_start_time = Some(start_time);
+        self
+    }
     pub fn build(self) -> Job {
         Job {
             id: self.id,
@@ -262,6 +270,7 @@ impl JobBuilder {
             time_sharing: self.time_sharing,
             placeholder: self.placeholder,
             dependencies: self.dependencies,
+            advance_reservation_start_time: self.advance_reservation_start_time,
         }
     }
 }

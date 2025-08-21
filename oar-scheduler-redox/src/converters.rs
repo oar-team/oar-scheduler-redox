@@ -7,6 +7,7 @@ use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};
 use pyo3::{Bound, PyAny, PyResult, Python};
 use std::collections::HashMap;
+use log::info;
 
 /// Builds a PlatformConfig Rust struct from a Python resource set.
 pub fn build_platform_config(py_res_set: Bound<PyAny>, job_security_time: i64) -> PyResult<PlatformConfig> {
@@ -23,27 +24,33 @@ pub fn build_platform_config(py_res_set: Bound<PyAny>, job_security_time: i64) -
 fn build_resource_set(py_res_set: &Bound<PyAny>) -> PyResult<ResourceSet> {
     let py_default_intervals = py_res_set.getattr("roid_itvs").unwrap();
     let available_upto = py_res_set
-        .getattr("available_upto").unwrap()
-        .downcast::<PyDict>().unwrap()
+        .getattr("available_upto")
+        .unwrap()
+        .downcast::<PyDict>()
+        .unwrap()
         .iter()
         .map(|(k, v)| {
             let time: i64 = k.extract().unwrap();
-            let proc_set = build_proc_set(&v).unwrap();
+            let proc_set = build_proc_set(&v);
             Ok((time, proc_set))
         })
-        .collect::<PyResult<Vec<_>>>().unwrap();
+        .collect::<PyResult<Vec<_>>>()
+        .unwrap();
 
     let mut unit_partition = None;
     let partitions = py_res_set
-        .getattr("hierarchy").unwrap()
-        .downcast::<PyDict>().unwrap()
+        .getattr("hierarchy")
+        .unwrap()
+        .downcast::<PyDict>()
+        .unwrap()
         .iter()
         .map(|(k, v)| {
             let key: String = k.extract().unwrap();
             let value: Box<[ProcSet]> = build_proc_sets(&v).unwrap();
             Ok((key.into_boxed_str(), value))
         })
-        .collect::<PyResult<HashMap<_, _>>>().unwrap()
+        .collect::<PyResult<HashMap<_, _>>>()
+        .unwrap()
         .into_iter()
         .filter(|(name, res)| {
             // If cores count is always 1, we can consider it a unit partition
@@ -56,31 +63,34 @@ fn build_resource_set(py_res_set: &Bound<PyAny>) -> PyResult<ResourceSet> {
         .collect();
 
     Ok(ResourceSet {
-        default_intervals: build_proc_set(&py_default_intervals).unwrap(),
+        default_intervals: build_proc_set(&py_default_intervals),
         available_upto,
         hierarchy: Hierarchy::new_defined(partitions, unit_partition),
     })
 }
 /// Builds a Rust ProcSet (range-set-blaze lib) from a Python ProcSet (procset lib).
-fn build_proc_set(py_proc_set: &Bound<PyAny>) -> PyResult<ProcSet> {
-    Ok(py_proc_set
+fn build_proc_set(py_proc_set: &Bound<PyAny>) -> ProcSet {
+    py_proc_set
         .py()
         .eval(
             c_str!("[(i.inf, i.sup) for i in list(p.intervals())]"),
             Some(&[("p", py_proc_set)].into_py_dict(py_proc_set.py()).unwrap()),
             None,
-        ).unwrap()
-        .extract::<Vec<(u32, u32)>>().unwrap()
+        )
+        .unwrap()
+        .extract::<Vec<(u32, u32)>>()
+        .unwrap()
         .iter()
         .map(|(inf, sup)| ProcSet::from_iter([*inf..=*sup]))
-        .fold(ProcSet::new(), |acc, x| acc | x))
+        .fold(ProcSet::new(), |acc, x| acc | x)
 }
 /// Converts a Rust ProcSet (range-set-blaze lib) to a Python ProcSet (procset lib).
 pub fn proc_set_to_python<'p>(py: Python<'p>, proc_set: &ProcSet) -> PyResult<Bound<'p, PyAny>> {
     let intervals = proc_set
         .ranges()
         .map(|r| PyList::new(py, [*r.start(), *r.end()]))
-        .collect::<PyResult<Vec<_>>>().unwrap();
+        .collect::<PyResult<Vec<_>>>()
+        .unwrap();
     let intervals = PyTuple::new(py, intervals).unwrap();
 
     py.import("procset").unwrap().getattr("ProcSet").unwrap().call1(intervals)
@@ -93,8 +103,10 @@ fn build_proc_sets(py_proc_sets: &Bound<PyAny>) -> PyResult<Box<[ProcSet]>> {
             c_str!("[[(i.inf, i.sup) for i in list(p.intervals())] for p in ps]"),
             Some(&[("ps", py_proc_sets)].into_py_dict(py_proc_sets.py()).unwrap()),
             None,
-        ).unwrap()
-        .extract::<Vec<Vec<(u32, u32)>>>().unwrap()
+        )
+        .unwrap()
+        .extract::<Vec<Vec<(u32, u32)>>>()
+        .unwrap()
         .iter()
         .map(|vec| {
             vec.iter()
@@ -110,23 +122,34 @@ fn build_quotas_config(py: Python) -> PyResult<QuotasConfig> {
     let enabled: bool = py_quotas.getattr("enabled").unwrap().extract().unwrap();
     let calendar = None; // Temporal quotas not implemented yet
     let default_rules: QuotasMap = py_quotas
-        .getattr("default_rules").unwrap()
-        .downcast::<PyDict>().unwrap()
+        .getattr("default_rules")
+        .unwrap()
+        .downcast::<PyDict>()
+        .unwrap()
         .iter()
         .map(|(k, v)| {
             // Extract the python tuple key and convert it to a tuple of boxed str.
             let k = k.extract::<(String, String, String, String)>().unwrap();
             let key = (k.0.into_boxed_str(), k.1.into_boxed_str(), k.2.into_boxed_str(), k.3.into_boxed_str());
             // Transform the value (list) to QuotasValue, replacing -1 with None and keeping other values as u32 or i64.
-            let v: Vec<Option<i64>> = v.extract::<Vec<i64>>().unwrap().iter().map(|x| if x < &0 { None } else { Some(*x) }).collect();
+            let v: Vec<Option<i64>> = v
+                .extract::<Vec<i64>>()
+                .unwrap()
+                .iter()
+                .map(|x| if x < &0 { None } else { Some(*x) })
+                .collect();
+            info!("Processing key: {:?} -> {:?}", key, v);
             let value: QuotasValue = QuotasValue::new(v[0].map(|i| i as u32), v[1].map(|i| i as u32), v[2]);
             Ok((key, value))
         })
-        .collect::<PyResult<QuotasMap>>().unwrap();
+        .collect::<PyResult<QuotasMap>>()
+        .unwrap();
 
     let tracked_job_types: Box<[Box<str>]> = py_quotas
-        .getattr("job_types").unwrap()
-        .extract::<Vec<String>>().unwrap()
+        .getattr("job_types")
+        .unwrap()
+        .extract::<Vec<String>>()
+        .unwrap()
         .iter()
         .map(|s| s.clone().into_boxed_str())
         .collect();
@@ -139,8 +162,10 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
     let project: Option<String> = py_job.getattr("project").unwrap().extract().unwrap();
     let queue: String = py_job.getattr("queue_name").unwrap().extract().unwrap();
     let types = py_job
-        .getattr("types").unwrap()
-        .extract::<HashMap<String, Option<String>>>().unwrap()
+        .getattr("types")
+        .unwrap()
+        .extract::<HashMap<String, Option<String>>>()
+        .unwrap()
         .into_iter()
         .map(|(k, v)| {
             (
@@ -159,11 +184,13 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
     };
 
     // NO_PLACEHOLDER = 0 ; PLACEHOLDER = 1 ; ALLOW = 2
-    let placeholder_type = py_job.getattr("ph")
+    let placeholder_type = py_job
+        .getattr("ph")
         .map_or(Ok(0), |ph| {
             ph.extract::<i32>()
                 .map_err(|_| pyo3::exceptions::PyTypeError::new_err("Invalid placeholder type"))
-        }).unwrap();
+        })
+        .unwrap();
 
     let placeholder = match placeholder_type {
         0 => PlaceholderType::None,
@@ -175,14 +202,18 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
     // Moldables (scheduled jobs do not have mdl_res_rqts defined)
     let moldables: Vec<_> = if py_job.hasattr("mld_res_rqts").unwrap() {
         py_job
-            .getattr("mld_res_rqts").unwrap()
-            .downcast::<PyList>().unwrap()
+            .getattr("mld_res_rqts")
+            .unwrap()
+            .downcast::<PyList>()
+            .unwrap()
             .iter()
             .map(|moldable| build_moldable(&moldable))
-            .collect::<PyResult<_>>().unwrap()
-    }else {
+            .collect::<PyResult<_>>()
+            .unwrap()
+    } else {
         Vec::new()
     };
+
 
     // Assignment
     let mut assignment: Option<JobAssignment> = None;
@@ -190,10 +221,10 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         let begin: Option<i64> = py_job.getattr("start_time").unwrap().extract().unwrap();
         let walltime: Option<i64> = py_job.getattr("walltime").unwrap().extract().unwrap();
         if let (Some(begin), Some(walltime)) = (begin, walltime) {
-            if begin > 0 && walltime > 0 {
+            if walltime > 0 {
                 let end: i64 = begin + walltime - 1;
 
-                let proc_set: ProcSet = build_proc_set(&py_job.getattr("res_set").unwrap()).unwrap();
+                let proc_set: ProcSet = build_proc_set(&py_job.getattr("res_set").unwrap());
 
                 let moldables_id: u32 = py_job.getattr("moldable_id").unwrap().extract().unwrap();
                 let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
@@ -207,21 +238,32 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
             }
         }
     }
+    // Advance reservation start time
+    let mut advance_reservation_start_time = None;
+    if assignment.is_none() && py_job.hasattr("start_time").unwrap() {
+        let begin: Option<i64> = py_job.getattr("start_time").unwrap().extract().unwrap();
+        if let Some(begin) = begin {
+            advance_reservation_start_time = Some(begin);
+        }
+    }
 
     // Dependencies (scheduled jobs do not have mdl_res_rqts defined)
     let dependencies: Vec<(u32, Box<str>, Option<i32>)> = if py_job.hasattr("deps").unwrap() {
         py_job
-        .getattr("deps").unwrap()
-        .downcast::<PyList>().unwrap()
-        .iter()
-        .map(|dep| {
-            let dep = dep.downcast::<PyTuple>().unwrap();
-            let id: u32 = dep.get_item(0).unwrap().extract().unwrap();
-            let name: String = dep.get_item(1).unwrap().extract().unwrap();
-            let state: Option<i32> = dep.get_item(2).unwrap().extract().unwrap();
-            Ok((id, name.into_boxed_str(), state))
-        })
-        .collect::<PyResult<_>>().unwrap()
+            .getattr("deps")
+            .unwrap()
+            .downcast::<PyList>()
+            .unwrap()
+            .iter()
+            .map(|dep| {
+                let dep = dep.downcast::<PyTuple>().unwrap();
+                let id: u32 = dep.get_item(0).unwrap().extract().unwrap();
+                let name: String = dep.get_item(1).unwrap().extract().unwrap();
+                let state: Option<i32> = dep.get_item(2).unwrap().extract().unwrap();
+                Ok((id, name.into_boxed_str(), state))
+            })
+            .collect::<PyResult<_>>()
+            .unwrap()
     } else {
         Vec::new()
     };
@@ -239,6 +281,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         time_sharing,
         placeholder,
         dependencies,
+        advance_reservation_start_time,
     })
 }
 /// Builds a Moldable Rust struct from a Python moldable object.
@@ -247,14 +290,17 @@ fn build_moldable(py_moldable: &Bound<PyAny>) -> PyResult<Moldable> {
     let walltime: i64 = py_moldable.get_item(1).unwrap().extract().unwrap();
 
     let requests: Vec<HierarchyRequest> = py_moldable
-        .get_item(2).unwrap()
-        .downcast::<PyList>().unwrap()
+        .get_item(2)
+        .unwrap()
+        .downcast::<PyList>()
+        .unwrap()
         .iter()
         .map(|req| {
             let req = req.downcast::<PyTuple>().unwrap();
             let level_nbs = req.get_item(0).unwrap();
             let level_nbs = level_nbs
-                .downcast::<PyList>().unwrap()
+                .downcast::<PyList>()
+                .unwrap()
                 .into_iter()
                 .map(|level_nb_tuple| {
                     let level_nb_tuple = level_nb_tuple.downcast::<PyTuple>().unwrap();
@@ -262,12 +308,14 @@ fn build_moldable(py_moldable: &Bound<PyAny>) -> PyResult<Moldable> {
                     let level_nb: u32 = level_nb_tuple.get_item(1).unwrap().extract().unwrap();
                     Ok((level_name.into_boxed_str(), level_nb))
                 })
-                .collect::<PyResult<Vec<_>>>().unwrap();
-            let filter = build_proc_set(&req.get_item(1).unwrap()).unwrap();
+                .collect::<PyResult<Vec<_>>>()
+                .unwrap();
+            let filter = build_proc_set(&req.get_item(1).unwrap());
 
             Ok(HierarchyRequest::new(filter, level_nbs))
         })
-        .collect::<PyResult<Vec<_>>>().unwrap();
+        .collect::<PyResult<Vec<_>>>()
+        .unwrap();
 
     Ok(Moldable::new(id, walltime, HierarchyRequests::from_requests(requests)))
 }

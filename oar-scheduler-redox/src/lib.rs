@@ -2,9 +2,12 @@ mod converters;
 mod platform;
 
 use crate::platform::Platform;
-use log::LevelFilter;
-use oar_scheduler_core::scheduler::kamelot;
+use indexmap::IndexMap;
+use log::{info, warn, LevelFilter};
+use oar_scheduler_core::models::{Job, JobAssignment, ProcSetCoresOp};
+use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_core::scheduler::slot::SlotSet;
+use oar_scheduler_core::scheduler::{kamelot, quotas};
 use pyo3::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -16,6 +19,7 @@ fn oar_scheduler_redox(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_redox_platform, m).unwrap()).unwrap();
     m.add_function(wrap_pyfunction!(build_redox_slot_sets, m).unwrap()).unwrap();
     m.add_function(wrap_pyfunction!(schedule_cycle_internal, m).unwrap()).unwrap();
+    m.add_function(wrap_pyfunction!(check_reservation_jobs, m).unwrap()).unwrap();
 
     env_logger::Builder::new().filter(None, LevelFilter::Info).init();
 
@@ -30,7 +34,7 @@ fn schedule_cycle_external(py_session: Bound<PyAny>, py_config: Bound<PyAny>, py
     let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, None).unwrap();
 
     // Loading the waiting jobs from the python platform for this specific queues
-    platform.load_waiting_jobs(&py_queues);
+    platform.load_waiting_jobs(&py_queues, None);
 
     // Scheduling (Platform automatically calls py_platform.save_assigns upon saving scheduled jobs.)
     let queues: Vec<String> = py_queues.extract().unwrap();
@@ -96,9 +100,8 @@ fn schedule_cycle_internal(platform: Bound<PlatformHandle>, slot_sets: Bound<Slo
     let mut slot_sets = slot_sets_handle_ref.inner.borrow_mut();
     let queues: Vec<String> = py_queues.extract()?;
 
-
     // Loading the waiting jobs from the python platform into the rust platform for these specific queues
-    platform.load_waiting_jobs(&py_queues);
+    platform.load_waiting_jobs(&py_queues, None);
 
     // Insert scheduled besteffort jobs if py_queues = ['besteffort'].
     if queues.len() == 1 && queues[0] == "besteffort" {
@@ -107,4 +110,123 @@ fn schedule_cycle_internal(platform: Bound<PlatformHandle>, slot_sets: Bound<Slo
 
     kamelot::internal_schedule_cycle(&mut *platform, &mut *slot_sets, queues);
     Ok(())
+}
+
+#[pyfunction]
+fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<SlotSetsHandle>, py_queue: Bound<PyAny>) {
+    let py = platform.py();
+    let platform_handle_ref = platform.borrow_mut();
+    let mut platform = platform_handle_ref.inner.borrow_mut();
+
+    let platform_config = platform.get_platform_config();
+    let job_security_time = platform_config.job_security_time;
+    let now = platform.get_now();
+    let job_handling = PyModule::import(py, "oar.lib.job_handling").expect("Could not import job_handling");
+    let slot_sets_handle_ref = slot_sets.borrow();
+    let mut slot_sets = slot_sets_handle_ref.inner.borrow_mut();
+    let py_session = platform.get_py_session().bind(py).clone();
+    let py_config = platform.get_py_config().bind(py).clone();
+
+    // Load jobs to schedule for the queue
+    platform.load_waiting_jobs(&py_queue, Some(&"toSchedule".to_string()));
+
+    let jobs: IndexMap<u32, Job> = platform.get_waiting_jobs();
+    if jobs.is_empty() {
+        return;
+    }
+
+    // Process each job for reservation
+    let mut assigned_jobs = IndexMap::new();
+    for (_id, mut job) in jobs.into_iter() {
+        // Only process the first moldable for AR jobs
+        let moldable = job.moldables.get(0).expect("No moldable found for job");
+
+        // Check if reservation is too old
+        let mut start_time = job.advance_reservation_start_time.unwrap();
+        if now > start_time + moldable.walltime {
+            set_job_resa_not_scheduled(&job_handling, &platform, job.id, "Reservation expired and couldn't be started.");
+            continue;
+        } else if start_time < now {
+            start_time = now;
+        }
+
+        let ss_name = job.slot_set_name();
+        let slot_set = slot_sets.get_mut(&*ss_name).expect("SlotSet not found");
+
+        let effective_end = start_time + moldable.walltime - 1 - job_security_time;
+        let (left_slot_id, right_slot_id) = match slot_set.get_encompassing_range(start_time, effective_end, None) {
+            Some((s1, s2)) => (s1.id(), s2.id()),
+            None => {
+                // Skipping, reservation might be after max_time.
+                warn!("Job {} cannot be scheduled: no slots available for the requested time range.", job.id);
+                continue;
+            }
+        };
+
+        // Time-sharing and placeholder
+        let empty: Box<str> = "".into();
+        let (ts_user_name, ts_job_name) = job.time_sharing.as_ref().map_or((None, None), |_| {
+            (Some(job.user.as_ref().unwrap_or(&empty)), Some(job.name.as_ref().unwrap_or(&empty)))
+        });
+        let available_resources = slot_set.intersect_slots_intervals(left_slot_id, right_slot_id, ts_user_name, ts_job_name, &job.placeholder);
+
+        let res = slot_set
+            .get_platform_config()
+            .resource_set
+            .hierarchy
+            .request(&available_resources, &moldable.requests);
+
+        if let Some(proc_set) = res {
+            if slot_set.get_platform_config().quotas_config.enabled {
+                let slots = slot_set.iter().between(left_slot_id, right_slot_id).collect::<Vec<_>>();
+                if let Some((_msg, _rule, _limit)) = quotas::check_slots_quotas(slots, &job, proc_set.core_count()) {
+                    set_job_resa_scheduled(&job_handling, &platform, job.id, Some("This AR cannot run: quotas exceeded"));
+                    continue;
+                }
+            }
+
+            job.assignment = Some(JobAssignment::new(start_time, start_time + moldable.walltime - 1, proc_set, 0));
+            slot_set.split_slots_for_job_and_update_resources(&job, true, true, None);
+            set_job_resa_scheduled(&job_handling, &platform, job.id, None);
+            assigned_jobs.insert(job.id, job);
+        } else {
+            set_job_resa_scheduled(&job_handling, &platform, job.id, Some("This AR cannot run: not enough resources"));
+            continue;
+        }
+    }
+    if !assigned_jobs.is_empty() {
+        platform.save_assignments(assigned_jobs);
+    }
+}
+
+fn set_job_resa_state(job_handling: &Bound<PyModule>, platform: &Platform, job_id: u32, state: &str, message: Option<&str>, scheduled: bool) {
+    job_handling
+        .getattr("set_job_state")
+        .unwrap()
+        .call1((platform.get_py_session(), platform.get_py_config(), job_id, state))
+        .unwrap();
+    if let Some(message) = message {
+        job_handling
+            .getattr("set_job_message")
+            .unwrap()
+            .call1((platform.get_py_session(), job_id, message))
+            .unwrap();
+    }
+    if scheduled {
+        job_handling
+            .getattr("set_job_resa_state")
+            .unwrap()
+            .call1((platform.get_py_session(), job_id, "Scheduled"))
+            .unwrap();
+    }
+}
+fn set_job_resa_scheduled(job_handling: &Bound<PyModule>, platform: &Platform, job_id: u32, error: Option<&str>) {
+    if let Some(error) = error {
+        set_job_resa_state(job_handling, platform, job_id, "toError", Some(error), true);
+    } else {
+        set_job_resa_state(job_handling, platform, job_id, "toAckReservation", None, true);
+    }
+}
+fn set_job_resa_not_scheduled(job_handling: &Bound<PyModule>, platform: &Platform, job_id: u32, error: &str) {
+    set_job_resa_state(job_handling, platform, job_id, "Error", Some(error), false);
 }

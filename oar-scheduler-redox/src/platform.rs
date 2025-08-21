@@ -44,12 +44,13 @@ impl PlatformTrait for Platform {
     fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
         Python::with_gil(|py| -> PyResult<()> {
             // Update python scheduled jobs
-            Self::save_assignments_python(self, py, &assigned_jobs).unwrap();
+            let py_scheduled_jobs = Self::save_assignments_python(self, py, &assigned_jobs).unwrap();
+
             // Save assign in the Python platform
             self.py_platform
                 .getattr(py, "save_assigns")
                 .unwrap()
-                .call1(py, (&self.py_session, &self.py_waiting_jobs_map, &self.py_res_set))
+                .call1(py, (&self.py_session, &py_scheduled_jobs, &self.py_res_set))
                 .map(|_| ())
         })
         .unwrap();
@@ -69,7 +70,9 @@ impl PlatformTrait for Platform {
 
 impl Platform {
     /// Updates the Python waiting jobs in `self.py_waiting_jobs_map` with the assignments from the Rust `assigned_jobs` parameter.
-    fn save_assignments_python(&self, py: Python, assigned_jobs: &IndexMap<u32, Job>) -> PyResult<()> {
+    /// Returns a dictionary containing the jobs of `self.py_waiting_jobs_map` filtered by keeping only the assigned jobs.
+    fn save_assignments_python<'s>(&self, py: Python<'s>, assigned_jobs: &'s IndexMap<u32, Job>) -> PyResult<Bound<'s, PyDict>> {
+        let py_scheduled_jobs = PyDict::new(py);
         if let Some(py_waiting_jobs_map) = &self.py_waiting_jobs_map {
             for (py_job_id, py_job) in py_waiting_jobs_map.bind(py) {
                 if let Some(job) = assigned_jobs.get(&py_job_id.extract::<u32>().unwrap()) {
@@ -79,13 +82,14 @@ impl Platform {
                         py_job.setattr("end_time", sd.end).unwrap();
                         py_job.setattr("moldable_id", job.moldables[sd.moldable_index].id).unwrap();
                         py_job.setattr("res_set", proc_set_to_python(py_job.py(), &sd.proc_set).unwrap()).unwrap();
+                        py_scheduled_jobs.set_item(py_job_id, py_job).unwrap();
                     }
                 }
             }
         } else {
             panic!("Waiting jobs not loaded. Call `Platform::load_waiting_jobs` before starting the scheduling.");
         }
-        Ok(())
+        Ok(py_scheduled_jobs)
     }
 
     /// Transforms a Python platform into a Rust Platform struct.
@@ -148,12 +152,15 @@ impl Platform {
     /// Fetches the waiting jobs for the provided queues from the Python platform,
     /// sorts them according to the meta-scheduler sorting algorithm,
     /// and stores them in this Platform instance.
-    pub fn load_waiting_jobs(&mut self, py_queues: &Bound<PyAny>) {
+    pub fn load_waiting_jobs(&mut self, py_queues: &Bound<PyAny>, reservation: Option<&String>) {
         let py = py_queues.py();
 
         // Get waiting jobs
         let kwargs = PyDict::new(py);
         kwargs.set_item("session", self.py_session.bind(py).clone()).unwrap();
+        if let Some(reservation) = reservation {
+            kwargs.set_item("reservation", reservation).unwrap();
+        }
         let py_waiting_jobs_tuple = self
             .py_platform
             .bind(py)
@@ -223,5 +230,12 @@ impl Platform {
 
     pub(crate) fn set_now(&mut self, now: i64) {
         self.now = now;
+    }
+
+    pub(crate) fn get_py_session(&self) -> &Py<PyAny> {
+        &self.py_session
+    }
+    pub(crate) fn get_py_config(&self) -> &Py<PyAny> {
+        &self.py_config
     }
 }

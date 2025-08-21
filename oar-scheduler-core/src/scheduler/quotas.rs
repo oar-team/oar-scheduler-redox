@@ -509,6 +509,7 @@ impl Quotas {
 }
 
 /// The job does not need to be scheduled yet, hence the walltime and resource_count are provided.
+/// Returns Some if quotas are exceeded, with a description, the rule key, and the limit value.
 pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     let mut slots_quotas: HashMap<i32, (Quotas, i64)> = HashMap::new();
     // Combine in slot_quotas all quotas with the total duration they cover, grouped by rules_id.
@@ -525,6 +526,7 @@ pub fn check_slots_quotas<'s>(slots: Vec<&Slot>, job: &Job, resource_count: u32)
     check_quotas(slots_quotas, job, resource_count)
 }
 /// The job does not need to be scheduled yet, hence the resource_count is provided.
+/// Returns Some if quotas are exceeded, with a description, the rule key, and the limit value.
 #[auto_bench_fct_hy]
 pub fn check_quotas<'s>(mut slots_quotas: HashMap<i32, (Quotas, i64)>, job: &Job, resource_count: u32) -> Option<(Box<str>, QuotasKey, i64)> {
     // Check each combined quotas against the job.

@@ -2,7 +2,7 @@
 use crate::models::proc_set_to_python;
 use crate::models::{Job, ProcSet};
 use crate::scheduler::hierarchy::Hierarchy;
-use crate::scheduler::quotas::QuotasConfig;
+use crate::scheduler::calendar::QuotasConfig;
 use indexmap::IndexMap;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};
@@ -61,16 +61,16 @@ impl<'a> IntoPyObject<'a> for &ResourceSet {
         let dict = PyDict::new(py);
 
         let default_intervals = proc_set_to_python(py, &self.default_intervals);
-        dict.set_item("default_intervals", default_intervals).unwrap();
+        dict.set_item("default_intervals", default_intervals)?;
 
         let available_upto = PyList::empty(py);
         for (time, proc_set) in &self.available_upto {
             let tuple = (time, proc_set_to_python(py, proc_set));
-            available_upto.append(tuple).unwrap();
+            available_upto.append(tuple)?;
         }
-        dict.set_item("available_upto", available_upto).unwrap();
+        dict.set_item("available_upto", available_upto)?;
 
-        dict.set_item("hierarchy", &self.hierarchy).unwrap();
+        dict.set_item("hierarchy", &self.hierarchy)?;
 
         Ok(dict)
     }

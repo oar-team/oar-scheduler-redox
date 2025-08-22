@@ -4,106 +4,11 @@ use crate::scheduler::slot::SlotIterator;
 use auto_bench_fct::auto_bench_fct_hy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::PyDictMethods;
-#[cfg(feature = "pyo3")]
-use pyo3::types::PyDict;
-#[cfg(feature = "pyo3")]
-use pyo3::{Bound, IntoPyObject, PyErr, Python};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default)]
-pub struct Calendar {
-    config: String,
-    quotas_period: String,
-
-    period_end: i64,
-    quotas_window_time_limit: String,
-
-    ordered_periodical_ids: Box<[u32]>,
-
-    op_index: u32,
-    periodicals: Vec<String>,
-    nb_periodicals: u32,
-
-    ordered_oneshot_ids: Box<[u32]>,
-    oneshots: Vec<String>,
-    oneshots_begin: Option<i64>,
-    oneshots_end: Option<i64>,
-    nb_oneshots: u32,
-
-    quotas_rules_list: Vec<String>,
-    quotas_rules2id: HashMap<String, u32>,
-    quotas_ids2rules: HashMap<u32, String>,
-    nb_quotas_rules: u32,
-}
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct QuotasConfig {
-    pub enabled: bool,
-    pub calendar: Option<Calendar>,
-    pub default_rules_id: i32,
-    pub default_rules: Rc<QuotasMap>,
-    pub default_rules_tree: Rc<QuotasTree>,
-    pub tracked_job_types: Box<[Box<str>]>, // called job_types in python
-}
-impl Default for QuotasConfig {
-    fn default() -> Self {
-        QuotasConfig::new(true, None, Default::default(), Box::new(["*".into()]))
-    }
-}
-#[cfg(feature = "pyo3")]
-impl<'a> IntoPyObject<'a> for &QuotasConfig {
-    type Target = PyDict;
-    type Output = Bound<'a, Self::Target>;
-    type Error = PyErr;
-
-    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
-        let dict = PyDict::new(py);
-
-        dict.set_item("enabled", self.enabled)?;
-        // Other fields not in use for now.
-
-        Ok(dict)
-    }
-}
-
-impl QuotasConfig {
-    /// Creates a new QuotasConfig with the given parameters.
-    pub fn new(enabled: bool, calendar: Option<Calendar>, default_rules: QuotasMap, tracked_job_types: Box<[Box<str>]>) -> Self {
-        let default_rules_tree = Rc::new(QuotasTree::from(default_rules.clone()));
-        QuotasConfig {
-            enabled,
-            calendar,
-            default_rules_id: -1,
-            default_rules: Rc::new(default_rules),
-            default_rules_tree,
-            tracked_job_types,
-        }
-    }
-    pub fn load_from_file(path: &str, enabled: bool, all_value: i64) -> Self {
-        let json = std::fs::read_to_string(path).expect("Failed to read quotas config file");
-        serde_json::from_str::<JsonQuotasConfig>(&json)
-            .expect("Failed to parse quotas config JSON")
-            .into_quotas_config(enabled, all_value)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct JsonQuotasConfig {
-    quotas: String,             // JSON string representing QuotasMap
-    job_types: Box<[Box<str>]>, // tracked_job_types
-}
-impl JsonQuotasConfig {
-    /// Converts the JSON configuration into a QuotasConfig instance.
-    pub fn into_quotas_config(self, enabled: bool, all_value: i64) -> QuotasConfig {
-        let quotas_map = quotas_map_from_json(&self.quotas, all_value);
-        QuotasConfig::new(enabled, None, quotas_map, self.job_types)
-    }
-}
 
 /// key: (queue, project, job_type, user)
 pub type QuotasKey = (Box<str>, Box<str>, Box<str>, Box<str>);
@@ -190,42 +95,49 @@ impl QuotasValue {
         let parsed = values
             .iter()
             .map(|v| match v {
-                Value::Number(n) => n
-                    .as_i64()
-                    .expect(format!("Invalid quotas value number: expected i64, got {}", n).as_str()),
+                Value::Number(n) => {
+                    let n = n
+                        .as_i64()
+                        .expect(format!("Invalid quotas value number: expected i64, got {}", n).as_str());
+                    if n < 0 { None } else { Some(n) }
+                }
                 Value::String(s) => {
                     if s == "ALL" {
-                        all_value
+                        Some(all_value)
                     } else if s.ends_with("*ALL") {
-                        (s[..s.len() - 4].parse::<f64>().expect(
-                            format!(
-                                "Invalid quotas value number: excepted f64 multiplicator, got {}",
-                                s[..s.len() - 4].to_string()
-                            )
-                            .as_str(),
-                        ) * all_value as f64) as i64
+                        Some(
+                            (s[..s.len() - 4].parse::<f64>().expect(
+                                format!(
+                                    "Invalid quotas value number: excepted f64 multiplicator, got {}",
+                                    s[..s.len() - 4].to_string()
+                                )
+                                .as_str(),
+                            ) * all_value as f64) as i64
+                        )
                     } else {
-                        s.parse::<i64>()
-                            .expect(format!("Invalid quotas value number: excepted i64, got {}", s).as_str())
+                        let n = s
+                            .parse::<i64>()
+                            .expect(format!("Invalid quotas value number: excepted i64, got {}", s).as_str());
+                        if n < 0 { None } else { Some(n) }
                     }
                 }
-                _ => 0,
+                _ => None,
             })
-            .collect::<Vec<i64>>();
+            .collect::<Vec<Option<i64>>>();
 
         QuotasValue {
-            resources: Some(parsed[0] as u32),
-            running_jobs: Some(parsed[1] as u32),
-            resources_times: Some(parsed[2]),
+            resources: parsed[0].map(|i| i as u32),
+            running_jobs: parsed[1].map(|i| i as u32),
+            resources_times: parsed[2].map(|i| i * 3600), // Converting hours to seconds
         }
     }
 }
 impl Default for QuotasValue {
     fn default() -> Self {
         QuotasValue {
-            resources: Some(0),
-            running_jobs: Some(0),
-            resources_times: Some(0),
+            resources: None,
+            running_jobs: None,
+            resources_times: None,
         }
     }
 }
@@ -238,9 +150,8 @@ pub type QuotasMap = HashMap<QuotasKey, QuotasValue>;
 /// The JSON must be a mapping between a string key (formatted as `queue,project,job_type,user` with names or `*` or `/`)
 ///     and an array of values (see `QuotasValue::from_serde_values`).
 #[allow(dead_code)]
-pub fn quotas_map_from_json(json: &str, all_value: i64) -> QuotasMap {
-    let quotas = serde_json::from_str::<HashMap<String, Vec<Value>>>(json).expect("Invalid quotas JSON format");
-    quotas
+pub fn build_quotas_map(quotas_map: &HashMap<String, Vec<Value>>, all_value: i64) -> QuotasMap {
+    quotas_map
         .iter()
         .map(|(key, value)| {
             let key_parts: Vec<&str> = key.split(',').collect();
@@ -327,20 +238,18 @@ impl<T> QuotasTreeNodeTrait for HashMap<Box<str>, T> {
     fn first_valid_key_multiple(&self, keys: &[&Box<str>]) -> Option<Box<str>> {
         let mut has_all = false;
         let mut has_any = false;
-        let valid_key = self.keys()
-            .into_iter()
-            .find(|k| {
-                if keys.contains(k) {
-                    return true;
-                }
-                if !has_all && k.as_ref() == "*" {
-                    has_all = true;
-                }
-                if !has_any && k.as_ref() == "/" {
-                    has_any = true;
-                }
-                false
-            });
+        let valid_key = self.keys().into_iter().find(|k| {
+            if keys.contains(k) {
+                return true;
+            }
+            if !has_all && k.as_ref() == "*" {
+                has_all = true;
+            }
+            if !has_any && k.as_ref() == "/" {
+                has_any = true;
+            }
+            false
+        });
         if let Some(key) = valid_key {
             return Some(key.clone());
         }
@@ -383,7 +292,7 @@ impl Debug for Quotas {
 impl Quotas {
     /// Creates a new Quotas instance with the given configuration and rules.
     /// As rules are also mostly common in Quotas instances, it is also a Rc.
-    pub fn new(platform_config: Rc<PlatformConfig>) -> Quotas {
+    pub fn from_platform_config(platform_config: Rc<PlatformConfig>) -> Quotas {
         Quotas {
             counters: QuotasMap::default(),
             rules_id: platform_config.quotas_config.default_rules_id,
@@ -517,7 +426,7 @@ pub fn check_slots_quotas<'s>(slots: SlotIterator, job: &Job, start: i64, end: i
     // Combine in slot_quotas all quotas with the total duration they cover, grouped by rules_id.
     for slot in slots {
         let quotas = slot.quotas();
-        let used_width =  slot.end().min(end) - slot.begin().max(start) + 1;
+        let used_width = slot.end().min(end) - slot.begin().max(start) + 1;
         slots_quotas
             .entry(quotas.rules_id)
             .and_modify(|(q, duration)| {

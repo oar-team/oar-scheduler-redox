@@ -15,11 +15,11 @@ use std::collections::HashMap;
 /// Python module declaration
 #[pymodule]
 fn oar_scheduler_redox(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(schedule_cycle_external, m).unwrap()).unwrap();
-    m.add_function(wrap_pyfunction!(build_redox_platform, m).unwrap()).unwrap();
-    m.add_function(wrap_pyfunction!(build_redox_slot_sets, m).unwrap()).unwrap();
-    m.add_function(wrap_pyfunction!(schedule_cycle_internal, m).unwrap()).unwrap();
-    m.add_function(wrap_pyfunction!(check_reservation_jobs, m).unwrap()).unwrap();
+    m.add_function(wrap_pyfunction!(schedule_cycle_external, m)?)?;
+    m.add_function(wrap_pyfunction!(build_redox_platform, m)?)?;
+    m.add_function(wrap_pyfunction!(build_redox_slot_sets, m)?)?;
+    m.add_function(wrap_pyfunction!(schedule_cycle_internal, m)?)?;
+    m.add_function(wrap_pyfunction!(check_reservation_jobs, m)?)?;
 
     env_logger::Builder::new().filter(None, LevelFilter::Info).init();
 
@@ -36,7 +36,7 @@ fn oar_scheduler_redox(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyfunction]
 fn schedule_cycle_external(py_session: Bound<PyAny>, py_config: Bound<PyAny>, py_platform: Bound<PyAny>, py_queues: Bound<PyAny>) -> PyResult<()> {
     // Extracting the platform (including the resource set, quotas config, and waiting jobs)
-    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, None).unwrap();
+    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, None);
 
     // Loading the waiting jobs from the python platform for this specific queues
     platform.load_waiting_jobs(&py_queues, None);
@@ -70,7 +70,7 @@ fn build_redox_platform(
     py_now: Bound<PyAny>,
     py_scheduled_jobs: Bound<PyAny>,
 ) -> PyResult<Py<PlatformHandle>> {
-    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, Some(&py_scheduled_jobs)).unwrap();
+    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, Some(&py_scheduled_jobs));
     let now: i64 = py_now.extract().unwrap();
     platform.set_now(now);
     Py::new(

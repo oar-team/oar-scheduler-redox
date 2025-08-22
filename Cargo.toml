@@ -4,6 +4,6 @@ members = ["oar-scheduler-core", "oar-scheduler-bench", "oar-scheduler-redox", "
 
 [profile.release]
 lto = "fat"
-opt-level = "z"
+opt-level = 3
 panic = "abort"
 strip = "debuginfo"

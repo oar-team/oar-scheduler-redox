@@ -4,3 +4,4 @@ pub mod scheduling;
 pub mod slot;
 pub mod hierarchy;
 pub mod quotas;
+pub mod calendar;

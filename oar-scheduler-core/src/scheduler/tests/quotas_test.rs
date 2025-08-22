@@ -8,6 +8,7 @@ use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use indexmap::indexmap;
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::scheduler::calendar::QuotasConfig;
 
 fn quotas_platform_config() -> Rc<PlatformConfig> {
     let platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);
@@ -16,19 +17,25 @@ fn quotas_platform_config() -> Rc<PlatformConfig> {
 
 #[test]
 fn test_quotas_rules_from_json() {
-    let quotas_rules_json = r#"{"*,*,*,john": [100, "ALL", "0.5*ALL"], "*,projA,*,*": ["34", "ALL", "2*ALL"]}"#;
-    let quotas = quotas_map_from_json(quotas_rules_json, 100);
+    let quotas_rules_json = r#"{
+            "quotas": {
+                "*,*,*,john": [100, "ALL", "0.5*ALL"],
+                "*,projA,*,*": ["34", "ALL", "2*ALL"]
+            }
+        }"#.to_string();
+
+    let quotas = QuotasConfig::load_from_json(quotas_rules_json, true, 100).default_rules;
 
     assert_eq!(quotas.len(), 2);
     assert!(quotas.contains_key(&("*".into(), "*".into(), "*".into(), "john".into())));
     assert!(quotas.contains_key(&("*".into(), "projA".into(), "*".into(), "*".into())));
     assert_eq!(
         quotas[&("*".into(), "*".into(), "*".into(), "john".into())],
-        QuotasValue::new(Some(100), Some(100), Some(50))
+        QuotasValue::new(Some(100), Some(100), Some(50*3600))
     );
     assert_eq!(
         quotas[&("*".into(), "projA".into(), "*".into(), "*".into())],
-        QuotasValue::new(Some(34), Some(100), Some(200))
+        QuotasValue::new(Some(34), Some(100), Some(200*3600))
     );
 }
 

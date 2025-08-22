@@ -44,7 +44,7 @@ impl PlatformTrait for Platform {
     fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
         Python::with_gil(|py| -> PyResult<()> {
             // Update python scheduled jobs
-            let py_scheduled_jobs = Self::save_assignments_python(self, py, &assigned_jobs).unwrap();
+            let py_scheduled_jobs = Self::save_assignments_python(self, py, &assigned_jobs);
 
             // Save assign in the Python platform
             self.py_platform
@@ -71,7 +71,7 @@ impl PlatformTrait for Platform {
 impl Platform {
     /// Updates the Python waiting jobs in `self.py_waiting_jobs_map` with the assignments from the Rust `assigned_jobs` parameter.
     /// Returns a dictionary containing the jobs of `self.py_waiting_jobs_map` filtered by keeping only the assigned jobs.
-    fn save_assignments_python<'s>(&self, py: Python<'s>, assigned_jobs: &'s IndexMap<u32, Job>) -> PyResult<Bound<'s, PyDict>> {
+    fn save_assignments_python<'s>(&self, py: Python<'s>, assigned_jobs: &'s IndexMap<u32, Job>) -> Bound<'s, PyDict> {
         let py_scheduled_jobs = PyDict::new(py);
         if let Some(py_waiting_jobs_map) = &self.py_waiting_jobs_map {
             for (py_job_id, py_job) in py_waiting_jobs_map.bind(py) {
@@ -81,7 +81,7 @@ impl Platform {
                         py_job.setattr("walltime", sd.end - sd.begin + 1).unwrap();
                         py_job.setattr("end_time", sd.end).unwrap();
                         py_job.setattr("moldable_id", job.moldables[sd.moldable_index].id).unwrap();
-                        py_job.setattr("res_set", proc_set_to_python(py_job.py(), &sd.proc_set).unwrap()).unwrap();
+                        py_job.setattr("res_set", proc_set_to_python(py_job.py(), &sd.proc_set)).unwrap();
                         py_scheduled_jobs.set_item(py_job_id, py_job).unwrap();
                     }
                 }
@@ -89,12 +89,12 @@ impl Platform {
         } else {
             panic!("Waiting jobs not loaded. Call `Platform::load_waiting_jobs` before starting the scheduling.");
         }
-        Ok(py_scheduled_jobs)
+        py_scheduled_jobs
     }
 
     /// Transforms a Python platform into a Rust Platform struct.
     /// The Rust Platform will keep a reference to Python objects to be able to transfert data back to Python after scheduling.
-    pub fn from_python(py_platform: &Bound<PyAny>, py_session: &Bound<PyAny>, py_config: &Bound<PyAny>, py_scheduled_jobs: Option<&Bound<PyAny>>) -> PyResult<Self> {
+    pub fn from_python(py_platform: &Bound<PyAny>, py_session: &Bound<PyAny>, py_config: &Bound<PyAny>, py_scheduled_jobs: Option<&Bound<PyAny>>) -> Self {
         let py_now = py_platform.getattr("get_time").unwrap().call0().unwrap();
         let now: i64 = py_now.extract().unwrap();
         let py_job_security_time: Bound<PyAny> = py_config
@@ -132,21 +132,20 @@ impl Platform {
         };
         let py_scheduled_jobs = py_scheduled_jobs.downcast::<PyList>().unwrap();
 
-        Ok(Platform {
+        Platform {
             now,
-            platform_config: Rc::new(build_platform_config(py_res_set.clone(), job_security_time).unwrap()),
+            platform_config: Rc::new(build_platform_config(py_res_set.clone(), py_config.clone(), job_security_time)),
             scheduled_jobs: py_scheduled_jobs
                 .iter()
                 .map(|py_job| build_job(&py_job))
-                .collect::<PyResult<Vec<Job>>>()
-                .unwrap(),
+                .collect::<Vec<Job>>(),
             waiting_jobs: None,
             py_waiting_jobs_map: None,
             py_platform: py_platform.clone().unbind(),
             py_session: py_session.clone().unbind(),
             py_config: py_config.clone().unbind(),
             py_res_set: py_res_set.unbind(),
-        })
+        }
     }
 
     /// Fetches the waiting jobs for the provided queues from the Python platform,
@@ -221,7 +220,7 @@ impl Platform {
                 .map(|py_id| {
                     let id: u32 = py_id.extract().unwrap();
                     let py_job = py_waiting_jobs_map.get_item(py_id).unwrap().unwrap();
-                    Ok((id, build_job(&py_job).unwrap()))
+                    Ok((id, build_job(&py_job)))
                 })
                 .collect::<PyResult<IndexMap<u32, Job>>>()
                 .unwrap(),

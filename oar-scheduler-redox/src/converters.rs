@@ -1,27 +1,29 @@
 use oar_scheduler_core::models::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
 use oar_scheduler_core::platform::{PlatformConfig, ResourceSet};
 use oar_scheduler_core::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
-use oar_scheduler_core::scheduler::quotas::{QuotasConfig, QuotasMap, QuotasValue};
 use pyo3::ffi::c_str;
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};
 use pyo3::{Bound, PyAny, PyResult, Python};
 use std::collections::HashMap;
-use log::info;
+use oar_scheduler_core::scheduler::calendar::QuotasConfig;
 
 /// Builds a PlatformConfig Rust struct from a Python resource set.
-pub fn build_platform_config(py_res_set: Bound<PyAny>, job_security_time: i64) -> PyResult<PlatformConfig> {
-    Ok(PlatformConfig {
+pub fn build_platform_config(py_res_set: Bound<PyAny>, py_config: Bound<PyAny>, job_security_time: i64) -> PlatformConfig {
+    let resource_set = build_resource_set(&py_res_set);
+    let quotas_config = build_quotas_config(py_config, &resource_set);
+
+    PlatformConfig {
         hour_size: 60 * 60, // Assuming 1 second resolution
         job_security_time,
         cache_enabled: true,
-        quotas_config: build_quotas_config(py_res_set.py()).unwrap(),
-        resource_set: build_resource_set(&py_res_set).unwrap(),
-    })
+        quotas_config,
+        resource_set,
+    }
 }
 
 /// Builds a ResourceSet Rust struct from a Python resource set.
-fn build_resource_set(py_res_set: &Bound<PyAny>) -> PyResult<ResourceSet> {
+fn build_resource_set(py_res_set: &Bound<PyAny>) -> ResourceSet {
     let py_default_intervals = py_res_set.getattr("roid_itvs").unwrap();
     let available_upto = py_res_set
         .getattr("available_upto")
@@ -46,7 +48,7 @@ fn build_resource_set(py_res_set: &Bound<PyAny>) -> PyResult<ResourceSet> {
         .iter()
         .map(|(k, v)| {
             let key: String = k.extract().unwrap();
-            let value: Box<[ProcSet]> = build_proc_sets(&v).unwrap();
+            let value: Box<[ProcSet]> = build_proc_sets(&v);
             Ok((key.into_boxed_str(), value))
         })
         .collect::<PyResult<HashMap<_, _>>>()
@@ -62,11 +64,11 @@ fn build_resource_set(py_res_set: &Bound<PyAny>) -> PyResult<ResourceSet> {
         })
         .collect();
 
-    Ok(ResourceSet {
+    ResourceSet {
         default_intervals: build_proc_set(&py_default_intervals),
         available_upto,
         hierarchy: Hierarchy::new_defined(partitions, unit_partition),
-    })
+    }
 }
 /// Builds a Rust ProcSet (range-set-blaze lib) from a Python ProcSet (procset lib).
 fn build_proc_set(py_proc_set: &Bound<PyAny>) -> ProcSet {
@@ -85,7 +87,7 @@ fn build_proc_set(py_proc_set: &Bound<PyAny>) -> ProcSet {
         .fold(ProcSet::new(), |acc, x| acc | x)
 }
 /// Converts a Rust ProcSet (range-set-blaze lib) to a Python ProcSet (procset lib).
-pub fn proc_set_to_python<'p>(py: Python<'p>, proc_set: &ProcSet) -> PyResult<Bound<'p, PyAny>> {
+pub fn proc_set_to_python<'p>(py: Python<'p>, proc_set: &ProcSet) -> Bound<'p, PyAny> {
     let intervals = proc_set
         .ranges()
         .map(|r| PyList::new(py, [*r.start(), *r.end()]))
@@ -93,11 +95,11 @@ pub fn proc_set_to_python<'p>(py: Python<'p>, proc_set: &ProcSet) -> PyResult<Bo
         .unwrap();
     let intervals = PyTuple::new(py, intervals).unwrap();
 
-    py.import("procset").unwrap().getattr("ProcSet").unwrap().call1(intervals)
+    py.import("procset").unwrap().getattr("ProcSet").unwrap().call1(intervals).unwrap()
 }
 /// Converts a Python list of ProcSets to a Rust array of ProcSets.
-fn build_proc_sets(py_proc_sets: &Bound<PyAny>) -> PyResult<Box<[ProcSet]>> {
-    Ok(py_proc_sets
+fn build_proc_sets(py_proc_sets: &Bound<PyAny>) -> Box<[ProcSet]> {
+    py_proc_sets
         .py()
         .eval(
             c_str!("[[(i.inf, i.sup) for i in list(p.intervals())] for p in ps]"),
@@ -113,50 +115,29 @@ fn build_proc_sets(py_proc_sets: &Bound<PyAny>) -> PyResult<Box<[ProcSet]>> {
                 .map(|(inf, sup)| ProcSet::from_iter([*inf..=*sup]))
                 .fold(ProcSet::new(), |acc, x| acc | x)
         })
-        .collect::<Box<[ProcSet]>>())
+        .collect::<Box<[ProcSet]>>()
 }
-/// Builds a QuotasConfig Rust struct from the Python Quotas class' static attributes.
-fn build_quotas_config(py: Python) -> PyResult<QuotasConfig> {
-    let py_quotas: Bound<PyAny> = py.import("oar.kao.quotas").unwrap().getattr("Quotas").unwrap();
+/// Builds a QuotasConfig Rust struct from the configuration file got from Python
+fn build_quotas_config(py_config: Bound<PyAny>, res_set: &ResourceSet) -> QuotasConfig {
+    let quotas_enabled: bool = py_config
+        .get_item("QUOTAS")
+        .map(|q| q.extract::<String>())
+        .is_ok_and(|q| q.is_ok_and(|q| q.eq("yes")));
 
-    let enabled: bool = py_quotas.getattr("enabled").unwrap().extract().unwrap();
-    let calendar = None; // Temporal quotas not implemented yet
-    let default_rules: QuotasMap = py_quotas
-        .getattr("default_rules")
-        .unwrap()
-        .downcast::<PyDict>()
-        .unwrap()
-        .iter()
-        .map(|(k, v)| {
-            // Extract the python tuple key and convert it to a tuple of boxed str.
-            let k = k.extract::<(String, String, String, String)>().unwrap();
-            let key = (k.0.into_boxed_str(), k.1.into_boxed_str(), k.2.into_boxed_str(), k.3.into_boxed_str());
-            // Transform the value (list) to QuotasValue, replacing -1 with None and keeping other values as u32 or i64.
-            let v: Vec<Option<i64>> = v
-                .extract::<Vec<i64>>()
-                .unwrap()
-                .iter()
-                .map(|x| if x < &0 { None } else { Some(*x) })
-                .collect();
-            info!("Processing key: {:?} -> {:?}", key, v);
-            let value: QuotasValue = QuotasValue::new(v[0].map(|i| i as u32), v[1].map(|i| i as u32), v[2]);
-            Ok((key, value))
-        })
-        .collect::<PyResult<QuotasMap>>()
-        .unwrap();
-
-    let tracked_job_types: Box<[Box<str>]> = py_quotas
-        .getattr("job_types")
-        .unwrap()
-        .extract::<Vec<String>>()
-        .unwrap()
-        .iter()
-        .map(|s| s.clone().into_boxed_str())
-        .collect();
-    Ok(QuotasConfig::new(enabled, calendar, default_rules, tracked_job_types))
+    if quotas_enabled {
+        let quotas_config_file: String = py_config.get_item("QUOTAS_CONF_FILE").unwrap().extract().unwrap();
+        let all_value_mode = py_config.get_item("ALL_VALUE_MODE").map(|m| m.extract().unwrap()).unwrap_or("default_not_dead".to_string());
+        let all_value = match all_value_mode.as_str() {
+            "default_not_dead" => res_set.default_intervals.core_count() as i64, // In a rust implementation, this should exclude dead cores
+            _ => res_set.default_intervals.core_count() as i64,
+        };
+        QuotasConfig::load_from_file(quotas_config_file.as_str(), true, all_value)
+    } else {
+        QuotasConfig::new(false, None, Default::default(), Box::new([]))
+    }
 }
 /// Transforms a Python job object into a Rust Job struct.
-pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
+pub fn build_job(py_job: &Bound<PyAny>) -> Job {
     let name: Option<String> = py_job.getattr("name").unwrap().extract().unwrap();
     let user: Option<String> = py_job.getattr("user").unwrap().extract().unwrap();
     let project: Option<String> = py_job.getattr("project").unwrap().extract().unwrap();
@@ -196,7 +177,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         0 => PlaceholderType::None,
         1 => PlaceholderType::Allow(py_job.getattr("ph_name").unwrap().extract::<String>().unwrap().into_boxed_str()),
         2 => PlaceholderType::Placeholder(py_job.getattr("ph_name").unwrap().extract::<String>().unwrap().into_boxed_str()),
-        _ => return Err(pyo3::exceptions::PyValueError::new_err("Invalid placeholder type value")),
+        _ => panic!("Invalid placeholder type value"),
     };
 
     // Moldables (scheduled jobs do not have mdl_res_rqts defined)
@@ -208,12 +189,10 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
             .unwrap()
             .iter()
             .map(|moldable| build_moldable(&moldable))
-            .collect::<PyResult<_>>()
-            .unwrap()
+            .collect()
     } else {
         Vec::new()
     };
-
 
     // Assignment
     let mut assignment: Option<JobAssignment> = None;
@@ -268,7 +247,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         Vec::new()
     };
 
-    Ok(Job {
+    Job {
         id: py_job.getattr("id").unwrap().extract::<u32>().unwrap(),
         name: name.map(|n| n.into_boxed_str()),
         user: user.map(|u| u.into_boxed_str()),
@@ -282,10 +261,10 @@ pub fn build_job(py_job: &Bound<PyAny>) -> PyResult<Job> {
         placeholder,
         dependencies,
         advance_reservation_start_time,
-    })
+    }
 }
 /// Builds a Moldable Rust struct from a Python moldable object.
-fn build_moldable(py_moldable: &Bound<PyAny>) -> PyResult<Moldable> {
+fn build_moldable(py_moldable: &Bound<PyAny>) -> Moldable {
     let id: u32 = py_moldable.get_item(0).unwrap().extract().unwrap();
     let walltime: i64 = py_moldable.get_item(1).unwrap().extract().unwrap();
 
@@ -317,5 +296,5 @@ fn build_moldable(py_moldable: &Bound<PyAny>) -> PyResult<Moldable> {
         .collect::<PyResult<Vec<_>>>()
         .unwrap();
 
-    Ok(Moldable::new(id, walltime, HierarchyRequests::from_requests(requests)))
+    Moldable::new(id, walltime, HierarchyRequests::from_requests(requests))
 }

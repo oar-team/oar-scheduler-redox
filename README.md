@@ -30,7 +30,7 @@ Rust scheduler implementation for OAR3
 
 # Crates & How to build/run
 
-## Dependency tree
+## Dependency graph
 ```mermaid
 graph TD;
     oar-scheduler-redox --> oar-scheduler-core

@@ -56,7 +56,7 @@ impl Slot {
             proc_set,
             begin,
             end,
-            quotas: quotas.unwrap_or(Quotas::new(platform_config.clone())),
+            quotas: quotas.unwrap_or(Quotas::from_platform_config(platform_config.clone())),
             platform_config,
             time_shared_proc_sets: HashMap::new(),
             placeholder_proc_sets: HashMap::new(),

@@ -133,6 +133,9 @@ Either clone the repository and edit directly the `oar-scheduler-hooks` crate, o
   If the job has two or more types and quotas are defined for booth types, the behavior is undefined.
 - Container jobs are subject to quotas limitations, but they never increment the quotas counters.
 - Container jobs don't anymore apply their time-sharing and placeholder attributes to their sub-slotset at is was an edge case with little use case.
+- In periodical temporal quotas, when specifying a period overnight (e.g. `22:00-04:00 fri * *`), it will create two periods: one from `22:00` to
+  `00:00` and another from `00:00` to `04:00`, **both on the same day**. The second period will not appear on saturday: it will rather apply to
+  friday.
 
 # License
 

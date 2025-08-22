@@ -1,14 +1,11 @@
 use crate::scheduler::quotas;
 use crate::scheduler::quotas::{QuotasMap, QuotasTree};
-use pyo3::prelude::PyDictMethods;
-use pyo3::types::PyDict;
+use crate::scheduler::quotas_parsing::{OneshotEntry, OneshotJsonEntry, OneshotsJson, PeriodicalEntry, PeriodicalJsonEntry, PeriodicalsJson, QuotasConfigEntries};
 #[cfg(feature = "pyo3")]
-use pyo3::{Bound, IntoPyObject, PyErr, Python};
-use serde::Deserialize;
+use pyo3::{prelude::PyDictMethods, types::PyDict, Bound, IntoPyObject, PyErr, Python};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::rc::Rc;
-use log::info;
 
 /// Configuration of quotas stored in PlatformConfig.
 #[allow(dead_code)]
@@ -21,13 +18,11 @@ pub struct QuotasConfig {
     pub default_rules_tree: Rc<QuotasTree>,
     pub tracked_job_types: Box<[Box<str>]>, // called job_types in python
 }
-
 impl Default for QuotasConfig {
     fn default() -> Self {
         QuotasConfig::new(true, None, Default::default(), Box::new(["*".into()]))
     }
 }
-
 #[cfg(feature = "pyo3")]
 impl<'a> IntoPyObject<'a> for &QuotasConfig {
     type Target = PyDict;
@@ -44,8 +39,6 @@ impl<'a> IntoPyObject<'a> for &QuotasConfig {
     }
 }
 
-type PeriodicalsJson = Box<[Box<(Box<str>, Box<str>, Box<str>)>]>;
-type OneshotJson = Box<[Box<(Box<str>, Box<str>, Box<str>, Box<str>)>]>;
 
 impl QuotasConfig {
     /// Creates a new QuotasConfig with the given parameters.
@@ -80,10 +73,10 @@ impl QuotasConfig {
             .map(|v| serde_json::from_value::<PeriodicalsJson>(v.clone()).expect("Failed to parse periodical quotas"));
         let oneshot = entries
             .get("oneshot")
-            .map(|v| serde_json::from_value::<OneshotJson>(v.clone()).expect("Failed to parse periodical quotas"));
+            .map(|v| serde_json::from_value::<OneshotsJson>(v.clone()).expect("Failed to parse periodical quotas"));
 
         let calendar = if periodical.is_some() || oneshot.is_some() {
-            Some(Calendar::from_config(entries, periodical, oneshot))
+            Some(Calendar::from_config(entries, periodical, oneshot, all_value))
         } else {
             None
         };
@@ -91,21 +84,6 @@ impl QuotasConfig {
     }
 }
 
-/// Json representation of QuotasConfig for deserialization from config file.
-#[derive(Debug, Clone, Deserialize)]
-struct JsonQuotasConfig {
-    periodical: Box<[Box<(Box<str>, Box<str>, Box<str>)>]>,
-    quotas: HashMap<String, Vec<Value>>, // default rules for non-temporal quotas
-    job_types: Box<[Box<str>]>,          // tracked_job_types
-}
-
-impl JsonQuotasConfig {
-    /// Converts the JSON configuration into a QuotasConfig instance.
-    pub fn into_quotas_config(self, enabled: bool, all_value: i64) -> QuotasConfig {
-        let quotas_map = quotas::build_quotas_map(&self.quotas, all_value);
-        QuotasConfig::new(enabled, None, quotas_map, self.job_types)
-    }
-}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
@@ -132,7 +110,29 @@ pub struct Calendar {
 }
 
 impl Calendar {
-    fn from_config(entries: HashMap<Box<str>, Value>, periodical: Option<PeriodicalsJson>, oneshot: Option<OneshotJson>) -> Self {
+    fn from_config(entries: HashMap<Box<str>, Value>, periodicals: Option<PeriodicalsJson>, oneshots: Option<OneshotsJson>, all_values: i64) -> Self {
+        let mut config_entries = QuotasConfigEntries::new(entries, all_values);
+
+        if let Some(periodicals) = periodicals {
+            let entries = periodicals
+                .into_iter()
+                .map(|periodical| PeriodicalJsonEntry::from_tuple(&periodical))
+                .map(|periodical| PeriodicalEntry::from_json_entry(&periodical, &mut config_entries))
+                .flatten()
+                .collect::<Vec<PeriodicalEntry>>();
+            // TODO: build Calendar structure based on the PeriodicalEntry items
+        }
+        if let Some(oneshots) = oneshots {
+            let entries = oneshots
+                .into_iter()
+                .map(|oneshot| OneshotJsonEntry::from_tuple(&oneshot))
+                .map(|oneshot| OneshotEntry::from_json_entry(&oneshot, &mut config_entries))
+                .collect::<Vec<OneshotEntry>>();
+            // TODO: build Calendar structure based on the OneshotEntry items
+        }
+
+        let quotas_rules = config_entries.to_parsed_entries();
+
         Self {
             config: "".to_string(),
             quotas_period: "".to_string(),

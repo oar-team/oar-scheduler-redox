@@ -14,3 +14,5 @@ mod dependencies_test;
 mod container_test;
 #[cfg(test)]
 mod placeholder_test;
+#[cfg(test)]
+mod quotas_parsing_test;

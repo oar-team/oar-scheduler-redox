@@ -2,7 +2,7 @@ use crate::models::{JobBuilder, Moldable, ProcSet, TimeSharingType};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::HierarchyRequests;
 use crate::scheduler::scheduling;
-use crate::scheduler::slot::SlotSet;
+use crate::scheduler::slotset::SlotSet;
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use indexmap::indexmap;
 use std::collections::HashMap;

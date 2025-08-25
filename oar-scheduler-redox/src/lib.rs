@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use log::{warn, LevelFilter};
 use oar_scheduler_core::models::{Job, JobAssignment, ProcSetCoresOp};
 use oar_scheduler_core::platform::PlatformTrait;
-use oar_scheduler_core::scheduler::slot::SlotSet;
+use oar_scheduler_core::scheduler::slotset::SlotSet;
 use oar_scheduler_core::scheduler::{kamelot, quotas};
 use pyo3::prelude::*;
 use std::cell::RefCell;

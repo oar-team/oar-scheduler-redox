@@ -1,14 +1,15 @@
 use crate::models::{JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformConfig;
+use crate::scheduler::calendar::QuotasConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::quotas::*;
 use crate::scheduler::scheduling;
-use crate::scheduler::slot::{Slot, SlotSet};
+use crate::scheduler::slot::Slot;
+use crate::scheduler::slotset::SlotSet;
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use indexmap::indexmap;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::scheduler::calendar::QuotasConfig;
 
 fn quotas_platform_config() -> Rc<PlatformConfig> {
     let platform_config = generate_mock_platform_config(false, 256, 8, 4, 8, true);

@@ -1,7 +1,8 @@
 use crate::hooks::get_hooks_manager;
 use crate::models::{Job, JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
-use crate::scheduler::slot::{Slot, SlotSet};
+use crate::scheduler::slot::Slot;
+use crate::scheduler::slotset::SlotSet;
 use auto_bench_fct::auto_bench_fct_hy;
 use indexmap::IndexMap;
 use log::{error, info, warn};

@@ -1,7 +1,7 @@
 use log::debug;
 use oar_scheduler_core::hooks::HooksHandler;
 use oar_scheduler_core::models::{Job, Moldable, ProcSet};
-use oar_scheduler_core::scheduler::slot::SlotSet;
+use oar_scheduler_core::scheduler::slotset::SlotSet;
 
 pub struct Hooks {
 
@@ -14,6 +14,7 @@ impl Hooks {
     }
 }
 
+#[allow(unused_variables)]
 impl HooksHandler for Hooks {
     fn hook_assign(&self, slot_set: &mut SlotSet, job: &mut Job, min_begin: Option<i64>) -> bool {
         debug!("Assign hook called");

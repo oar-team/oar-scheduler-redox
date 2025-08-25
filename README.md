@@ -150,13 +150,19 @@ Either clone the repository and edit directly the `oar-scheduler-hooks` crate, o
 
 # Notes
 
+- The whole scheduling algorithm works with closed intervals, meaning that the start and end time of a job, slot, periodical quotas are all inclusive.
+  If a slot goes from `t1` to `t2`, the next slot will start at `t2 + 1` (same as in the original Python oar scheduler).
 - A job is subject to a single quota rule. The rule to be applied is the one that matches the job with the maximum specificity.
   If the job has two or more types and quotas are defined for booth types, the behavior is undefined.
 - Container jobs are subject to quotas limitations, but they never increment the quotas counters.
 - Container jobs don't anymore apply their time-sharing and placeholder attributes to their sub-slotset at is was an edge case with little use case.
+- Inner jobs are not subject to quotas limitations. Quotas are only tracked for the slotset `default`.
 - In periodical temporal quotas, when specifying a period overnight (e.g. `22:00-04:00 fri * *`), it will create two periods: one from `22:00` to
   `00:00` and another from `00:00` to `04:00`, **both on the same day**. The second period will not appear on saturday: it will rather apply to
   friday.
+- Although the scheduler uses closed intervals, periodical and oneshot temporal quotas are configured using half-open intervals (`[start, end)`),
+  meaning that a time interval defined in the configuration as `10:00-12:00` will be parsed by the code as a period from `10:00:00` (inclusive) to
+  `11:59:59` (inclusive).
 
 # License
 

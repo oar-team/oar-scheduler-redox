@@ -2,7 +2,7 @@ use crate::models::*;
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::scheduling::*;
-use crate::scheduler::slot::*;
+use crate::scheduler::slotset::SlotSet;
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use indexmap::indexmap;
 use std::collections::HashMap;

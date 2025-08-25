@@ -1,9 +1,7 @@
 use crate::models::Job;
 use crate::platform::PlatformConfig;
-use crate::scheduler::slot::SlotIterator;
+use crate::scheduler::slotset::SlotIterator;
 use auto_bench_fct::auto_bench_fct_hy;
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::PyDictMethods;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -112,7 +110,7 @@ impl QuotasValue {
                                     s[..s.len() - 4].to_string()
                                 )
                                 .as_str(),
-                            ) * all_value as f64) as i64
+                            ) * all_value as f64) as i64,
                         )
                     } else {
                         let n = s
@@ -290,6 +288,15 @@ impl Debug for Quotas {
 /// One can check if the counters for a job exceed the limits defined in the rules by calling `Quotas::check`.
 /// Checking if a job’s counters exceed the limits finds the rule that is the most specific for the job, i.e., the one with the least number of wildcards, and checks the counters of that rule key.
 impl Quotas {
+    pub fn new(platform_config: Rc<PlatformConfig>, rules_id: i32, rules: Rc<QuotasMap>, rules_tree: Rc<QuotasTree>) -> Quotas {
+        Quotas {
+            counters: QuotasMap::default(),
+            rules_id,
+            rules,
+            rules_tree,
+            platform_config,
+        }
+    }
     /// Creates a new Quotas instance with the given configuration and rules.
     /// As rules are also mostly common in Quotas instances, it is also a Rc.
     pub fn from_platform_config(platform_config: Rc<PlatformConfig>) -> Quotas {
@@ -414,6 +421,10 @@ impl Quotas {
         let (rule_key_counter, rule_key, rule_value) = self.find_applicable_rule(job)?;
         let counts = self.counters.get(&rule_key_counter)?;
         rule_value.check(counts).map(|(description, limit)| (description, rule_key, limit))
+    }
+
+    pub fn rules_id(&self) -> i32 {
+        self.rules_id
     }
 }
 

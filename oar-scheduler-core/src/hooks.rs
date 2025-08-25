@@ -1,5 +1,5 @@
 use crate::models::{Job, Moldable, ProcSet};
-use crate::scheduler::slot::SlotSet;
+use crate::scheduler::slotset::SlotSet;
 use std::cell::OnceCell;
 use std::rc::Rc;
 

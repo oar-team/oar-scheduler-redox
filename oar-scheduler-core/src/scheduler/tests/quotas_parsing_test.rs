@@ -1,4 +1,5 @@
-use crate::scheduler::quotas_parsing::{PeriodicalEntry, PeriodicalJsonEntry, QuotasConfigEntries};
+use crate::scheduler::calendar::parsing::{PeriodicalEntry, PeriodicalJsonEntry, QuotasConfigEntries};
+use crate::scheduler::calendar::QuotasConfig;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -24,8 +25,8 @@ fn test_parse_periodical_entry() {
 
     // Verify first entry (Monday)
     let monday_entry = &result[0];
-    assert_eq!(monday_entry.begin_time, 0 * 86400 + 8 * 3600);
-    assert_eq!(monday_entry.duration, 11 * 3600); // 08:00-19:00 = 11 hours
+    assert_eq!(monday_entry.week_begin_time, 8 * 3600);
+    assert_eq!(monday_entry.week_end_time, 19 * 3600 - 1);
 }
 
 #[test]
@@ -49,4 +50,25 @@ fn test_overnight_period() {
 
     // Should have entries for each day, with proper overflow handling
     assert_eq!(result.len(), 7 * 2); // 7 days * 2 entries per day (split at midnight)
+}
+
+#[test]
+fn test_quotas_config() {
+    let rules_json = r#"{
+            "periodical": [["* * * *", "quotas_1", "default"]],
+            "quotas_1": {"*,*,*,/": [1, -1, -1]},
+            "quotas_2": {"*,*,*,/": [-1, -1, -1]},
+            "oneshot": [["2025-08-27 15:47", "2025-08-28 15:47", "quotas_2", ""]]
+        }"#.to_string();
+    let quotas_config = QuotasConfig::load_from_json(rules_json, true, 0);
+
+
+    let calendar = quotas_config.calendar.unwrap();
+    let periodicals = calendar.ordered_periodicals();
+    assert_eq!(periodicals.len(), 1);
+
+    let periodical = &periodicals[0];
+    assert_eq!(periodical.period_string, "* * * * + * * * * + * * * * + * * * * + * * * * + * * * * + * * * *".into());
+    assert_eq!(periodical.week_begin_time, 0);
+    assert_eq!(periodical.week_end_time, 7 * 24 * 3600 - 1);
 }

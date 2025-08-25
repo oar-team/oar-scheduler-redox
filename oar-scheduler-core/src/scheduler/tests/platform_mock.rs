@@ -1,11 +1,11 @@
 use crate::models::{Job, ProcSet};
 use crate::platform::{PlatformConfig, PlatformTrait, ResourceSet};
+use crate::scheduler::calendar::QuotasConfig;
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasValue;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::scheduler::calendar::QuotasConfig;
 
 /// In mocking, the time unit is the minute.
 pub struct PlatformBenchMock {

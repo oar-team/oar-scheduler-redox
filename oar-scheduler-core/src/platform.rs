@@ -1,8 +1,8 @@
 #[cfg(feature = "pyo3")]
 use crate::models::proc_set_to_python;
 use crate::models::{Job, ProcSet};
-use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::calendar::QuotasConfig;
+use crate::scheduler::hierarchy::Hierarchy;
 use indexmap::IndexMap;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};

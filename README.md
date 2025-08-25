@@ -99,12 +99,33 @@ maturin develop --release
 
 ### Usage in Python
 
-You can use the library in Python as follows:
+You can use the library in internal mode, or in (almost) external mode, called mixed mode.
+Look at the oar3 python source code to see how to use it. In oar3, the mixed mode is implemented to be used in replacement of the internal scheduler.
+
+External mode:
+```python
+import oar_scheduler_redox
+
+oar_scheduler_redox.schedule_cycle_external(session, config, platform, now, queues)
+```
+
+Internal mode (mixed mode):
 
 ```python
 import oar_scheduler_redox
 
-oar_scheduler_redox.schedule_cycle(session, config, platform, queues)
+redox_platform = oar_scheduler_redox.build_redox_platform(
+  session, config, platform, now, scheduled_jobs
+)
+redox_slot_sets = oar_scheduler_redox.build_redox_slot_sets(redox_platform)
+for active_queues in grouped_active_queues:
+  oar_scheduler_redox.schedule_cycle_internal(
+    redox_platform, redox_slot_sets, active_queues
+  )
+  for queue in active_queues:
+    oar_scheduler_redox.check_reservation_jobs(
+      redox_platform, redox_slot_sets, queue
+    )
 ```
 
 ## Crate oar-scheduler-hooks

@@ -34,9 +34,9 @@ fn oar_scheduler_redox(m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Schedules the jobs from the platform and saves the assignments back to the platform.
 /// Should be called in external scheduler mode.
 #[pyfunction]
-fn schedule_cycle_external(py_session: Bound<PyAny>, py_config: Bound<PyAny>, py_platform: Bound<PyAny>, py_queues: Bound<PyAny>) -> PyResult<()> {
+fn schedule_cycle_external(py_session: Bound<PyAny>, py_config: Bound<PyAny>, py_platform: Bound<PyAny>, py_now: Bound<PyAny>, py_queues: Bound<PyAny>) -> PyResult<()> {
     // Extracting the platform (including the resource set, quotas config, and waiting jobs)
-    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, None);
+    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, &py_now, None);
 
     // Loading the waiting jobs from the python platform for this specific queues
     platform.load_waiting_jobs(&py_queues, None);
@@ -70,9 +70,7 @@ fn build_redox_platform(
     py_now: Bound<PyAny>,
     py_scheduled_jobs: Bound<PyAny>,
 ) -> PyResult<Py<PlatformHandle>> {
-    let mut platform = Platform::from_python(&py_platform, &py_session, &py_config, Some(&py_scheduled_jobs));
-    let now: i64 = py_now.extract().unwrap();
-    platform.set_now(now);
+    let platform = Platform::from_python(&py_platform, &py_session, &py_config, &py_now, Some(&py_scheduled_jobs));
     Py::new(
         py,
         PlatformHandle {

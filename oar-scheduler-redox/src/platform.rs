@@ -94,8 +94,7 @@ impl Platform {
 
     /// Transforms a Python platform into a Rust Platform struct.
     /// The Rust Platform will keep a reference to Python objects to be able to transfert data back to Python after scheduling.
-    pub fn from_python(py_platform: &Bound<PyAny>, py_session: &Bound<PyAny>, py_config: &Bound<PyAny>, py_scheduled_jobs: Option<&Bound<PyAny>>) -> Self {
-        let py_now = py_platform.getattr("get_time").unwrap().call0().unwrap();
+    pub fn from_python(py_platform: &Bound<PyAny>, py_session: &Bound<PyAny>, py_config: &Bound<PyAny>, py_now: &Bound<PyAny>, py_scheduled_jobs: Option<&Bound<PyAny>>) -> Self {
         let now: i64 = py_now.extract().unwrap();
         let py_job_security_time: Bound<PyAny> = py_config
             .get_item("SCHEDULER_JOB_SECURITY_TIME")
@@ -225,10 +224,6 @@ impl Platform {
                 .collect::<PyResult<IndexMap<u32, Job>>>()
                 .unwrap(),
         );
-    }
-
-    pub(crate) fn set_now(&mut self, now: i64) {
-        self.now = now;
     }
 
     pub(crate) fn get_py_session(&self) -> &Py<PyAny> {

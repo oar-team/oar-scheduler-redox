@@ -25,7 +25,7 @@ fn test_quotas_rules_from_json() {
             }
         }"#.to_string();
 
-    let quotas = QuotasConfig::load_from_json(quotas_rules_json, true, 100).default_rules;
+    let quotas = QuotasConfig::load_from_json(quotas_rules_json, true, 100, 2 * 7 * 24 * 3600).default_rules;
 
     assert_eq!(quotas.len(), 2);
     assert!(quotas.contains_key(&("*".into(), "*".into(), "*".into(), "john".into())));

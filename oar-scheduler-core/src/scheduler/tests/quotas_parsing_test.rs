@@ -60,7 +60,7 @@ fn test_quotas_config() {
             "quotas_2": {"*,*,*,/": [-1, -1, -1]},
             "oneshot": [["2025-08-27 15:47", "2025-08-28 15:47", "quotas_2", ""]]
         }"#.to_string();
-    let quotas_config = QuotasConfig::load_from_json(rules_json, true, 0);
+    let quotas_config = QuotasConfig::load_from_json(rules_json, true, 0, 2 * 7 * 24 * 3600);
 
 
     let calendar = quotas_config.calendar.unwrap();

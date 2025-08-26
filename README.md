@@ -11,7 +11,7 @@ Rust scheduler implementation for OAR3
 - [x] Job dependencies support
 - [x] Job container support
 - [x] Placeholders support
-- [ ] Temporal quotas support
+- [x] Temporal quotas support
 - [ ] Envelopes support
 
 ### Benchmarking (`oar-scheduler-bench`)
@@ -25,14 +25,16 @@ Rust scheduler implementation for OAR3
 - [x] Expose the Rust scheduler as a Python library
 - [x] Support external mode (convert platform: jobs, config, resources set, etc.)
 - [x] Support mixed mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
-- [x] Rust hooks support (plugins developed in Rust) 
+- [x] Rust hooks support (plugins developed in Rust)
 - [ ] Support internal mode (convert slotset objects from Python to Rust and from Rust to Python)
 
 # Crates & How to build/run
 
 ## Dependency graph
+
 ```mermaid
-graph TD;
+graph TD
+;
     oar-scheduler-redox --> oar-scheduler-core
     oar-scheduler-redox --> oar-scheduler-hooks
     oar-scheduler-hooks --> oar-scheduler-core
@@ -103,6 +105,7 @@ You can use the library in internal mode, or in (almost) external mode, called m
 Look at the oar3 python source code to see how to use it. In oar3, the mixed mode is implemented to be used in replacement of the internal scheduler.
 
 External mode:
+
 ```python
 import oar_scheduler_redox
 
@@ -130,12 +133,16 @@ for active_queues in grouped_active_queues:
 
 ## Crate oar-scheduler-hooks
 
-This crate allows sysadmins to define rust functions (hooks) that are called by the scheduler at specific points in the scheduling process, allowing to overwrite default behavior.
+This crate allows sysadmins to define rust functions (hooks) that are called by the scheduler at specific points in the scheduling process, allowing
+to overwrite default behavior.
 
-As shown in the dependency tree, this crate should keep a fixed structure exposing the struct `Hooks` with a `pub fn new() -> Option<Self>` function, and implementing the trait `HooksHandler`. This way `oar-scheduler-redox` will be able to initialize the struct and call a function of `oar-scheduler-core` to register the hooks.
+As shown in the dependency tree, this crate should keep a fixed structure exposing the struct `Hooks` with a `pub fn new() -> Option<Self>` function,
+and implementing the trait `HooksHandler`. This way `oar-scheduler-redox` will be able to initialize the struct and call a function of
+`oar-scheduler-core` to register the hooks.
 
 The `new` function of `Hooks` is called at the beginning of the process, and can return `None` to disable the hook system.
-Hook functions return either a `bool` or an `Option<T>`. If `false` or `None` is returned, the default behavior is applied. If `true` or `Some(value)` is returned, the default behavior is overridden.
+Hook functions return either a `bool` or an `Option<T>`. If `false` or `None` is returned, the default behavior is applied. If `true` or `Some(value)`
+is returned, the default behavior is overridden.
 
 ### Available hooks
 
@@ -146,7 +153,8 @@ Look at `oar-scheduler-core/hooks.rs` for more details on the available hooks an
 
 ### Creating custom hooks
 
-Either clone the repository and edit directly the `oar-scheduler-hooks` crate, or create a new crate with the same structure as `oar-scheduler-hooks`, and replace the `oar-scheduler-hooks` dependency in `oar-scheduler-redox/Cargo.toml` with your custom crate.
+Either clone the repository and edit directly the `oar-scheduler-hooks` crate, or create a new crate with the same structure as `oar-scheduler-hooks`,
+and replace the `oar-scheduler-hooks` dependency in `oar-scheduler-redox/Cargo.toml` with your custom crate.
 
 # Notes
 
@@ -163,7 +171,9 @@ Either clone the repository and edit directly the `oar-scheduler-hooks` crate, o
 - Although the scheduler uses closed intervals, periodical and oneshot temporal quotas are configured using half-open intervals (`[start, end)`),
   meaning that a time interval defined in the configuration as `10:00-12:00` will be parsed by the code as a period from `10:00:00` (inclusive) to
   `11:59:59` (inclusive).
--
+- This scheduler does not take into account the `QUOTAS_PERIOD` configuration variable. It only uses `QUOTAS_WINDOW_TIME_LIMIT` and adds the
+  periodical quotas only up to the end of the week containing `now + QUOTAS_WINDOW_TIME_LIMIT`. Any quota-limited job trying to be scheduled after
+  `now + QUOTAS_WINDOW_TIME_LIMIT` will not be scheduled and a warning will be logged (if temporal quotas are configured).
 
 # License
 

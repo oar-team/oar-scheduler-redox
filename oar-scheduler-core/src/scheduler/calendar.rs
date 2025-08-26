@@ -59,11 +59,11 @@ impl QuotasConfig {
             tracked_job_types,
         }
     }
-    pub fn load_from_file(path: &str, enabled: bool, all_value: i64) -> Self {
+    pub fn load_from_file(path: &str, enabled: bool, all_value: i64, quotas_window_time_limit: i64) -> Self {
         let json = std::fs::read_to_string(path).expect("Failed to read quotas config file");
-        Self::load_from_json(json, enabled, all_value)
+        Self::load_from_json(json, enabled, all_value, quotas_window_time_limit)
     }
-    pub fn load_from_json(json: String, enabled: bool, all_value: i64) -> Self {
+    pub fn load_from_json(json: String, enabled: bool, all_value: i64, quotas_window_time_limit: i64) -> Self {
         let entries = serde_json::from_str::<HashMap<Box<str>, Value>>(&json).expect("Failed to parse quotas config base JSON");
 
         let job_types = entries
@@ -87,8 +87,8 @@ impl QuotasConfig {
                 periodical,
                 oneshot,
                 all_value,
-                6 * 7 * 24 * 3600, /*1296000*/
-            )) // TODO: replace by real max time, or make it automatic.
+                quotas_window_time_limit,
+            ))
         } else {
             None
         };
@@ -327,6 +327,9 @@ impl Calendar {
     }
     pub fn rules_map(&self) -> HashMap<i32, Rc<QuotasMap>> {
         self.rules_map.iter().map(|(k, v)| (*k, Rc::clone(&v.0))).collect()
+    }
+    pub fn quotas_window_time_limit(&self) -> i64 {
+        self.quotas_window_time_limit
     }
 }
 

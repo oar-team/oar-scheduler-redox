@@ -131,7 +131,8 @@ fn build_quotas_config(py_config: Bound<PyAny>, res_set: &ResourceSet) -> Quotas
             "default_not_dead" => res_set.default_intervals.core_count() as i64, // In a rust implementation, this should exclude dead cores
             _ => res_set.default_intervals.core_count() as i64,
         };
-        QuotasConfig::load_from_file(quotas_config_file.as_str(), true, all_value)
+        let quotas_window_time_limit: i64 = py_config.get_item("QUOTAS_WINDOW_TIME_LIMIT").map(|t| t.extract().unwrap()).expect("QUOTAS_WINDOW_TIME_LIMIT must be defined when quotas are enabled");
+        QuotasConfig::load_from_file(quotas_config_file.as_str(), true, all_value, quotas_window_time_limit)
     } else {
         QuotasConfig::new(false, None, Default::default(), Box::new([]))
     }

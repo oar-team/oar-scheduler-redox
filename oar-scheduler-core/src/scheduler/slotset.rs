@@ -2,7 +2,6 @@ use crate::models::{Job, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, Tim
 use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
 use auto_bench_fct::auto_bench_fct_hy;
-use log::info;
 use prettytable::{format, row, Table};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -104,8 +103,6 @@ impl SlotSet {
         let mut slotset = SlotSet::from_slot(slot);
         if let Some(calendar) = &platform_config.quotas_config.calendar {
             calendar.split_slotset_for_temporal_quotas(&mut slotset);
-            info!("Slotset created from {} to {} with {} slots after applying temporal quotas", begin, end, slotset.slot_count());
-            info!("{}", slotset.to_table().to_string())
         }
         slotset
     }

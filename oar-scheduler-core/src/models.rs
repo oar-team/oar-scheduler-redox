@@ -35,6 +35,8 @@ pub struct Job {
     pub queue: Box<str>,
     pub types: HashMap<Box<str>, Option<Box<str>>>,
     pub moldables: Vec<Moldable>,
+    /// This attribute is set to true if job has the type key "no_quotas", which means the job is not limited by quotas.
+    pub no_quotas: bool,
     /// The time interval and resources assigned to the job.
     pub assignment: Option<JobAssignment>,
     /// Used for benchmarking the quotas hit count
@@ -43,7 +45,7 @@ pub struct Job {
     pub placeholder: PlaceholderType,
     /// List of job dependencies, tuples of (job_id, state, exit_code)
     pub dependencies: Vec<(u32, Box<str>, Option<i32>)>,
-    /// Attribute used to store the start time of advance reservation jobs.
+    /// Attribute used to store the start time of advance reservation jobs before they get an assignment.
     pub advance_reservation_start_time: Option<i64>,
 }
 
@@ -146,7 +148,7 @@ impl Job {
 
     /// Returns true if the job can be scheduled using the cache.
     pub fn can_use_cache(&self) -> bool {
-        self.time_sharing.is_none() && self.placeholder.is_none()
+        self.time_sharing.is_none() && self.placeholder.is_none() && !self.no_quotas
     }
     /// Returns true if the job assignment can be used to insert a cache entry.
     pub fn can_set_cache(&self) -> bool {
@@ -263,6 +265,7 @@ impl JobBuilder {
             user: self.user,
             project: self.project,
             queue: self.queue.unwrap_or_else(|| "default".into()),
+            no_quotas: self.types.contains_key("no_quotas".into()),
             types: self.types,
             moldables: self.moldables,
             assignment: self.assignment,

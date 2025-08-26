@@ -31,6 +31,9 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
             "job_security_time: {} | hour_size: {} | cache_enabled: {}",
             platform_config.job_security_time, platform_config.hour_size, platform_config.cache_enabled
         );
+        waiting_jobs.values().for_each(|j| {
+            info!("{:?}", j);
+        });
     }
 
     if waiting_jobs.len() > 0 {

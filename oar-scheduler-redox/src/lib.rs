@@ -179,7 +179,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
             .request(&available_resources, &moldable.requests);
 
         if let Some(proc_set) = res {
-            if slot_set.get_platform_config().quotas_config.enabled {
+            if slot_set.get_platform_config().quotas_config.enabled && !job.no_quotas {
                 let slots = slot_set.iter().between(left_slot_id, right_slot_id);
                 if let Some((_msg, _rule, _limit)) = quotas::check_slots_quotas(slots, &job, start_time, end_time, proc_set.core_count()) {
                     set_job_resa_scheduled(&job_handling, &platform, job.id, Some("This AR cannot run: quotas exceeded"));

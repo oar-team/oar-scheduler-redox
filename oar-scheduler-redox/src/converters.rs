@@ -1,12 +1,12 @@
 use oar_scheduler_core::models::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
 use oar_scheduler_core::platform::{PlatformConfig, ResourceSet};
+use oar_scheduler_core::scheduler::calendar::QuotasConfig;
 use oar_scheduler_core::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use pyo3::ffi::c_str;
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyTuple};
 use pyo3::{Bound, PyAny, PyResult, Python};
 use std::collections::HashMap;
-use oar_scheduler_core::scheduler::calendar::QuotasConfig;
 
 /// Builds a PlatformConfig Rust struct from a Python resource set.
 pub fn build_platform_config(py_res_set: Bound<PyAny>, py_config: Bound<PyAny>, job_security_time: i64) -> PlatformConfig {
@@ -222,7 +222,9 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
     if assignment.is_none() && py_job.hasattr("start_time").unwrap() {
         let begin: Option<i64> = py_job.getattr("start_time").unwrap().extract().unwrap();
         if let Some(begin) = begin {
-            advance_reservation_start_time = Some(begin);
+            if begin > 0 {
+                advance_reservation_start_time = Some(begin);
+            }
         }
     }
 
@@ -247,6 +249,9 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
         Vec::new()
     };
 
+    // no_quotas
+    let no_quotas: bool = py_job.getattr_opt("no_quotas").unwrap().map(|o| o.extract()).unwrap_or(Ok(false)).unwrap();
+
     Job {
         id: py_job.getattr("id").unwrap().extract::<u32>().unwrap(),
         name: name.map(|n| n.into_boxed_str()),
@@ -255,6 +260,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
         queue: queue.into_boxed_str(),
         types,
         moldables,
+        no_quotas,
         assignment,
         quotas_hit_count: 0,
         time_sharing,

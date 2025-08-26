@@ -126,6 +126,7 @@ impl SlotSet {
             buFc->"End (epoch)",
             buFc->"Size (days)",
             buFc->"ProcSet",
+            buFc->"Quotas r_id"
             //buFc->"Placeholders ProcSets"
         ]);
         let mut slot = self.first_slot();
@@ -138,6 +139,7 @@ impl SlotSet {
                 s.end,
                 format!("{:.2}", (s.end - s.begin) as f32 / 3600f32 / 24f32),
                 s.proc_set,
+                s.quotas.rules_id(),
                 //s.placeholder_proc_set,
             ]);
 
@@ -382,7 +384,7 @@ impl SlotSet {
                 let proc_set = &assignment.proc_set;
                 if sub_resources {
                     slot.sub_proc_set(proc_set);
-                    if self.platform_config.quotas_config.enabled && do_update_quotas {
+                    if self.platform_config.quotas_config.enabled && !job.no_quotas && do_update_quotas {
                         slot.quotas
                             .increment_for_job(job, slot.end - slot.begin + 1, assignment.proc_set.core_count());
                     }

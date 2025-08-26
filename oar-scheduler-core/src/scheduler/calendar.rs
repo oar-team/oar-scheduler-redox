@@ -6,8 +6,8 @@ use crate::scheduler::calendar::parsing::{
 use crate::scheduler::quotas;
 use crate::scheduler::quotas::{Quotas, QuotasMap, QuotasTree};
 use crate::scheduler::slotset::SlotSet;
-use chrono::{DateTime, Datelike, Timelike};
-use log::{info, warn};
+use chrono::{Datelike, Local, TimeZone, Timelike};
+use log::warn;
 #[cfg(feature = "pyo3")]
 use pyo3::{prelude::PyDictMethods, types::PyDict, Bound, IntoPyObject, PyErr, Python};
 use serde_json::Value;
@@ -81,9 +81,14 @@ impl QuotasConfig {
             .get("oneshot")
             .map(|v| serde_json::from_value::<OneshotsJson>(v.clone()).expect("Failed to parse periodical quotas"));
 
-
         let calendar = if periodical.is_some() || oneshot.is_some() {
-            Some(Calendar::from_config(entries, periodical, oneshot, all_value, 5000000000)) // TODO: replace by real max time, or make it automatic.
+            Some(Calendar::from_config(
+                entries,
+                periodical,
+                oneshot,
+                all_value,
+                6 * 7 * 24 * 3600, /*1296000*/
+            )) // TODO: replace by real max time, or make it automatic.
         } else {
             None
         };
@@ -94,7 +99,8 @@ impl QuotasConfig {
 #[allow(dead_code)]
 #[derive(Debug, Default)]
 pub struct Calendar {
-    quotas_max_time: i64, // quotas_period
+    /// Periodicals are applied until the end of the week containing the instant (now + quotas_window_time_limit).
+    quotas_window_time_limit: i64,
 
     rules_map: HashMap<i32, (Rc<QuotasMap>, Rc<QuotasTree>)>,
     ordered_periodicals: Vec<PeriodicalEntry>,
@@ -107,7 +113,7 @@ impl Calendar {
         periodicals: Option<PeriodicalsJson>,
         oneshots: Option<OneshotsJson>,
         all_values: i64,
-        quotas_max_time: i64,
+        quotas_window_time_limit: i64,
     ) -> Self {
         let mut config_entries = QuotasConfigEntries::new(json_entries, all_values);
 
@@ -118,7 +124,6 @@ impl Calendar {
                 .map(|periodical| PeriodicalEntry::from_json_entry(&periodical, &mut config_entries))
                 .flatten()
                 .collect::<Vec<PeriodicalEntry>>();
-
 
             // Sort and merge periodicals
             entries.sort_by(|a, b| a.week_begin_time.cmp(&b.week_begin_time));
@@ -175,7 +180,7 @@ impl Calendar {
         let rules_map = config_entries.to_rules_map();
 
         Self {
-            quotas_max_time,
+            quotas_window_time_limit,
             rules_map,
             ordered_periodicals,
             ordered_oneshot,
@@ -195,11 +200,16 @@ impl Calendar {
             }
         }
         // Find the time in the week (0 = Monday 00:00:00, 604800 = Sunday 23:59:59)
-        let week_datetime = DateTime::from_timestamp(time, 0).expect("Failed to convert time to DateTime");
+        let week_datetime = match Local.timestamp_opt(time, 0) {
+            chrono::LocalResult::Single(dt) => dt,
+            _ => panic!("Failed to convert time to DateTime"),
+        };
+
         let week_time = (week_datetime.weekday().num_days_from_monday() as i64) * 24 * 3600
             + (week_datetime.hour() as i64) * 3600
             + (week_datetime.minute() as i64) * 60
             + (week_datetime.second() as i64);
+
         // Iterating over ordered_periodicals, looping back to the start if needed
         for (i, periodical) in self.ordered_periodicals[periodicals_start_index..]
             .iter()
@@ -219,7 +229,7 @@ impl Calendar {
             return;
         }
         self.split_slotset_for_oneshots(slot_set);
-        self.split_slotset_for_periodicals(slot_set, self.quotas_max_time);
+        self.split_slotset_for_periodicals(slot_set);
     }
 
     /// Splits the slotset according to the oneshot entries in the calendar.
@@ -255,9 +265,14 @@ impl Calendar {
 
     /// Splits the slotset according to the periodical entries in the calendar.
     /// Sets the correct [`Quotas`] structs to the slots.
-    fn split_slotset_for_periodicals(&self, slot_set: &mut SlotSet, max_time: i64) {
+    fn split_slotset_for_periodicals(&self, slot_set: &mut SlotSet) {
+        let max_time = slot_set.begin() + self.quotas_window_time_limit;
+
         let slotset_begin = slot_set.begin();
-        let slotset_begin_datetime = DateTime::from_timestamp(slotset_begin, 0).expect("Failed to convert time to DateTime");
+        let slotset_begin_datetime = match Local.timestamp_opt(slotset_begin, 0) {
+            chrono::LocalResult::Single(dt) => dt,
+            _ => panic!("Failed to convert time to DateTime"),
+        };
         let mut week_begin = slotset_begin
             - (slotset_begin_datetime.weekday().num_days_from_monday() as i64) * 24 * 3600
             - (slotset_begin_datetime.hour() as i64) * 3600
@@ -291,8 +306,9 @@ impl Calendar {
                     Rc::clone(&rules.1),
                 );
                 for slot_id in slot_set.iter().between(begin_slot_id, end_slot_id).map(|s| s.id).collect::<Vec<i32>>() {
-                    if slot_set.get_slot(slot_id).unwrap().quotas.rules_id() == slot_set.get_platform_config().quotas_config.default_rules_id {}
-                    slot_set.get_slot_mut(slot_id).unwrap().quotas = quotas.clone();
+                    if slot_set.get_slot(slot_id).unwrap().quotas.rules_id() == slot_set.get_platform_config().quotas_config.default_rules_id {
+                        slot_set.get_slot_mut(slot_id).unwrap().quotas = quotas.clone();
+                    }
                 }
             }
             week_begin += 7 * 24 * 3600;
@@ -318,7 +334,7 @@ impl Calendar {
 pub mod parsing {
     use crate::scheduler::quotas;
     use crate::scheduler::quotas::{QuotasMap, QuotasTree};
-    use chrono::{DateTime, NaiveDateTime, Utc};
+    use chrono::{DateTime, Local, NaiveDateTime};
     use serde_json::Value;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -576,7 +592,7 @@ pub mod parsing {
     }
 
     /// Parse a datetime string in the format "YYYY-MM-DD hh:mm" to a DateTime<Utc>
-    fn parse_datetime(datetime_str: &str) -> Result<DateTime<Utc>, String> {
+    fn parse_datetime(datetime_str: &str) -> Result<DateTime<Local>, String> {
         // Add seconds if not present
         let datetime_with_seconds = if datetime_str.len() == 16 {
             // Format: YYYY-MM-DD hh:mm
@@ -587,7 +603,7 @@ pub mod parsing {
 
         // Parse with timezone support
         NaiveDateTime::parse_from_str(&datetime_with_seconds, "%Y-%m-%d %H:%M:%S")
-            .map(|datetime| datetime.and_utc())
+            .map(|datetime| datetime.and_local_timezone(Local).unwrap())
             .map_err(|e| e.to_string())
     }
 }

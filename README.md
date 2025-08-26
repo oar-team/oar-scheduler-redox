@@ -163,6 +163,7 @@ Either clone the repository and edit directly the `oar-scheduler-hooks` crate, o
 - Although the scheduler uses closed intervals, periodical and oneshot temporal quotas are configured using half-open intervals (`[start, end)`),
   meaning that a time interval defined in the configuration as `10:00-12:00` will be parsed by the code as a period from `10:00:00` (inclusive) to
   `11:59:59` (inclusive).
+-
 
 # License
 

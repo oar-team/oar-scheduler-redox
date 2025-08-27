@@ -32,7 +32,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
             schedule_cycle
                 .call1((
                     py.None(),
-                    create_config(py),
+                    create_config(py, use_rust),
                     platform_py.clone_ref(py),
                     now,
                     PyList::new(py, ["default"]).unwrap(),
@@ -85,12 +85,21 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
 }
 
 /// Create a fake instance of the Python Configuration class
-fn create_config(py: Python) -> Bound<PyAny> {
+fn create_config(py: Python, use_rust: bool) -> Bound<PyAny> {
     // Create a default Configuration instance
     let config_module = PyModule::import(py, "oar.lib.configuration").unwrap();
     let config_class = config_module.getattr("Configuration").unwrap();
 
-    config_class.call0().unwrap()
+    let instance = config_class.call0().unwrap();
+
+    // Update the config value REDOX_SCHEDULER to yes or no
+    if use_rust {
+        instance.set_item("REDOX_SCHEDULER", "yes").unwrap();
+    } else {
+        instance.set_item("REDOX_SCHEDULER", "no").unwrap();
+    }
+
+    instance
 }
 
 /// Create a Python PlatformAdapter instance from a Rust PlatformTrait

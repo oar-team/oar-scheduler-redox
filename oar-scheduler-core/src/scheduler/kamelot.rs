@@ -3,7 +3,6 @@ use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slotset::SlotSet;
 use indexmap::IndexMap;
-use log::info;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -20,17 +19,17 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
     let mut waiting_jobs = platform.get_waiting_jobs();
 
     {
-        info!(
-            "Internal scheduling {} jobs ({} scheduled jobs). Queues: {:?}",
-            waiting_jobs.len(),
-            platform.get_scheduled_jobs().len(),
-            queues
-        );
-        info!("ResourceSet: {:?}", platform_config.resource_set);
-        info!(
-            "job_security_time: {} | hour_size: {} | cache_enabled: {}",
-            platform_config.job_security_time, platform_config.hour_size, platform_config.cache_enabled
-        );
+        // info!(
+        //     "Internal scheduling {} jobs ({} scheduled jobs). Queues: {:?}",
+        //     waiting_jobs.len(),
+        //     platform.get_scheduled_jobs().len(),
+        //     queues
+        // );
+        // info!("ResourceSet: {:?}", platform_config.resource_set);
+        // info!(
+        //     "job_security_time: {} | hour_size: {} | cache_enabled: {}",
+        //     platform_config.job_security_time, platform_config.hour_size, platform_config.cache_enabled
+        // );
         // waiting_jobs.values().for_each(|j| {
         //     info!("{:?}", j);
         // });

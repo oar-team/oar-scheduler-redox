@@ -1,4 +1,18 @@
-Rust scheduler implementation for OAR3
+# Overview
+
+This repository is a Rust implementation of the scheduler of the [OAR3 resource and job manager for cluster](https://github.com/oar-team/oar3).
+
+oar-scheduler-redox fully re-implements the scheduling algorithm of OAR3, including all of its features
+
+- In external mode, it can be used as a drop-in replacement of the original Python scheduler.
+- In internal mode (job in/job out), some parts of the meta-scheduler are developed in Rust, and you should use the OAR3
+  branch [redox](https://github.com/oar-team/oar3/tree/redox) since significant changes have been made to the meta-scheduler to support this mode.
+
+oar-scheduler-redox is up to 100 times faster than the original Python implementation :
+
+|                                                               Python Scheduler                                                                |                                     Rust Scheduler called from Python (Release maturin build)                                      |
+|:---------------------------------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------:|
+| <img src="https://raw.githubusercontent.com/oar-team/oar-scheduler-redox/refs/heads/main/benchmarks/1_ts_debug_py-NodeOnly.svg" width="400"/> | <img src="https://raw.githubusercontent.com/oar-team/oar-scheduler-redox/main/benchmarks/1_ts_debug_rp-NodeOnly.svg" width="400"/> |
 
 # Roadmap
 
@@ -24,9 +38,10 @@ Rust scheduler implementation for OAR3
 
 - [x] Expose the Rust scheduler as a Python library
 - [x] Support external mode (convert platform: jobs, config, resources set, etc.)
-- [x] Support mixed mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
+- [x] Support internal (mixed) mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
+
+### Plugins support (`oar-scheduler-hooks`)
 - [x] Rust hooks support (plugins developed in Rust)
-- [ ] Support internal mode (convert slotset objects from Python to Rust and from Rust to Python)
 
 # Crates & How to build/run
 
@@ -101,8 +116,9 @@ maturin develop --release
 
 ### Usage in Python
 
-You can use the library in internal mode, or in (almost) external mode, called mixed mode.
-Look at the oar3 python source code to see how to use it. In oar3, the mixed mode is implemented to be used in replacement of the internal scheduler.
+You can use the library in internal mode, or in external mode, called mixed mode.
+A full python implementation is available on the OAR3 branch [redox](https://github.com/oar-team/oar3/tree/redox).
+In OAR3, the mixed mode is implemented to be used in replacement of the internal scheduler.
 
 External mode:
 
@@ -156,7 +172,7 @@ Look at `oar-scheduler-core/hooks.rs` for more details on the available hooks an
 Either clone the repository and edit directly the `oar-scheduler-hooks` crate, or create a new crate with the same structure as `oar-scheduler-hooks`,
 and replace the `oar-scheduler-hooks` dependency in `oar-scheduler-redox/Cargo.toml` with your custom crate.
 
-# Notes
+# Notes about edge cases and differences with the original Python scheduler
 
 - The whole scheduling algorithm works with closed intervals, meaning that the start and end time of a job, slot, periodical quotas are all inclusive.
   If a slot goes from `t1` to `t2`, the next slot will start at `t2 + 1` (same as in the original Python oar scheduler).

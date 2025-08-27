@@ -3,11 +3,11 @@ mod grapher;
 mod python_caller;
 mod platform_mock;
 
-use indexmap::IndexMap;
 use crate::benchmarker::{get_sample_waiting_jobs, BenchmarkConfig, BenchmarkTarget, WaitingJobsSampleType};
 use crate::grapher::graph_benchmark_result;
 use crate::platform_mock::{generate_mock_platform_config, PlatformBenchMock};
 use crate::python_caller::schedule_cycle_on_oar_python;
+use indexmap::IndexMap;
 use log::LevelFilter;
 use oar_scheduler_core::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
 use oar_scheduler_core::models::Job;

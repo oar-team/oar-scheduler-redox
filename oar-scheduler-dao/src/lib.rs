@@ -3,7 +3,6 @@ use rand::Rng;
 use sea_query::{Alias, ExprTrait, Iden, PostgresQueryBuilder, Query};
 use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::Execute;
 use std::env;
 
 #[cfg(test)]
@@ -26,7 +25,13 @@ pub enum Users {
 pub async fn sqlx_sea_query_example() {
     dotenv().ok();
 
-    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set in .env file or environment");
+    let db_url = env::var("DATABASE_URL");
+    if db_url.is_err() {
+        println!("WARNING: can’t run sqlx_sea_query_example() without a DATABASE_URL");
+        return;
+    }
+    let db_url = db_url.unwrap();
+
     let pool = PgPoolOptions::new().max_connections(5).connect(db_url.as_str()).await.unwrap();
 
     let column_name: String = rand::thread_rng()
@@ -68,7 +73,7 @@ pub async fn sqlx_sea_query_example() {
         .from(Users::Table)
         .and_where(sea_query::Expr::col(Alias::new(&column_name)).eq(&column_name))
         .build_sqlx(PostgresQueryBuilder);
-
+    println!("Select SQL: {}", sql);
     let row: (i32, String, String) = sqlx::query_as_with(sql.as_str(), values).fetch_one(&pool).await.unwrap();
 
     assert_eq!(row.1, "test".to_string());

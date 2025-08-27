@@ -1,6 +1,7 @@
 use crate::platform_mock;
 use crate::platform_mock::PlatformBenchMock;
 use crate::python_caller::schedule_cycle_on_oar_python;
+use indexmap::IndexMap;
 use log::info;
 use oar_scheduler_core::models::{Job, JobBuilder, ProcSet, ProcSetCoresOp};
 use oar_scheduler_core::platform::PlatformTrait;
@@ -15,7 +16,6 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::time::{SystemTime, UNIX_EPOCH};
-use indexmap::IndexMap;
 
 #[derive(Clone)]
 pub struct BenchmarkResult {

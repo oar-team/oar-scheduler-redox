@@ -1420,6 +1420,7 @@ name = "oar-scheduler-dao"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
+ "log",
  "rand 0.8.5",
  "sea-query",
  "sea-query-sqlx",

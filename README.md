@@ -25,6 +25,7 @@ oar-scheduler-redox is 10 to 100 times faster than the original Python implement
 - [x] Job container support
 - [x] Placeholders support
 - [x] Temporal quotas support
+- [ ] Implement job sorting on the Rust side.
 - [ ] Envelopes support
 
 ### Benchmarking (`oar-scheduler-bench`)
@@ -45,7 +46,7 @@ oar-scheduler-redox is 10 to 100 times faster than the original Python implement
 
 ### Database support (`oar-scheduler-dao`)
 
-- [ ] Find a database abstraction layer that would work with variable schemas (the resource table is customizable by the users).
+- [x] Find a database abstraction layer that would work with variable schemas (the resource table is customizable by the users).
 - [ ] Implement queries, preparing the migration of more python functions into the Rust codebase.
 
 # Crates & How to build/run

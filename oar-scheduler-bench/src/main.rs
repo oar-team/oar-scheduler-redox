@@ -51,6 +51,7 @@ async fn main() {
     graph_benchmark_result("1_ts".to_string(), benchmark, results);
 }
 
+#[allow(dead_code)]
 async fn detect_differences(seed: u64) -> bool {
     let job_count = 20;
     let res_count = 100;
@@ -115,6 +116,7 @@ async fn detect_differences(seed: u64) -> bool {
     false
 }
 
+#[allow(dead_code)]
 fn display_job_comparison(waiting_jobs: &IndexMap<u32, Job>, rust_scheduled: &Vec<Job>, python_scheduled: &Vec<Job>) {
     println!("\n=== JOB COMPARISON ===");
 

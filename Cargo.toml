@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["oar-scheduler-core", "oar-scheduler-bench", "oar-scheduler-redox", "oar-scheduler-hooks", "oar-scheduler-dao"]
+members = ["oar-scheduler-core", "oar-scheduler-bench", "oar-scheduler-redox", "oar-scheduler-hooks", "oar-scheduler-dao", "oar-scheduler-meta"]
 
 [profile.release]
 lto = "fat"

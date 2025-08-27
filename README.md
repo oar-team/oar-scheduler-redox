@@ -40,31 +40,52 @@ oar-scheduler-redox is 10 to 100 times faster than the original Python implement
 - [x] Support external mode (convert platform: jobs, config, resources set, etc.)
 - [x] Support internal (mixed) mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
 
+### Standalone meta-scheduler (`oar-scheduler-meta`)
+
+- [ ] Develop the meta-scheduler fully in Rust
+
+### Database support (`oar-scheduler-dao`)
+
+- [x] Demonstrate a usage of a database library allowing to query arbitrary column names (the resource table is customizable by the users).
+- [ ] Create/move the database structs in this crate
+- [ ] Add the DAO functions to query the database
+
 ### Plugins support (`oar-scheduler-hooks`)
 
 - [x] Rust hooks support (plugins developed in Rust)
 
-### Database support (`oar-scheduler-dao`)
+# Crates Descriptions & Usage
 
-- [x] Find a database abstraction layer that would work with variable schemas (the resource table is customizable by the users).
-- [ ] Implement queries, preparing the migration of more python functions into the Rust codebase.
-
-# Crates & How to build/run
-
-## Dependency graph
+## Dependency DAG
 
 ```mermaid
 graph TD
 ;
+  oar-scheduler-meta["oar-scheduler-meta (WiP)<br/><span style='font-size: 0.8em;'>Batteries included entry point.<br/>Meta-scheduler developed in Rust<br/>Database access from Rust.</span>"] --> oar-scheduler-core
+  oar-scheduler-hooks --> oar-scheduler-core
+  oar-scheduler-meta --> oar-scheduler-hooks
+  oar-scheduler-redox["oar-scheduler-meta<br/><span style='font-size: 0.8em;'>Internal/External scheduler entrypoint.<br/>Called by the Python meta-scheduler</span>"] --> oar-scheduler-hooks
     oar-scheduler-redox --> oar-scheduler-core
-    oar-scheduler-redox --> oar-scheduler-hooks
-    oar-scheduler-hooks --> oar-scheduler-core
     oar-scheduler-bench --> oar-scheduler-core
+  oar-scheduler-core --> oar-scheduler-dao
 ```
 
 ## Crate oar-scheduler-core
 
 This crate is a Rust library that implements the core scheduler of OAR3 in Rust.
+
+## Crate oar-scheduler-dao
+
+This crate provide the domain structs and allows to interact with the database.
+
+- The domain structs definition are used by all the crates.
+- The database requests is used only by the `oar-scheduler-meta` crate.
+-
+
+## Crate oar-scheduler-meta
+
+Work in progress crate allowing to run the meta-scheduler fully in Rust, including database access.
+No Python bindings are required.
 
 ## Crate oar-scheduler-bench
 
@@ -89,8 +110,9 @@ cargo run -p oar-scheduler-bench --release
 
 ## Crate oar-scheduler-redox
 
-This crate is a Maturin Python library exposing the oar-scheduler-core crate to Python.
-It can be used by the OAR3 meta-scheduler instead of the legacy Python scheduler.
+This crate is a Maturin Python library exposing the `oar-scheduler-core` crate to Python.
+It can be used by the OAR3 Python meta-scheduler instead of the legacy Python scheduler. Though the meta-scheduler implementation and database
+requests stay in Python.
 
 ### Building the library and installing it in a virtual environment
 
@@ -124,7 +146,9 @@ maturin develop --release
 
 You can use the library in internal mode, or in external mode, called mixed mode.
 A full python implementation is available on the OAR3 branch [redox](https://github.com/oar-team/oar3/tree/redox).
+
 In OAR3, the mixed mode is implemented to be used in replacement of the internal scheduler.
+It delegates some parts of the meta-scheduling to this crate. Though all the database requests are done in Python.
 
 External mode:
 

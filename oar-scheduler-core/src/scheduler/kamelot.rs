@@ -14,8 +14,8 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
     internal_schedule_cycle(platform, &mut slot_sets, queues)
 }
 
-pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &mut HashMap<Box<str>, SlotSet>, queues: Vec<String>) -> usize {
-    let platform_config = platform.get_platform_config();
+pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &mut HashMap<Box<str>, SlotSet>, _queues: Vec<String>) -> usize {
+    let _platform_config = platform.get_platform_config();
     let mut waiting_jobs = platform.get_waiting_jobs();
 
     {
@@ -23,12 +23,12 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
         //     "Internal scheduling {} jobs ({} scheduled jobs). Queues: {:?}",
         //     waiting_jobs.len(),
         //     platform.get_scheduled_jobs().len(),
-        //     queues
+        //     _queues
         // );
         // info!("ResourceSet: {:?}", platform_config.resource_set);
         // info!(
         //     "job_security_time: {} | hour_size: {} | cache_enabled: {}",
-        //     platform_config.job_security_time, platform_config.hour_size, platform_config.cache_enabled
+        //     _platform_config.job_security_time, _platform_config.hour_size, _platform_config.cache_enabled
         // );
         // waiting_jobs.values().for_each(|j| {
         //     info!("{:?}", j);

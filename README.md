@@ -2,17 +2,16 @@
 
 This repository is a Rust implementation of the scheduler of the [OAR3 resource and job manager for cluster](https://github.com/oar-team/oar3).
 
-oar-scheduler-redox fully re-implements the scheduling algorithm of OAR3, including all of its features
-
+oar-scheduler-redox fully re-implements the scheduling algorithm of OAR3, including all of its features.
 - In external mode, it can be used as a drop-in replacement of the original Python scheduler.
 - In internal mode (job in/job out), some parts of the meta-scheduler are developed in Rust, and you should use the OAR3
   branch [redox](https://github.com/oar-team/oar3/tree/redox) since significant changes have been made to the meta-scheduler to support this mode.
 
-oar-scheduler-redox is up to 100 times faster than the original Python implementation :
+oar-scheduler-redox is 10 to 100 times faster than the original Python implementation :
 
-|                                                               Python Scheduler                                                                |                                     Rust Scheduler called from Python (Release maturin build)                                      |
-|:---------------------------------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------:|
-| <img src="https://raw.githubusercontent.com/oar-team/oar-scheduler-redox/refs/heads/main/benchmarks/1_ts_debug_py-NodeOnly.svg" width="400"/> | <img src="https://raw.githubusercontent.com/oar-team/oar-scheduler-redox/main/benchmarks/1_ts_debug_rp-NodeOnly.svg" width="400"/> |
+|                                                          Python Scheduler                                                          |                                     Rust Scheduler called from Python (Release maturin build)                                      |
+|:----------------------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------:|
+| <img src="https://raw.githubusercontent.com/oar-team/oar-scheduler-redox/main/benchmarks/1_ts_debug_py-NodeOnly.svg" width="400"/> | <img src="https://raw.githubusercontent.com/oar-team/oar-scheduler-redox/main/benchmarks/1_ts_debug_rp-NodeOnly.svg" width="400"/> |
 
 # Roadmap
 
@@ -41,7 +40,13 @@ oar-scheduler-redox is up to 100 times faster than the original Python implement
 - [x] Support internal (mixed) mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
 
 ### Plugins support (`oar-scheduler-hooks`)
+
 - [x] Rust hooks support (plugins developed in Rust)
+
+### Database support (`oar-scheduler-dao`)
+
+- [ ] Find a database abstraction layer that would work with variable schemas (the resource table is customizable by the users).
+- [ ] Implement queries, preparing the migration of more python functions into the Rust codebase.
 
 # Crates & How to build/run
 

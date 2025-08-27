@@ -8,8 +8,11 @@
       <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-core/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-redox/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-hooks/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/oar-scheduler-dao/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/oar3-rust-macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/.idea/dataSources" />
+      <excludeFolder url="file://$MODULE_DIR$/oar-scheduler-redox/.env" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

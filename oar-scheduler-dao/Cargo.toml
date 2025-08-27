@@ -1,0 +1,11 @@
+[package]
+name = "oar-scheduler-dao"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["full"] }
+dotenvy = "0.15.7"
+rand = "0.8.5"
+

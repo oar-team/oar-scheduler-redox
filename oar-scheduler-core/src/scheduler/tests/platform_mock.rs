@@ -4,6 +4,7 @@ use crate::scheduler::calendar::QuotasConfig;
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasValue;
 use indexmap::IndexMap;
+use oar_scheduler_dao::model::configuration::Configuration;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -41,12 +42,14 @@ impl PlatformTrait for PlatformBenchMock {
 
 
 pub fn generate_mock_platform_config(cache_enabled: bool, res_count: u32, switch_size: u32, node_size: u32, cpu_size: u32, quotas_enable: bool) -> PlatformConfig {
+    let mut config = Configuration::default();
+    config.quotas = quotas_enable;
+    config.cache_enabled = cache_enabled;
+    config.scheduler_job_security_time = 0;
     PlatformConfig {
-        hour_size: 60,
-        job_security_time: 0,
-        cache_enabled,
         resource_set: generate_mock_resource_set(res_count, switch_size, node_size, cpu_size),
         quotas_config: generate_mock_quotas_config(quotas_enable, res_count),
+        config,
     }
 }
 

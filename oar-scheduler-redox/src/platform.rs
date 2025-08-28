@@ -1,10 +1,12 @@
 use crate::converters::{build_job, build_platform_config, proc_set_to_python};
 use indexmap::{indexmap, IndexMap};
+use log::info;
+use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::models::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
-use pyo3::{Bound, IntoPyObjectExt, Py, PyAny, PyResult, Python};
+use pyo3::{Bound, Py, PyAny, PyResult, Python};
 use std::rc::Rc;
 
 /// Rust Platform using Python objects and functions to interact with the OAR platform.
@@ -42,6 +44,14 @@ impl PlatformTrait for Platform {
     }
 
     fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
+        assigned_jobs.iter().for_each(|(_, job)| {
+            if let Some(sd) = &job.assignment {
+                info!("Assigned job {}: start_time={}, end_time={}, moldable_id={}, proc_set={:?}, moldable_walltime={}", job.id, sd.begin, sd.end, job.moldables[sd.moldable_index].id, sd.proc_set, job.moldables[sd.moldable_index].walltime);
+            } else {
+                info!("Job {} has no assignment!", job.id);
+            }
+        });
+
         Python::with_gil(|py| -> PyResult<()> {
             // Update python scheduled jobs
             let py_scheduled_jobs = Self::save_assignments_python(self, py, &assigned_jobs);
@@ -95,22 +105,9 @@ impl Platform {
     /// Transforms a Python platform into a Rust Platform struct.
     /// The Rust Platform will keep a reference to Python objects to be able to transfert data back to Python after scheduling.
     pub fn from_python(py_platform: &Bound<PyAny>, py_session: &Bound<PyAny>, py_config: &Bound<PyAny>, py_now: &Bound<PyAny>, py_scheduled_jobs: Option<&Bound<PyAny>>) -> Self {
+
         let now: i64 = py_now.extract().unwrap();
-        let py_job_security_time: Bound<PyAny> = py_config
-            .get_item("SCHEDULER_JOB_SECURITY_TIME")
-            .expect("SCHEDULER_JOB_SECURITY_TIME not found in config");
-        let py_job_security_time_int: Bound<PyAny> = py_job_security_time
-            .extract::<i64>()
-            .or_else(|_| {
-                py_job_security_time
-                    .extract::<String>()
-                    .expect("SCHEDULER_JOB_SECURITY_TIME should be a string or an integer")
-                    .parse::<i64>()
-            })
-            .expect("Failed to parse SCHEDULER_JOB_SECURITY_TIME as i64")
-            .into_bound_py_any(py_config.py())
-            .expect("Failed to convert SCHEDULER_JOB_SECURITY_TIME to PyAny");
-        let job_security_time = py_job_security_time_int.extract::<i64>().unwrap();
+        let config: Configuration = py_config.extract().unwrap();
 
         // Get the resource set
         let kwargs = PyDict::new(py_platform.py());
@@ -119,21 +116,20 @@ impl Platform {
         let py_res_set: Bound<PyAny> = py_platform.getattr("resource_set").unwrap().call((), Some(&kwargs)).unwrap();
 
         // Get already scheduled jobs
-
         let py_scheduled_jobs = if let Some(py_scheduled_jobs) = py_scheduled_jobs {
             py_scheduled_jobs.clone()
         }else {
             py_platform
                 .getattr("get_scheduled_jobs")
                 .unwrap()
-                .call((py_session, &py_res_set, &py_job_security_time_int, &py_now), None)
+                .call((py_session, &py_res_set, &config.scheduler_job_security_time, &py_now), None)
                 .unwrap()
         };
         let py_scheduled_jobs = py_scheduled_jobs.downcast::<PyList>().unwrap();
 
         Platform {
             now,
-            platform_config: Rc::new(build_platform_config(py_res_set.clone(), py_config.clone(), job_security_time)),
+            platform_config: Rc::new(build_platform_config(py_res_set.clone(), config)),
             scheduled_jobs: py_scheduled_jobs
                 .iter()
                 .map(|py_job| build_job(&py_job))
@@ -187,7 +183,7 @@ impl Platform {
                     &py_waiting_jobs_map,
                     &py_waiting_jobs_ids,
                     &self.py_res_set,
-                    &self.platform_config.job_security_time,
+                    &self.platform_config.config.scheduler_job_security_time,
                 ),
                 None,
             )

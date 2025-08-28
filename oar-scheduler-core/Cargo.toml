@@ -8,7 +8,7 @@ default = ["benchmark_disable", "benchmark_disable_hy"]
 benchmark_disable = ["auto_bench_fct/disable"]
 benchmark_disable_hy = ["auto_bench_fct/disable_hy"]
 pyo3-abi3-py38 = ["pyo3/abi3-py38"]
-database = ["oar-scheduler-dao/database"]
+pyo3 = ["oar-scheduler-dao/pyo3"]
 
 [dependencies]
 log = "0.4"

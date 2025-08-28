@@ -122,7 +122,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
     let mut platform = platform_handle_ref.inner.borrow_mut();
 
     let platform_config = platform.get_platform_config();
-    let job_security_time = platform_config.job_security_time;
+    let job_security_time = platform_config.config.scheduler_job_security_time;
     let now = platform.get_now();
     let job_handling = PyModule::import(py, "oar.lib.job_handling").expect("Could not import job_handling");
     let slot_sets_handle_ref = slot_sets.borrow();

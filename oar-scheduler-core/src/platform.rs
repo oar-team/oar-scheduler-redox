@@ -4,6 +4,7 @@ use crate::models::{Job, ProcSet};
 use crate::scheduler::calendar::QuotasConfig;
 use crate::scheduler::hierarchy::Hierarchy;
 use indexmap::IndexMap;
+use oar_scheduler_dao::model::configuration::Configuration;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};
 #[cfg(feature = "pyo3")]
@@ -33,12 +34,9 @@ pub trait PlatformTrait {
 
 #[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]
 pub struct PlatformConfig {
-    /// Size of an hour in units of time (e.g., 3600 for second resolution)
-    pub hour_size: i64,
-    pub job_security_time: i64,
-    pub cache_enabled: bool,
     pub resource_set: ResourceSet,
     pub quotas_config: QuotasConfig,
+    pub config: Configuration
 }
 
 /// ResourceSet provide a resource description with the hierarchy of resources.

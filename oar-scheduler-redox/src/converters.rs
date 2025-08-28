@@ -1,3 +1,4 @@
+use oar_scheduler_core::model::configuration::{Configuration, QuotasAllNbResourcesMode};
 use oar_scheduler_core::models::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
 use oar_scheduler_core::platform::{PlatformConfig, ResourceSet};
 use oar_scheduler_core::scheduler::calendar::QuotasConfig;
@@ -9,16 +10,14 @@ use pyo3::{Bound, PyAny, PyResult, Python};
 use std::collections::HashMap;
 
 /// Builds a PlatformConfig Rust struct from a Python resource set.
-pub fn build_platform_config(py_res_set: Bound<PyAny>, py_config: Bound<PyAny>, job_security_time: i64) -> PlatformConfig {
+pub fn build_platform_config(py_res_set: Bound<PyAny>, config: Configuration) -> PlatformConfig {
     let resource_set = build_resource_set(&py_res_set);
-    let quotas_config = build_quotas_config(py_config, &resource_set);
+    let quotas_config = build_quotas_config(&config, &resource_set);
 
     PlatformConfig {
-        hour_size: 60 * 60, // Assuming 1 second resolution
-        job_security_time,
-        cache_enabled: true,
         quotas_config,
         resource_set,
+        config,
     }
 }
 
@@ -118,21 +117,16 @@ fn build_proc_sets(py_proc_sets: &Bound<PyAny>) -> Box<[ProcSet]> {
         .collect::<Box<[ProcSet]>>()
 }
 /// Builds a QuotasConfig Rust struct from the configuration file got from Python
-fn build_quotas_config(py_config: Bound<PyAny>, res_set: &ResourceSet) -> QuotasConfig {
-    let quotas_enabled: bool = py_config
-        .get_item("QUOTAS")
-        .map(|q| q.extract::<String>())
-        .is_ok_and(|q| q.is_ok_and(|q| q.eq("yes")));
-
-    if quotas_enabled {
-        let quotas_config_file: String = py_config.get_item("QUOTAS_CONF_FILE").unwrap().extract().unwrap();
-        let all_value_mode = py_config.get_item("ALL_VALUE_MODE").map(|m| m.extract().unwrap()).unwrap_or("default_not_dead".to_string());
-        let all_value = match all_value_mode.as_str() {
-            "default_not_dead" => res_set.default_intervals.core_count() as i64, // In a rust implementation, this should exclude dead cores
-            _ => res_set.default_intervals.core_count() as i64,
+fn build_quotas_config(config: &Configuration, res_set: &ResourceSet) -> QuotasConfig {
+    if config.quotas {
+        if config.quotas_conf_file.is_none() {
+            panic!("Quotas are enabled but no quotas configuration file is provided.");
+        }
+        let all_value = match &config.quotas_all_nb_resources_mode {
+            QuotasAllNbResourcesMode::DefaultNotDead => res_set.default_intervals.core_count() as i64, // In a rust implementation, this should exclude dead cores
+            QuotasAllNbResourcesMode::All => res_set.default_intervals.core_count() as i64,
         };
-        let quotas_window_time_limit: i64 = py_config.get_item("QUOTAS_WINDOW_TIME_LIMIT").map(|t| t.extract().unwrap()).expect("QUOTAS_WINDOW_TIME_LIMIT must be defined when quotas are enabled");
-        QuotasConfig::load_from_file(quotas_config_file.as_str(), true, all_value, quotas_window_time_limit)
+        QuotasConfig::load_from_file(config.quotas_conf_file.clone().unwrap().as_str(), true, all_value, config.quotas_window_time_limit)
     } else {
         QuotasConfig::new(false, None, Default::default(), Box::new([]))
     }

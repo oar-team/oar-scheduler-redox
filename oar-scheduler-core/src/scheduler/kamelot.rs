@@ -2,6 +2,7 @@ use crate::models::{Job, JobAssignment, JobBuilder, ProcSet};
 use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slotset::SlotSet;
+use crate::scheduler::sorting::sort_jobs;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -27,8 +28,8 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
         // );
         // info!("ResourceSet: {:?}", platform_config.resource_set);
         // info!(
-        //     "job_security_time: {} | hour_size: {} | cache_enabled: {}",
-        //     _platform_config.job_security_time, _platform_config.hour_size, _platform_config.cache_enabled
+        //     "job_security_time: {} | cache_enabled: {}",
+        //     _platform_config.job_security_time, _platform_config.cache_enabled
         // );
         // waiting_jobs.values().for_each(|j| {
         //     info!("{:?}", j);
@@ -36,6 +37,9 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
     }
 
     if waiting_jobs.len() > 0 {
+        // Sorting
+        sort_jobs(platform, &mut waiting_jobs);
+
         // Scheduling
         schedule_jobs(slot_sets, &mut waiting_jobs);
 

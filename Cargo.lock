@@ -1422,9 +1422,11 @@ version = "0.1.0"
 dependencies = [
  "dotenvy",
  "log",
+ "pyo3",
  "rand 0.9.2",
  "sea-query",
  "sea-query-sqlx",
+ "serde",
  "sqlx",
  "tokio",
 ]
@@ -1444,6 +1446,7 @@ dependencies = [
  "env_logger",
  "log",
  "oar-scheduler-core",
+ "oar-scheduler-dao",
  "oar-scheduler-hooks",
 ]
 

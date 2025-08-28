@@ -6,3 +6,4 @@ pub mod slotset;
 pub mod hierarchy;
 pub mod quotas;
 pub mod calendar;
+pub mod sorting;

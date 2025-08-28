@@ -140,8 +140,8 @@ impl Job {
     pub fn slot_set_name(&self) -> Box<str> {
         let mut slot_set_name: Box<str> = "default".into();
         // Manage inner jobs
-        if self.types.contains_key("inner".into()) {
-            slot_set_name = self.types["inner".into()].clone().unwrap();
+        if self.types.contains_key::<Box<str>>(&"inner".into()) {
+            slot_set_name = self.types[&Box::from("inner")].clone().unwrap();
         }
         slot_set_name
     }
@@ -264,8 +264,8 @@ impl JobBuilder {
             name: self.name,
             user: self.user,
             project: self.project,
-            queue: self.queue.unwrap_or_else(|| "default".into()),
-            no_quotas: self.types.contains_key("no_quotas".into()),
+            queue: self.queue.unwrap_or_else(|| Box::from("default")),
+            no_quotas: self.types.contains_key(&Box::from("no_quotas")),
             types: self.types,
             moldables: self.moldables,
             assignment: self.assignment,

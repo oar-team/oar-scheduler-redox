@@ -113,10 +113,10 @@ impl Slot {
     pub fn get_time_sharing_proc_set(&self, user_name: &Box<str>, job_name: &Box<str>) -> ProcSet {
         if let Some(map) = self
             .time_shared_proc_sets
-            .get("*".into())
+            .get(&Box::from("*"))
             .or_else(|| self.time_shared_proc_sets.get(user_name))
         {
-            if let Some(proc_set) = map.get("*".into()).or_else(|| map.get(job_name)) {
+            if let Some(proc_set) = map.get(&Box::from("*")).or_else(|| map.get(job_name)) {
                 return proc_set.clone();
             }
         }

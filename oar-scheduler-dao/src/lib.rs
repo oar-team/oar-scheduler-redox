@@ -1,3 +1,3 @@
-mod model;
+pub mod model;
 #[cfg(feature = "database")]
-mod database;
+pub mod database;

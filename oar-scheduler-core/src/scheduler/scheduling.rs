@@ -56,7 +56,7 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &
         }
 
         // Manage container jobs
-        if job.types.contains_key("container".into()) {
+        if job.types.contains_key(&Box::from("container")) {
             update_container_job_slot_set(slot_sets, job);
         }
     }
@@ -201,7 +201,7 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
             })
     });
 
-    if job.can_set_cache() && slotset.get_platform_config().cache_enabled {
+    if job.can_set_cache() && slotset.get_platform_config().config.cache_enabled {
         if let Some(cache_first_slot_id) = cache_first_slot {
             slotset.insert_cache_entry(moldable.cache_key.clone(), cache_first_slot_id);
         }
@@ -229,11 +229,11 @@ pub fn get_job_slot_set<'s>(slotsets: &'s mut HashMap<Box<str>, SlotSet>, job: &
 pub fn update_container_job_slot_set(slotsets: &mut HashMap<Box<str>, SlotSet>, job: &Job) {
     assert!(job.types.contains_key("container"));
 
-    let default_slot_set = slotsets.get("default".into()).expect("Default SlotSet not found");
+    let default_slot_set = slotsets.get(&Box::from("default")).expect("Default SlotSet not found");
 
     let inner_slot_set_name = job
         .types
-        .get("container".into())
+        .get(&Box::from("container"))
         .map(|name| name.clone())
         .unwrap()
         .unwrap_or(format!("{}", job.id).into_boxed_str());
@@ -262,7 +262,7 @@ pub fn update_container_job_slot_set(slotsets: &mut HashMap<Box<str>, SlotSet>, 
             // .placeholder(job.placeholder.clone()) Do not apply the placeholder to the available slots of the children slot set
             .assign(JobAssignment::new(
                 assignment.begin,
-                assignment.end - platform_config.job_security_time, // Removing the security time added by get_data_jobs.
+                assignment.end - platform_config.config.scheduler_job_security_time, // Removing the security time added by get_data_jobs.
                 assignment.proc_set.clone(),
                 0,
             ))

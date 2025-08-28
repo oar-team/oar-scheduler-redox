@@ -3,11 +3,9 @@ name = "oar-scheduler-meta"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-default = ["oar-scheduler-core/database"]
-
 [dependencies]
 log = "0.4.27"
 env_logger = "0.11.8"
-oar-scheduler-core = { path = "../oar-scheduler-core", features = ["pyo3", "pyo3-abi3-py38"] }
+oar-scheduler-core = { path = "../oar-scheduler-core" }
 oar-scheduler-hooks = { path = "../oar-scheduler-hooks" }
+oar-scheduler-dao = { path = "../oar-scheduler-dao", features = ["database"] }

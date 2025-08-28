@@ -1,4 +1,5 @@
 use indexmap::IndexMap;
+use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::models::{Job, ProcSet};
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait, ResourceSet};
 use oar_scheduler_core::scheduler::calendar::QuotasConfig;
@@ -50,12 +51,14 @@ impl PlatformBenchMock {
 
 
 pub fn generate_mock_platform_config(cache_enabled: bool, res_count: u32, switch_size: u32, node_size: u32, cpu_size: u32, quotas_enable: bool) -> PlatformConfig {
+    let mut config = Configuration::default();
+    config.quotas = quotas_enable;
+    config.cache_enabled = cache_enabled;
+    config.scheduler_job_security_time = 0;
     PlatformConfig {
-        hour_size: 60,
-        job_security_time: 0,
-        cache_enabled,
         resource_set: generate_mock_resource_set(res_count, switch_size, node_size, cpu_size),
         quotas_config: generate_mock_quotas_config(quotas_enable, res_count),
+        config,
     }
 }
 

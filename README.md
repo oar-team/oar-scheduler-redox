@@ -64,10 +64,11 @@ graph TD
   oar-scheduler-meta["oar-scheduler-meta (WiP)<br/><span style='font-size: 0.8em;'>Batteries included entry point.<br/>Meta-scheduler developed in Rust<br/>Database access from Rust.</span>"] --> oar-scheduler-core
   oar-scheduler-hooks --> oar-scheduler-core
   oar-scheduler-meta --> oar-scheduler-hooks
-  oar-scheduler-redox["oar-scheduler-meta<br/><span style='font-size: 0.8em;'>Internal/External scheduler entrypoint.<br/>Called by the Python meta-scheduler</span>"] --> oar-scheduler-hooks
+  oar-scheduler-meta -->|database| oar-scheduler-dao
+  oar-scheduler-redox["oar-scheduler-redox<br/><span style='font-size: 0.8em;'>Internal/External scheduler entrypoint.<br/>Called by the Python meta-scheduler</span>"] --> oar-scheduler-hooks
     oar-scheduler-redox --> oar-scheduler-core
     oar-scheduler-bench --> oar-scheduler-core
-  oar-scheduler-core --> oar-scheduler-dao
+  oar-scheduler-core -->|models| oar-scheduler-dao
 ```
 
 ## Crate oar-scheduler-core

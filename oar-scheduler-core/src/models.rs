@@ -47,6 +47,12 @@ pub struct Job {
     pub dependencies: Vec<(u32, Box<str>, Option<i32>)>,
     /// Attribute used to store the start time of advance reservation jobs before they get an assignment.
     pub advance_reservation_start_time: Option<i64>,
+    /// Job submission epoch seconds (used for multifactor age)
+    pub submission_time: i64,
+    /// Job QoS score in [0.0, 1.0] (used for multifactor qos)
+    pub qos: f64,
+    /// Job nice value (>=1.0) (used for multifactor nice)
+    pub nice: f64,
     pub karma: f64,
 }
 
@@ -275,6 +281,9 @@ impl JobBuilder {
             placeholder: self.placeholder,
             dependencies: self.dependencies,
             advance_reservation_start_time: self.advance_reservation_start_time,
+            submission_time: 0,
+            qos: 0.0,
+            nice: 1.0,
             karma: 0.0,
         }
     }

@@ -1,9 +1,12 @@
 use crate::hooks::get_hooks_manager;
-use crate::models::Job;
+use crate::models::{Job, ProcSetCoresOp};
 use crate::platform::PlatformTrait;
 use indexmap::IndexMap;
+use log::{info, warn};
 use oar_scheduler_dao::model::configuration::JobPriority;
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs;
 
 // Parse strings like "{default => 21.0, user1=>30}" into a map
 fn parse_perl_hash_to_map_f64(s: &str) -> HashMap<String, f64> {
@@ -21,6 +24,79 @@ fn parse_perl_hash_to_map_f64(s: &str) -> HashMap<String, f64> {
     map
 }
 
+#[derive(Debug, Deserialize)]
+struct PriorityYaml {
+    #[serde(default)]
+    age_weight: f64,
+    #[serde(default = "default_age_coef")]
+    age_coef: f64,
+    #[serde(default)]
+    queue_weight: f64,
+    #[serde(default)]
+    queue_coefs: HashMap<String, f64>,
+    #[serde(default)]
+    work_weight: f64,
+    #[serde(default)]
+    work_mode: f64,
+    #[serde(default)]
+    size_weight: f64,
+    #[serde(default)]
+    size_mode: f64,
+    #[serde(default)]
+    karma_weight: f64,
+    #[serde(default)]
+    qos_weight: f64,
+    #[serde(default)]
+    nice_weight: f64,
+}
+
+fn default_age_coef() -> f64 { 1.65e-06 }
+
+fn load_priority_yaml(path_opt: &Option<String>) -> PriorityYaml {
+    if let Some(path) = path_opt {
+        if let Ok(content) = fs::read_to_string(path) {
+            info!("Parsing multifactor priority configuration from {}: {}", path, content);
+            info!("{:?}", serde_yaml::from_str::<PriorityYaml>(&content));
+            if let Ok(yaml) = serde_yaml::from_str::<PriorityYaml>(&content) {
+                info!("Parsed multifactor priority configuration from {}: {}", path, content);
+                return yaml;
+            }
+        }
+    }
+    info!("Using default multifactor priority configuration");
+    PriorityYaml {
+        age_weight: 0.0,
+        age_coef: default_age_coef(),
+        queue_weight: 0.0,
+        queue_coefs: HashMap::new(),
+        work_weight: 0.0,
+        work_mode: 0.0,
+        size_weight: 0.0,
+        size_mode: 0.0,
+        karma_weight: 0.0,
+        qos_weight: 0.0,
+        nice_weight: 0.0,
+    }
+}
+
+fn job_requested_units(job: &Job, unit_name: &str) -> Option<u32> {
+    // Heuristic: take the first moldable and sum the unit level counts across its requests
+    job.moldables.first().map(|m| {
+        let mut total: u32 = 0;
+        for req in m.requests.0.iter() {
+            for (level, count) in req.level_nbs.iter() {
+                if level.as_ref() == unit_name {
+                    total = total.saturating_add(*count);
+                }
+            }
+        }
+        total
+    })
+}
+
+fn job_min_walltime(job: &Job) -> Option<i64> {
+    job.moldables.iter().map(|m| m.walltime).min()
+}
 
 /// Computes the karma for each job in waiting_jobs and saves it in the `job.karma` attribute.
 fn evaluate_jobs_karma<P: PlatformTrait>(
@@ -71,6 +147,114 @@ fn evaluate_jobs_karma<P: PlatformTrait>(
     }
 }
 
+/// Compute multifactor priority for each job from YAML config and sort waiting_jobs by priority desc.
+fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>) {
+    // Load YAML config
+    let cfg = &platform.get_platform_config().config;
+    let pyaml = load_priority_yaml(&cfg.priority_conf_file);
+
+    // Compute karma if needed
+    if pyaml.karma_weight > 0.0 {
+        evaluate_jobs_karma(platform, queues, waiting_jobs);
+    }
+
+    let now = platform.get_now();
+    let resource_set = &platform.get_platform_config().resource_set;
+    let cluster_size = resource_set.default_intervals.core_count() as f64;
+    let unit_name_opt = resource_set.hierarchy.unit_partition.clone();
+
+    let max_time = platform.get_max_time() as f64;
+
+    // Precompute priorities
+    let mut prio: HashMap<u32, f64> = HashMap::with_capacity(waiting_jobs.len());
+    for (jid, job) in waiting_jobs.iter() {
+        let mut p: f64 = 0.0;
+
+        // age
+        if pyaml.age_weight > 0.0 {
+            let age = (now - job.submission_time).max(0) as f64;
+            let age_factor = (pyaml.age_coef * age).max(1.0);
+            p += pyaml.age_weight * age_factor;
+        }
+
+        // queue
+        if pyaml.queue_weight > 0.0 {
+            if let Some(coef) = pyaml.queue_coefs.get(job.queue.as_ref()) {
+                p += pyaml.queue_weight * (*coef);
+            } else if !pyaml.queue_coefs.is_empty() {
+                warn!("queue {} is not defined in queue_coefs but queue_weight > 0", job.queue);
+            }
+        }
+
+        // work = nb_resources * walltime normalized to [0,1] by (cluster_size * max_time)
+        if pyaml.work_weight > 0.0 && cluster_size > 0.0 && max_time > 0.0 {
+            let mut work_norm: f64 = 0.0;
+            if let Some(unit_name) = unit_name_opt.as_ref() {
+                if let Some(size_units) = job_requested_units(job, unit_name.as_ref()) {
+                    if let Some(wt) = job_min_walltime(job) {
+                        let raw_work = (size_units as f64) * (wt as f64);
+                        let denom = cluster_size * max_time;
+                        if denom > 0.0 {
+                            work_norm = (raw_work / denom).clamp(0.0, 1.0);
+                        }
+                    }
+                }
+            }
+            let factor = if pyaml.work_mode != 0.0 {
+                // big jobs prioritized
+                1.0 - 1.0 / work_norm.max(1e-12).min(1.0)
+            } else {
+                // small jobs prioritized
+                1.0 / work_norm.max(1e-12).min(1.0)
+            };
+            p += pyaml.work_weight * factor;
+        }
+
+        // size
+        if pyaml.size_weight > 0.0 && cluster_size > 0.0 {
+            let mut size_frac: f64 = 0.0;
+            if let Some(unit_name) = unit_name_opt.as_ref() {
+                if let Some(size_units) = job_requested_units(job, unit_name.as_ref()) {
+                    size_frac = (size_units as f64 / cluster_size).clamp(0.0, 1.0);
+                }
+            }
+            let factor = if pyaml.size_mode != 0.0 {
+                // big jobs prioritized
+                size_frac
+            } else {
+                // small jobs prioritized
+                1.0 - size_frac
+            };
+            p += pyaml.size_weight * factor;
+        }
+
+        // karma
+        if pyaml.karma_weight > 0.0 {
+            let karma_factor = 1.0 / (1.0 + job.karma);
+            p += pyaml.karma_weight * karma_factor;
+        }
+
+        // qos
+        if pyaml.qos_weight > 0.0 {
+            p += pyaml.qos_weight * job.qos;
+        }
+
+        // nice
+        if pyaml.nice_weight > 0.0 {
+            p += pyaml.nice_weight * job.nice.max(1.0);
+        }
+
+        prio.insert(*jid, p);
+    }
+
+    waiting_jobs.sort_by(|id1, _j1, id2, _j2| {
+        let p1 = prio.get(id1).copied().unwrap_or(0.0);
+        let p2 = prio.get(id2).copied().unwrap_or(0.0);
+        p1.partial_cmp(&p2).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    waiting_jobs.reverse(); // descending
+}
+
 pub fn sort_jobs<P>(platform: &P, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>)
 where
     P: PlatformTrait,
@@ -89,7 +273,8 @@ where
                 job1.karma.partial_cmp(&job2.karma).unwrap_or(std::cmp::Ordering::Equal)
             });
         },
-        JobPriority::Multifactor => {},
+        JobPriority::Multifactor => {
+            multifactor_sort(platform, queues, waiting_jobs);
+        },
     }
 }
-

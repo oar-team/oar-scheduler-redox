@@ -193,6 +193,7 @@ is returned, the default behavior is overridden.
 
 ### Available hooks
 
+- `sort`: Overrides the job sorting algorithm.
 - `assign`: Overrides the job assignment logic for a single job on a given slotset.
 - `find`: Overrides the resources request evaluation logic.
 

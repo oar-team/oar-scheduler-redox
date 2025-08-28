@@ -122,11 +122,14 @@ fn build_quotas_config(config: &Configuration, res_set: &ResourceSet) -> QuotasC
         if config.quotas_conf_file.is_none() {
             panic!("Quotas are enabled but no quotas configuration file is provided.");
         }
+        if config.quotas_window_time_limit.is_none() {
+            panic!("Quotas are enabled but no quotas window time limit is provided.");
+        }
         let all_value = match &config.quotas_all_nb_resources_mode {
             QuotasAllNbResourcesMode::DefaultNotDead => res_set.default_intervals.core_count() as i64, // In a rust implementation, this should exclude dead cores
             QuotasAllNbResourcesMode::All => res_set.default_intervals.core_count() as i64,
         };
-        QuotasConfig::load_from_file(config.quotas_conf_file.clone().unwrap().as_str(), true, all_value, config.quotas_window_time_limit)
+        QuotasConfig::load_from_file(config.quotas_conf_file.clone().unwrap().as_str(), true, all_value, config.quotas_window_time_limit.unwrap())
     } else {
         QuotasConfig::new(false, None, Default::default(), Box::new([]))
     }
@@ -262,6 +265,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
         placeholder,
         dependencies,
         advance_reservation_start_time,
+        karma: 0.0,
     }
 }
 /// Builds a Moldable Rust struct from a Python moldable object.

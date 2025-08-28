@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 oar-scheduler-core = { path = "../oar-scheduler-core" }
 log = "0.4.27"
+indexmap = "2.10.0"

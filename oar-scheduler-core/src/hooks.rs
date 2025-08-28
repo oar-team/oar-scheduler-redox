@@ -1,5 +1,7 @@
 use crate::models::{Job, Moldable, ProcSet};
+use crate::platform::PlatformConfig;
 use crate::scheduler::slotset::SlotSet;
+use indexmap::IndexMap;
 use std::cell::OnceCell;
 use std::rc::Rc;
 
@@ -8,6 +10,9 @@ thread_local! {
 }
 
 pub trait HooksHandler {
+    /// Overrides the job sorting process. This hook should sort the `waiting_jobs` in place.
+    fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>) -> bool;
+
     /// Overrides the single job scheduling on a slot set process. This hook should define the `assignment` property of `Job`.
     /// It will override quotas, timesharing, and placeholders, but not container/inner jobs.
     /// The dependencies can be taken into account through the `min_begin` function parameter.
@@ -46,6 +51,15 @@ impl HooksManager {
         let _ = self.hooks_handler.set(Box::new(hooks_handler));
     }
 
+    pub fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>) -> bool {
+        if self.hooks_handler.get().is_none() {
+            return false;
+        }
+        self.hooks_handler
+            .get()
+            .unwrap()
+            .hook_sort(platform_config, queues, waiting_jobs)
+    }
     pub fn hook_assign(&self, slot_set: &mut SlotSet, job: &mut Job, min_begin: Option<i64>) -> bool {
         if self.hooks_handler.get().is_none() {
             return false;

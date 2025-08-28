@@ -1435,6 +1435,7 @@ dependencies = [
 name = "oar-scheduler-hooks"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "log",
  "oar-scheduler-core",
 ]

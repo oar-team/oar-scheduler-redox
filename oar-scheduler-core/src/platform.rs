@@ -11,6 +11,7 @@ use pyo3::prelude::{PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList};
 #[cfg(feature = "pyo3")]
 use pyo3::{pyclass, Bound, IntoPyObject, IntoPyObjectRef, PyErr, Python};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 pub trait PlatformTrait {
@@ -30,6 +31,32 @@ pub trait PlatformTrait {
     /// This function is called after scheduling jobs to remove the assigned jobs from the waiting list,
     /// to add them to the scheduled list, and to save them to the database
     fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>);
+
+    // --- Accounting DB access ---
+    /// Returns summed accounting for all queues in [window_start, window_stop):
+    /// (ASKED, USED)
+    fn get_sum_accounting_window(
+        &self,
+        queues: &[String],
+        window_start: i64,
+        window_stop: i64,
+    ) -> (f64, f64);
+
+    /// Returns (ASKED, USED) per project for the given queues and window.
+    fn get_sum_accounting_by_project(
+        &self,
+        queues: &[String],
+        window_start: i64,
+        window_stop: i64,
+    ) -> (HashMap<String, f64>, HashMap<String, f64>);
+
+    /// Returns (ASKED, USED) per user for the given queues and window.
+    fn get_sum_accounting_by_user(
+        &self,
+        queues: &[String],
+        window_start: i64,
+        window_stop: i64,
+    ) -> (HashMap<String, f64>, HashMap<String, f64>);
 }
 
 #[cfg_attr(feature = "pyo3", derive(IntoPyObjectRef))]

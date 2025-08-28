@@ -38,6 +38,18 @@ impl PlatformTrait for PlatformBenchMock {
         self.waiting_jobs.retain(|id, _job| !assigned_jobs.contains_key(id));
         self.scheduled_jobs.extend(assigned_jobs.into_values());
     }
+
+    fn get_sum_accounting_window(&self, queues: &[String], window_start: i64, window_stop: i64) -> (f64, f64) {
+        (0f64, 0f64)
+    }
+
+    fn get_sum_accounting_by_project(&self, queues: &[String], window_start: i64, window_stop: i64) -> (HashMap<String, f64>, HashMap<String, f64>) {
+        (HashMap::new(), HashMap::new())
+    }
+
+    fn get_sum_accounting_by_user(&self, queues: &[String], window_start: i64, window_stop: i64) -> (HashMap<String, f64>, HashMap<String, f64>) {
+        (HashMap::new(), HashMap::new())
+    }
 }
 
 

@@ -47,6 +47,7 @@ pub struct Job {
     pub dependencies: Vec<(u32, Box<str>, Option<i32>)>,
     /// Attribute used to store the start time of advance reservation jobs before they get an assignment.
     pub advance_reservation_start_time: Option<i64>,
+    pub karma: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -274,6 +275,7 @@ impl JobBuilder {
             placeholder: self.placeholder,
             dependencies: self.dependencies,
             advance_reservation_start_time: self.advance_reservation_start_time,
+            karma: 0.0,
         }
     }
 }

@@ -7,6 +7,7 @@ use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{Bound, Py, PyAny, PyResult, Python};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Rust Platform using Python objects and functions to interact with the OAR platform.
@@ -76,6 +77,114 @@ impl PlatformTrait for Platform {
         self.waiting_jobs = None;
         self.py_waiting_jobs_map = None;
     }
+
+    fn get_sum_accounting_window(
+        &self,
+        queues: &[String],
+        window_start: i64,
+        window_stop: i64,
+    ) -> (f64, f64) {
+        Python::with_gil(|py| {
+            // Build Python list of queues
+            let py_queues = PyList::empty(py);
+            for q in queues {
+                py_queues.append(q).unwrap();
+            }
+            let res = self
+                .py_platform
+                .bind(py)
+                .getattr("get_sum_accounting_window")
+                .unwrap()
+                .call1((&self.py_session, &py_queues, window_start, window_stop))
+                .unwrap();
+            let tup = res.downcast::<PyTuple>().unwrap();
+            let item0 = tup.get_item(0).unwrap();
+            let asked: f64 = item0.extract().unwrap();
+            let item1 = tup.get_item(1).unwrap();
+            let used: f64 = item1.extract().unwrap();
+            (asked, used)
+        })
+    }
+
+    fn get_sum_accounting_by_project(
+        &self,
+        queues: &[String],
+        window_start: i64,
+        window_stop: i64,
+    ) -> (HashMap<String, f64>, HashMap<String, f64>) {
+        Python::with_gil(|py| {
+            let py_queues = PyList::empty(py);
+            for q in queues {
+                py_queues.append(q).unwrap();
+            }
+            let res = self
+                .py_platform
+                .bind(py)
+                .getattr("get_sum_accounting_by_project")
+                .unwrap()
+                .call1((&self.py_session, &py_queues, window_start, window_stop))
+                .unwrap();
+            let tup = res.downcast::<PyTuple>().unwrap();
+            let item0 = tup.get_item(0).unwrap();
+            let asked_dict = item0.downcast::<PyDict>().unwrap();
+            let item1 = tup.get_item(1).unwrap();
+            let used_dict = item1.downcast::<PyDict>().unwrap();
+
+            let mut asked: HashMap<String, f64> = HashMap::with_capacity(asked_dict.len());
+            for (k, v) in asked_dict.into_iter() {
+                let key: String = k.extract().unwrap();
+                let val: f64 = v.extract().unwrap();
+                asked.insert(key, val);
+            }
+            let mut used: HashMap<String, f64> = HashMap::with_capacity(used_dict.len());
+            for (k, v) in used_dict.into_iter() {
+                let key: String = k.extract().unwrap();
+                let val: f64 = v.extract().unwrap();
+                used.insert(key, val);
+            }
+            (asked, used)
+        })
+    }
+
+    fn get_sum_accounting_by_user(
+        &self,
+        queues: &[String],
+        window_start: i64,
+        window_stop: i64,
+    ) -> (HashMap<String, f64>, HashMap<String, f64>) {
+        Python::with_gil(|py| {
+            let py_queues = PyList::empty(py);
+            for q in queues {
+                py_queues.append(q).unwrap();
+            }
+            let res = self
+                .py_platform
+                .bind(py)
+                .getattr("get_sum_accounting_by_user")
+                .unwrap()
+                .call1((&self.py_session, &py_queues, window_start, window_stop))
+                .unwrap();
+            let tup = res.downcast::<PyTuple>().unwrap();
+            let item0 = tup.get_item(0).unwrap();
+            let asked_dict = item0.downcast::<PyDict>().unwrap();
+            let item1 = tup.get_item(1).unwrap();
+            let used_dict = item1.downcast::<PyDict>().unwrap();
+
+            let mut asked: HashMap<String, f64> = HashMap::with_capacity(asked_dict.len());
+            for (k, v) in asked_dict.into_iter() {
+                let key: String = k.extract().unwrap();
+                let val: f64 = v.extract().unwrap();
+                asked.insert(key, val);
+            }
+            let mut used: HashMap<String, f64> = HashMap::with_capacity(used_dict.len());
+            for (k, v) in used_dict.into_iter() {
+                let key: String = k.extract().unwrap();
+                let val: f64 = v.extract().unwrap();
+                used.insert(key, val);
+            }
+            (asked, used)
+        })
+    }
 }
 
 impl Platform {
@@ -92,6 +201,7 @@ impl Platform {
                         py_job.setattr("end_time", sd.end).unwrap();
                         py_job.setattr("moldable_id", job.moldables[sd.moldable_index].id).unwrap();
                         py_job.setattr("res_set", proc_set_to_python(py_job.py(), &sd.proc_set)).unwrap();
+                        py_job.setattr("karma", job.karma).unwrap();
                         py_scheduled_jobs.set_item(py_job_id, py_job).unwrap();
                     }
                 }
@@ -190,21 +300,22 @@ impl Platform {
             .unwrap();
 
         // Sort waiting jobs
-        let py_sorted_waiting_job_ids = py
-            .import("oar.kao.kamelot")
-            .unwrap()
-            .getattr("jobs_sorting")
-            .unwrap()
-            .call1((
-                &self.py_session,
-                &self.py_config,
-                &py_queues,
-                &self.now,
-                &py_waiting_jobs_ids,
-                &py_waiting_jobs_map,
-                &self.py_platform,
-            ))
-            .unwrap();
+        let py_sorted_waiting_job_ids = py_waiting_jobs_ids;
+        // let py_sorted_waiting_job_ids = py
+        //     .import("oar.kao.kamelot")
+        //     .unwrap()
+        //     .getattr("jobs_sorting")
+        //     .unwrap()
+        //     .call1((
+        //         &self.py_session,
+        //         &self.py_config,
+        //         &py_queues,
+        //         &self.now,
+        //         &py_waiting_jobs_ids,
+        //         &py_waiting_jobs_map,
+        //         &self.py_platform,
+        //     ))
+        //     .unwrap();
 
         // Create Rust IndexMap from Python jobs
         self.waiting_jobs = Some(

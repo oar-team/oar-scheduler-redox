@@ -25,7 +25,7 @@ oar-scheduler-redox is 10 to 100 times faster than the original Python implement
 - [x] Job container support
 - [x] Placeholders support
 - [x] Temporal quotas support
-- [ ] Implement job sorting on the Rust side.
+- [x] Implement job sorting on the Rust side.
 - [ ] Envelopes support
 
 ### Benchmarking (`oar-scheduler-bench`)
@@ -79,9 +79,8 @@ This crate is a Rust library that implements the core scheduler of OAR3 in Rust.
 
 This crate provide the domain structs and allows to interact with the database.
 
-- The domain structs definition are used by all the crates.
-- The database requests is used only by the `oar-scheduler-meta` crate.
--
+- The domain structs definitions are used by all the crates.
+- The database requests are used only by the `oar-scheduler-meta` crate.
 
 ## Crate oar-scheduler-meta
 

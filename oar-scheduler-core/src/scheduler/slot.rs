@@ -1,4 +1,4 @@
-use crate::models::ProcSet;
+use crate::model::job::ProcSet;
 use crate::platform::PlatformConfig;
 use crate::scheduler::quotas::Quotas;
 use std::collections::HashMap;

@@ -1,4 +1,4 @@
-use crate::models::{JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
+use crate::model::job::{JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
 use crate::platform::PlatformConfig;
 use crate::scheduler::calendar::QuotasConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};

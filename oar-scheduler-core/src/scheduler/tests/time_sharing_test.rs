@@ -1,4 +1,4 @@
-use crate::models::{JobBuilder, Moldable, ProcSet, TimeSharingType};
+use crate::model::job::{JobBuilder, Moldable, ProcSet, TimeSharingType};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::HierarchyRequests;
 use crate::scheduler::scheduling;

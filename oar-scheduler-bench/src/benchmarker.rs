@@ -3,7 +3,7 @@ use crate::platform_mock::PlatformBenchMock;
 use crate::python_caller::schedule_cycle_on_oar_python;
 use indexmap::IndexMap;
 use log::info;
-use oar_scheduler_core::models::{Job, JobBuilder, ProcSet, ProcSetCoresOp};
+use oar_scheduler_core::model::job::{Job, JobBuilder, ProcSet, ProcSetCoresOp};
 use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use oar_scheduler_core::scheduler::kamelot::schedule_cycle;

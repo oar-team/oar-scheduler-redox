@@ -2,7 +2,7 @@ use crate::converters::{build_job, build_platform_config, proc_set_to_python};
 use indexmap::{indexmap, IndexMap};
 use log::info;
 use oar_scheduler_core::model::configuration::Configuration;
-use oar_scheduler_core::models::Job;
+use oar_scheduler_core::model::job::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};

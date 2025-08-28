@@ -1,5 +1,5 @@
 use crate::benchmarker::measure_time;
-use oar_scheduler_core::models::{JobAssignment, ProcSet};
+use oar_scheduler_core::model::job::{JobAssignment, ProcSet};
 use oar_scheduler_core::platform::PlatformTrait;
 use pyo3::ffi::c_str;
 use pyo3::prelude::*;

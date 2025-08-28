@@ -1,4 +1,4 @@
-use crate::models::{JobAssignment, JobBuilder, PlaceholderType, ProcSet};
+use crate::model::job::{JobAssignment, JobBuilder, PlaceholderType, ProcSet};
 use crate::scheduler::slot::Slot;
 use crate::scheduler::slotset::SlotSet;
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;

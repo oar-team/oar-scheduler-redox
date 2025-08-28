@@ -1408,7 +1408,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "log",
- "oar-scheduler-dao",
+ "oar-scheduler-db",
  "prettytable-rs",
  "pyo3",
  "range-set-blaze",
@@ -1418,7 +1418,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oar-scheduler-dao"
+name = "oar-scheduler-db"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
@@ -1448,7 +1448,7 @@ dependencies = [
  "env_logger",
  "log",
  "oar-scheduler-core",
- "oar-scheduler-dao",
+ "oar-scheduler-db",
  "oar-scheduler-hooks",
 ]
 

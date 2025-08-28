@@ -1,9 +1,9 @@
 use crate::hooks::get_hooks_manager;
-use crate::models::{Job, ProcSetCoresOp};
+use crate::model::configuration::JobPriority;
+use crate::model::job::{Job, ProcSetCoresOp};
 use crate::platform::PlatformTrait;
 use indexmap::IndexMap;
 use log::{info, warn};
-use oar_scheduler_dao::model::configuration::JobPriority;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;

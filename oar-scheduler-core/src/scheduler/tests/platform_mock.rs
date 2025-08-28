@@ -1,10 +1,10 @@
-use crate::models::{Job, ProcSet};
+use crate::model::configuration::Configuration;
+use crate::model::job::{Job, ProcSet};
 use crate::platform::{PlatformConfig, PlatformTrait, ResourceSet};
 use crate::scheduler::calendar::QuotasConfig;
 use crate::scheduler::hierarchy::Hierarchy;
 use crate::scheduler::quotas::QuotasValue;
 use indexmap::IndexMap;
-use oar_scheduler_dao::model::configuration::Configuration;
 use std::collections::HashMap;
 use std::rc::Rc;
 

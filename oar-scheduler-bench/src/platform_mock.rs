@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use oar_scheduler_core::model::configuration::Configuration;
-use oar_scheduler_core::models::{Job, ProcSet};
+use oar_scheduler_core::model::job::{Job, ProcSet};
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait, ResourceSet};
 use oar_scheduler_core::scheduler::calendar::QuotasConfig;
 use oar_scheduler_core::scheduler::hierarchy::Hierarchy;

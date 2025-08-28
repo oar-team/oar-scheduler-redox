@@ -1,4 +1,4 @@
-use crate::models::{Job, Moldable, ProcSet};
+use crate::model::job::{Job, Moldable, ProcSet};
 use crate::platform::PlatformConfig;
 use crate::scheduler::slotset::SlotSet;
 use indexmap::IndexMap;

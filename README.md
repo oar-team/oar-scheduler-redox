@@ -44,11 +44,10 @@ oar-scheduler-redox is 10 to 100 times faster than the original Python implement
 
 - [ ] Develop the meta-scheduler fully in Rust
 
-### Database support (`oar-scheduler-dao`)
+### Database support (`oar-scheduler-db`)
 
 - [x] Demonstrate a usage of a database library allowing to query arbitrary column names (the resource table is customizable by the users).
-- [ ] Create/move the database structs in this crate
-- [ ] Add the DAO functions to query the database
+- [ ] Support any CRUD operations integrated with `oar-scheduler-core::model`.
 
 ### Plugins support (`oar-scheduler-hooks`)
 
@@ -62,25 +61,22 @@ oar-scheduler-redox is 10 to 100 times faster than the original Python implement
 graph TD
 ;
   oar-scheduler-meta["oar-scheduler-meta (WiP)<br/><span style='font-size: 0.8em;'>Batteries included entry point.<br/>Meta-scheduler developed in Rust<br/>Database access from Rust.</span>"] --> oar-scheduler-core
-  oar-scheduler-hooks --> oar-scheduler-core
   oar-scheduler-meta --> oar-scheduler-hooks
-  oar-scheduler-meta -->|database| oar-scheduler-dao
+  oar-scheduler-meta --> oar-scheduler-db
+  oar-scheduler-db --> oar-scheduler-core
+  oar-scheduler-hooks --> oar-scheduler-core
   oar-scheduler-redox["oar-scheduler-redox<br/><span style='font-size: 0.8em;'>Internal/External scheduler entrypoint.<br/>Called by the Python meta-scheduler</span>"] --> oar-scheduler-hooks
-    oar-scheduler-redox --> oar-scheduler-core
-    oar-scheduler-bench --> oar-scheduler-core
-  oar-scheduler-core -->|models| oar-scheduler-dao
+  oar-scheduler-redox --> oar-scheduler-core
+  oar-scheduler-bench --> oar-scheduler-core
 ```
 
 ## Crate oar-scheduler-core
 
-This crate is a Rust library that implements the core scheduler of OAR3 in Rust.
+This crate is a Rust library that implements the core scheduling algorithms of OAR3. It also contains the data models.
 
-## Crate oar-scheduler-dao
+## Crate oar-scheduler-db
 
-This crate provide the domain structs and allows to interact with the database.
-
-- The domain structs definitions are used by all the crates.
-- The database requests are used only by the `oar-scheduler-meta` crate.
+This crate provide the integration with the OAR3 database using `sqlx` and `sea-query`.
 
 ## Crate oar-scheduler-meta
 

@@ -10,7 +10,7 @@ use crate::python_caller::schedule_cycle_on_oar_python;
 use indexmap::IndexMap;
 use log::LevelFilter;
 use oar_scheduler_core::auto_bench_fct::{print_bench_fct_hy_results, print_bench_fct_results};
-use oar_scheduler_core::models::Job;
+use oar_scheduler_core::model::job::Job;
 use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_core::scheduler::kamelot::schedule_cycle;
 

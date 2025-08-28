@@ -1,4 +1,4 @@
-use crate::models::Job;
+use crate::model::job::Job;
 use crate::platform::PlatformConfig;
 use crate::scheduler::slotset::SlotIterator;
 use auto_bench_fct::auto_bench_fct_hy;

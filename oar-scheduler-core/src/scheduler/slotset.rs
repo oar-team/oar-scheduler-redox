@@ -1,4 +1,4 @@
-use crate::models::{Job, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
+use crate::model::job::{Job, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
 use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
 use auto_bench_fct::auto_bench_fct_hy;

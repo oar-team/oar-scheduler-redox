@@ -1,10 +1,10 @@
+use crate::model::configuration::Configuration;
+use crate::model::job::{Job, ProcSet};
 #[cfg(feature = "pyo3")]
-use crate::models::proc_set_to_python;
-use crate::models::{Job, ProcSet};
+use crate::model::python::proc_set_to_python;
 use crate::scheduler::calendar::QuotasConfig;
 use crate::scheduler::hierarchy::Hierarchy;
 use indexmap::IndexMap;
-use oar_scheduler_dao::model::configuration::Configuration;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::{PyDictMethods, PyListMethods};
 #[cfg(feature = "pyo3")]

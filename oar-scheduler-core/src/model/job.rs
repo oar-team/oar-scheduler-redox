@@ -1,30 +1,10 @@
 use crate::scheduler::hierarchy::HierarchyRequests;
 use auto_bench_fct::auto_bench_fct_hy;
 use log::warn;
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::{PyAnyMethods, PyListMethods, PyModule};
-#[cfg(feature = "pyo3")]
-use pyo3::types::{PyDict, PyList, PyTuple};
-#[cfg(feature = "pyo3")]
-use pyo3::{Bound, IntoPyObject, PyAny, PyErr, Python};
 use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
 
 pub type ProcSet = RangeSetBlaze<u32>;
-#[cfg(feature = "pyo3")]
-pub fn proc_set_to_python<'a>(py: Python<'a>, proc_set: &ProcSet) -> Bound<'a, PyAny> {
-    let procset_module = PyModule::import(py, "procset").unwrap();
-    let procset_class = procset_module.getattr("ProcSet").unwrap();
-    let procint_class = procset_module.getattr("ProcInt").unwrap();
-
-    let list = PyList::empty(py);
-    for range in proc_set.ranges() {
-        list.append(procint_class.call1((range.start(), range.end())).unwrap()).unwrap();
-    }
-
-    let procset_instance = procset_class.call1(PyTuple::new(py, list).unwrap()).unwrap();
-    procset_instance
-}
 
 #[derive(Debug, Clone)]
 pub struct Job {
@@ -57,6 +37,23 @@ pub struct Job {
 }
 
 #[derive(Debug, Clone)]
+pub struct JobAssignment {
+    pub begin: i64,
+    pub end: i64,
+    pub proc_set: ProcSet,
+    pub moldable_index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct Moldable {
+    pub id: u32,
+    pub walltime: i64,
+    pub requests: HierarchyRequests,
+    /// Cache key is only calculated at initialization. If fields are changed, the cache key must be recalculated.
+    pub cache_key: Box<str>,
+}
+
+#[derive(Debug, Clone)]
 pub enum TimeSharingType {
     /// timesharing=\*,\*
     AllAll,
@@ -67,6 +64,17 @@ pub enum TimeSharingType {
     /// timesharing=user,name
     UserName,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlaceholderType {
+    /// Mark the job as a placeholder and name it by the String parameter,
+    /// meaning it is not a real job but a placeholder for other jobs to be scheduled on its resources.
+    Placeholder(Box<str>),
+    /// Allow the job to use the resources of the placeholder referenced by the String parameter.
+    Allow(Box<str>),
+    None,
+}
+
 impl TimeSharingType {
     pub fn from_str(user: &str, job: &str) -> Self {
         match (user, job) {
@@ -82,15 +90,6 @@ impl TimeSharingType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum PlaceholderType {
-    /// Mark the job as a placeholder and name it by the String parameter,
-    /// meaning it is not a real job but a placeholder for other jobs to be scheduled on its resources.
-    Placeholder(Box<str>),
-    /// Allow the job to use the resources of the placeholder referenced by the String parameter.
-    Allow(Box<str>),
-    None,
-}
 impl PlaceholderType {
     pub fn is_placeholder(&self) -> bool {
         matches!(self, PlaceholderType::Placeholder(_))
@@ -101,23 +100,6 @@ impl PlaceholderType {
     pub fn is_none(&self) -> bool {
         matches!(self, PlaceholderType::None)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct JobAssignment {
-    pub begin: i64,
-    pub end: i64,
-    pub proc_set: ProcSet,
-    pub moldable_index: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct Moldable {
-    pub id: u32,
-    pub walltime: i64,
-    pub requests: HierarchyRequests,
-    /// Cache key is only calculated at initialization. If fields are changed, the cache key must be recalculated.
-    pub cache_key: Box<str>,
 }
 
 impl Job {
@@ -177,6 +159,7 @@ pub struct JobBuilder {
     dependencies: Vec<(u32, Box<str>, Option<i32>)>,
     advance_reservation_start_time: Option<i64>,
 }
+
 impl JobBuilder {
     pub fn new(id: u32) -> Self {
         JobBuilder {
@@ -289,70 +272,6 @@ impl JobBuilder {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl<'a> IntoPyObject<'a> for &Job {
-    type Target = PyDict;
-    type Output = Bound<'a, Self::Target>;
-    type Error = PyErr;
-
-    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
-        let dict = PyDict::new(py);
-        dict.set_item("id", self.id)?;
-
-        if let Some(name) = &self.name {
-            dict.set_item("name", name.as_ref())?;
-        } else {
-            dict.set_item("name", py.None())?;
-        }
-        if let Some(user) = &self.user {
-            dict.set_item("user", user.as_ref())?;
-        } else {
-            dict.set_item("user", py.None())?;
-        }
-        if let Some(project) = &self.project {
-            dict.set_item("project", project.as_ref())?;
-        } else {
-            dict.set_item("project", py.None())?;
-        }
-
-        dict.set_item("queue", self.queue.clone().as_ref())?;
-        dict.set_item(
-            "types",
-            self.types
-                .iter()
-                .map(|(k, v)| (k.as_ref(), v.clone().map(|v| v.to_string())))
-                .collect::<HashMap<&str, Option<String>>>(),
-        )?;
-        dict.set_item("moldables", self.moldables.iter().enumerate().collect::<Vec<(usize, &Moldable)>>())?;
-        if let Some(assignment) = &self.assignment {
-            let assignment_dict = PyDict::new(py);
-            assignment_dict.set_item("begin", assignment.begin)?;
-            assignment_dict.set_item("end", assignment.end)?;
-            assignment_dict.set_item("proc_set", proc_set_to_python(py, &assignment.proc_set))?;
-            assignment_dict.set_item("moldable_index", assignment.moldable_index)?;
-            dict.set_item("assignment", assignment_dict)?;
-        } else {
-            dict.set_item("assignment", py.None())?;
-        }
-        Ok(dict)
-    }
-}
-#[cfg(feature = "pyo3")]
-impl<'a> IntoPyObject<'a> for &Moldable {
-    type Target = PyDict;
-    type Output = Bound<'a, Self::Target>;
-    type Error = PyErr;
-
-    fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
-        let dict = PyDict::new(py);
-        dict.set_item("id", &self.id)?;
-        dict.set_item("walltime", &self.walltime)?;
-        dict.set_item("requests", &self.requests)?;
-        dict.set_item("cache_key", &self.cache_key.to_string())?;
-        Ok(dict)
-    }
-}
-
 impl JobAssignment {
     pub fn new(begin: i64, end: i64, proc_set: ProcSet, moldable_index: usize) -> JobAssignment {
         JobAssignment {
@@ -382,6 +301,7 @@ pub trait ProcSetCoresOp {
     fn sub_proc_set_with_cores(&self, core_count: u32) -> Option<ProcSet>;
     fn core_count(&self) -> u32;
 }
+
 impl ProcSetCoresOp for ProcSet {
     /// Tries to claim a subset of the `ProcSet` with the specified number of cores.
     /// Will not substract cores to the slots. This function will only try to find a fitting subset of cores

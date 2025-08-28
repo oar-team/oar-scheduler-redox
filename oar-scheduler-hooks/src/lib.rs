@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use log::debug;
 use oar_scheduler_core::hooks::HooksHandler;
-use oar_scheduler_core::models::{Job, Moldable, ProcSet};
+use oar_scheduler_core::model::job::{Job, Moldable, ProcSet};
 use oar_scheduler_core::platform::PlatformConfig;
 use oar_scheduler_core::scheduler::slotset::SlotSet;
 

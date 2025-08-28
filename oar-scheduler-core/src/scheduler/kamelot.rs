@@ -1,4 +1,4 @@
-use crate::models::{Job, JobAssignment, JobBuilder, ProcSet};
+use crate::model::job::{Job, JobAssignment, JobBuilder, ProcSet};
 use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slotset::SlotSet;

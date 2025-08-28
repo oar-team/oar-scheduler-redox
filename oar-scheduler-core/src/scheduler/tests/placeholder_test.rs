@@ -1,4 +1,4 @@
-use crate::models::*;
+use crate::model::job::{JobBuilder, PlaceholderType, ProcSet};
 use crate::platform::PlatformConfig;
 use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::scheduling::*;

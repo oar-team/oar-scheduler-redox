@@ -1,5 +1,5 @@
 use oar_scheduler_core::model::configuration::{Configuration, QuotasAllNbResourcesMode};
-use oar_scheduler_core::models::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
+use oar_scheduler_core::model::job::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
 use oar_scheduler_core::platform::{PlatformConfig, ResourceSet};
 use oar_scheduler_core::scheduler::calendar::QuotasConfig;
 use oar_scheduler_core::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};

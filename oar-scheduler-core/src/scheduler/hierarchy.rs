@@ -1,6 +1,6 @@
+use crate::model::job::{ProcSet, ProcSetCoresOp};
 #[cfg(feature = "pyo3")]
-use crate::models::proc_set_to_python;
-use crate::models::{ProcSet, ProcSetCoresOp};
+use crate::model::python::proc_set_to_python;
 use auto_bench_fct::auto_bench_fct_hy;
 use log::warn;
 #[cfg(feature = "pyo3")]

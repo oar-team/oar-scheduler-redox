@@ -1,5 +1,5 @@
 use crate::model::configuration::{Configuration, QuotasAllNbResourcesMode};
-use crate::model::job::{Job, ProcSet, ProcSetCoresOp};
+pub use crate::model::job::{Job, ProcSet, ProcSetCoresOp};
 #[cfg(feature = "pyo3")]
 use crate::model::python::proc_set_to_python;
 use crate::scheduler::calendar::QuotasConfig;
@@ -70,6 +70,7 @@ pub struct PlatformConfig {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "pyo3-abi3-py38", pyclass(module = "oar_scheduler_redox"))]
 pub struct ResourceSet {
+    /// Default available resources for slot initialization.
     pub default_intervals: ProcSet,
     /// For each `ProcSet`, the time until which it is available. Integrated through pseudo jobs.
     pub available_upto: Vec<(i64, ProcSet)>,

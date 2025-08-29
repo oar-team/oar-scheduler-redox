@@ -7,6 +7,8 @@ pub const DEFAULT_CONFIG_FILE: &str = "/etc/oar/oar.conf";
 pub struct Configuration {
     pub scheduler_job_security_time: i64,
     pub cache_enabled: bool,
+    // --- Resources configuration ---
+    pub scheduler_resource_order: Option<String>,
     // --- Quotas configuration ---
     pub quotas: bool,
     pub quotas_conf_file: Option<String>,
@@ -27,21 +29,18 @@ pub struct Configuration {
 impl Configuration {
     /// Load configuration from a file, in a .conf format (key=value).
     pub fn load_from_file(path: &str) -> Self {
-        let contents = std::fs::read_to_string(path).unwrap_or_else(|_| {
-            eprintln!(
-                "Warning: could not read configuration file '{}', using default configuration.",
-                path
-            );
-            String::new()
-        });
-        let mut config: Configuration = toml::from_str(&contents).unwrap_or_else(|e| {
-            eprintln!(
-                "Warning: could not parse configuration file '{}': {}, using default configuration.",
-                path, e
-            );
+        let contents = std::fs::read_to_string(path).ok();
+        return if let Some(contents) = contents {
+            toml::from_str(&contents).unwrap_or_else(|e| {
+                eprintln!(
+                    "Warning: could not parse configuration file '{}': {}, using default configuration.",
+                    path, e
+                );
+                Configuration::default()
+            })
+        } else {
             Configuration::default()
-        });
-        config
+        }
     }
 }
 
@@ -50,6 +49,7 @@ impl Default for Configuration {
         Configuration {
             scheduler_job_security_time: 60, // 1 minute
             cache_enabled: true,
+            scheduler_resource_order: None,
             quotas: false,
             quotas_conf_file: None,
             quotas_window_time_limit: Some(60 * 24 * 3600), // 60 days

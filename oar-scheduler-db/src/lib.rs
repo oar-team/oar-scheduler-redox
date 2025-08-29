@@ -1,10 +1,16 @@
-use oar_scheduler_core::platform::ResourceSet;
-use sqlx::any::install_default_drivers;
+use crate::model::{resources, NewResource, Resources};
+use log::info;
+use oar_scheduler_core::platform::{ProcSet, ResourceSet};
+use oar_scheduler_core::scheduler::hierarchy::Hierarchy;
+use sea_query::{InsertStatement, PostgresQueryBuilder, QueryBuilder, SelectStatement, SqliteQueryBuilder};
+use sea_query_sqlx::{SqlxBinder, SqlxValues};
+use sqlx::any::{install_default_drivers, AnyRow};
 use sqlx::pool::PoolOptions;
-use sqlx::Any;
 use sqlx::AnyPool;
+use sqlx::{Any, Error};
 
 pub mod example;
+pub mod model;
 
 enum Backend {
     Postgres,
@@ -19,15 +25,48 @@ impl From<&str> for Backend {
         }
     }
 }
+impl Backend {
+    fn build_insert(&self, query: &InsertStatement) -> (String, SqlxValues) {
+        match self {
+            Backend::Postgres => query.build_sqlx(PostgresQueryBuilder),
+            Backend::Sqlite => query.build_sqlx(SqliteQueryBuilder),
+        }
+    }
+    fn build_select(&self, query: &SelectStatement) -> (String, SqlxValues) {
+        match self {
+            Backend::Postgres => query.build_sqlx(PostgresQueryBuilder),
+            Backend::Sqlite => query.build_sqlx(SqliteQueryBuilder),
+        }
+    }
+}
 
 pub struct Session {
     pool: AnyPool,
     backend: Backend,
 }
-
 impl Session {
     pub async fn get_resource_set(&self) -> ResourceSet {
-        todo!()
+
+        // Test to create a dummy resource
+        NewResource {
+            network_address: "test".to_string(),
+            r#type: "test".to_string(),
+            state: "active".to_string(),
+        }.insert(&self).await;
+
+        let resources = Resources::get_all_sorted(&self, "type, network_address").await.unwrap();
+        info!("Loaded {} resources from database", resources.len());
+        for (resource_id, network_address, r#type, state) in &resources {
+            info!("Resource {}: {} (type={}, state={})", resource_id, network_address, r#type, state);
+        }
+
+
+        let hierarchy = Hierarchy::new().add_unit_partition(Box::from("resource_id"));
+        ResourceSet {
+            default_intervals: ProcSet::default(),
+            available_upto: vec![],
+            hierarchy,
+        }
     }
 }
 
@@ -53,19 +92,46 @@ impl Session {
     pub async fn get_now(&self) -> i64 {
         match self.backend {
             Backend::Postgres => {
-                let row: (i64,) = sqlx::query_as("SELECT EXTRACT(EPOCH FROM current_timestamp)")
+                let row: (i64,) = sqlx::query_as("SELECT EXTRACT(EPOCH FROM current_timestamp)::BIGINT")
                     .fetch_one(&self.pool)
                     .await
                     .expect("Failed to fetch current time");
                 row.0
             }
             Backend::Sqlite => {
-                let row: (i64,) = sqlx::query_as("SELECT strftime('%s','now')")
+                let row: (i64,) = sqlx::query_as("SELECT CAST(strftime('%s','now') AS INTEGER)")
                     .fetch_one(&self.pool)
                     .await
                     .expect("Failed to fetch current time");
                 row.0
             }
         }
+    }
+}
+
+trait SessionInsertStatement {
+    async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error>;
+}
+impl SessionInsertStatement for InsertStatement {
+    async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error> {
+        let (sql, values) = session.backend.build_insert(&self);
+        sqlx::query_with(sql.as_str(), values)
+            .fetch_one(&session.pool).await
+    }
+}
+trait SessionSelectStatement {
+    async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error>;
+    async fn fetch_all<'q>(&'q self, session: &Session) -> Result<Vec<AnyRow>, Error>;
+}
+impl SessionSelectStatement for SelectStatement {
+    async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error> {
+        let (sql, values) = session.backend.build_select(&self);
+        sqlx::query_with(sql.as_str(), values)
+            .fetch_one(&session.pool).await
+    }
+    async fn fetch_all<'q>(&'q self, session: &Session) -> Result<Vec<AnyRow>, Error> {
+        let (sql, values) = session.backend.build_select(&self);
+        sqlx::query_with(sql.as_str(), values)
+            .fetch_all(&session.pool).await
     }
 }

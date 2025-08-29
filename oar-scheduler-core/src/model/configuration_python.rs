@@ -186,21 +186,23 @@ where
 impl<'a> FromPyObject<'a> for Configuration {
     fn extract_bound(obj: &Bound<'a, PyAny>) -> PyResult<Self> {
         let dict: &Bound<'a, PyDict> = obj.downcast()?;
-        Ok(Configuration {
-            job_priority: get_opt_any_config(&dict, "JOB_PRIORITY")?.unwrap_or(JobPriority::Fifo),
-            priority_conf_file: get_opt_str_config(dict, "PRIORITY_CONF_FILE")?,
-            scheduler_job_security_time: get_i64_config(dict, "SCHEDULER_JOB_SECURITY_TIME")?,
-            quotas: get_bool_config(dict, "QUOTAS")?,
-            quotas_conf_file: get_opt_str_config(dict, "QUOTAS_CONF_FILE")?,
-            quotas_window_time_limit: get_opt_i64_config(dict, "QUOTAS_WINDOW_TIME_LIMIT")?,
-            quotas_all_nb_resources_mode: get_opt_any_config(&dict, "QUOTAS_ALL_NB_RESOURCES_MODE")?.unwrap_or(QuotasAllNbResourcesMode::All),
-            cache_enabled: get_opt_bool_config(dict, "CACHE_ENABLED")?.unwrap_or(true),
-            scheduler_fairsharing_window_size: get_opt_i64_config(dict, "SCHEDULER_FAIRSHARING_WINDOW_SIZE")?,
-            scheduler_fairsharing_project_targets: get_opt_str_config(dict, "SCHEDULER_FAIRSHARING_PROJECT_TARGETS")?,
-            scheduler_fairsharing_user_targets: get_opt_str_config(dict, "SCHEDULER_FAIRSHARING_USER_TARGETS")?,
-            scheduler_fairsharing_coef_project: get_opt_f64_config(dict, "SCHEDULER_FAIRSHARING_COEF_PROJECT")?,
-            scheduler_fairsharing_coef_user: get_opt_f64_config(dict, "SCHEDULER_FAIRSHARING_COEF_USER")?,
-            scheduler_fairsharing_coef_user_ask: get_opt_f64_config(dict, "SCHEDULER_FAIRSHARING_COEF_USER_ASK")?,
-        })
+        let mut cfg = Configuration::default();
+        cfg.job_priority = get_opt_any_config(&dict, "JOB_PRIORITY")?.unwrap_or(JobPriority::Fifo);
+        cfg.priority_conf_file = get_opt_str_config(dict, "PRIORITY_CONF_FILE")?;
+        cfg.scheduler_resource_order = get_opt_str_config(dict, "SCHEDULER_RESOURCE_ORDER")?;
+        cfg.scheduler_job_security_time = get_i64_config(dict, "SCHEDULER_JOB_SECURITY_TIME")?;
+        cfg.quotas = get_bool_config(dict, "QUOTAS")?;
+        cfg.quotas_conf_file = get_opt_str_config(dict, "QUOTAS_CONF_FILE")?;
+        cfg.quotas_window_time_limit = get_opt_i64_config(dict, "QUOTAS_WINDOW_TIME_LIMIT")?;
+        cfg.quotas_all_nb_resources_mode = get_opt_any_config(&dict, "QUOTAS_ALL_NB_RESOURCES_MODE")?.unwrap_or(QuotasAllNbResourcesMode::All);
+        cfg.cache_enabled = get_opt_bool_config(dict, "CACHE_ENABLED")?.unwrap_or(true);
+        cfg.scheduler_fairsharing_window_size = get_opt_i64_config(dict, "SCHEDULER_FAIRSHARING_WINDOW_SIZE")?;
+        cfg.scheduler_fairsharing_project_targets = get_opt_str_config(dict, "SCHEDULER_FAIRSHARING_PROJECT_TARGETS")?;
+        cfg.scheduler_fairsharing_user_targets = get_opt_str_config(dict, "SCHEDULER_FAIRSHARING_USER_TARGETS")?;
+        cfg.scheduler_fairsharing_coef_project = get_opt_f64_config(dict, "SCHEDULER_FAIRSHARING_COEF_PROJECT")?;
+        cfg.scheduler_fairsharing_coef_user = get_opt_f64_config(dict, "SCHEDULER_FAIRSHARING_COEF_USER")?;
+        cfg.scheduler_fairsharing_coef_user_ask = get_opt_f64_config(dict, "SCHEDULER_FAIRSHARING_COEF_USER_ASK")?;
+        // Other config fields are not relevant for the redox and core scheduler.
+        Ok(cfg)
     }
 }

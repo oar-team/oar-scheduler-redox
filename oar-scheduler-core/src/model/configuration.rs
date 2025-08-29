@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_CONFIG_FILE: &str = "/etc/oar/oar.conf";
+pub const DEFAULT_CONFIG_FILE: &str = "/etc/oar/oar.conf";
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -22,6 +22,27 @@ pub struct Configuration {
     pub scheduler_fairsharing_coef_project: Option<f64>,
     pub scheduler_fairsharing_coef_user: Option<f64>,
     pub scheduler_fairsharing_coef_user_ask: Option<f64>,
+}
+
+impl Configuration {
+    /// Load configuration from a file, in a .conf format (key=value).
+    pub fn load_from_file(path: &str) -> Self {
+        let contents = std::fs::read_to_string(path).unwrap_or_else(|_| {
+            eprintln!(
+                "Warning: could not read configuration file '{}', using default configuration.",
+                path
+            );
+            String::new()
+        });
+        let mut config: Configuration = toml::from_str(&contents).unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: could not parse configuration file '{}': {}, using default configuration.",
+                path, e
+            );
+            Configuration::default()
+        });
+        config
+    }
 }
 
 impl Default for Configuration {

@@ -1,5 +1,5 @@
-use crate::model::configuration::Configuration;
-use crate::model::job::{Job, ProcSet};
+use crate::model::configuration::{Configuration, QuotasAllNbResourcesMode};
+use crate::model::job::{Job, ProcSet, ProcSetCoresOp};
 #[cfg(feature = "pyo3")]
 use crate::model::python::proc_set_to_python;
 use crate::scheduler::calendar::QuotasConfig;
@@ -98,5 +98,24 @@ impl<'a> IntoPyObject<'a> for &ResourceSet {
         dict.set_item("hierarchy", &self.hierarchy)?;
 
         Ok(dict)
+    }
+}
+
+/// Builds a QuotasConfig Rust struct from the configuration and resource set.
+pub fn build_quotas_config(config: &Configuration, res_set: &ResourceSet) -> QuotasConfig {
+    if config.quotas {
+        if config.quotas_conf_file.is_none() {
+            panic!("Quotas are enabled but no quotas configuration file is provided.");
+        }
+        if config.quotas_window_time_limit.is_none() {
+            panic!("Quotas are enabled but no quotas window time limit is provided.");
+        }
+        let all_value = match &config.quotas_all_nb_resources_mode {
+            QuotasAllNbResourcesMode::DefaultNotDead => res_set.default_intervals.core_count() as i64, // TODO: exclude dead cores
+            QuotasAllNbResourcesMode::All => res_set.default_intervals.core_count() as i64,
+        };
+        QuotasConfig::load_from_file(config.quotas_conf_file.clone().unwrap().as_str(), true, all_value, config.quotas_window_time_limit.unwrap())
+    } else {
+        QuotasConfig::new(false, None, Default::default(), Box::new([]))
     }
 }

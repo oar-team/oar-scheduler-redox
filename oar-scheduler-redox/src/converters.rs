@@ -1,7 +1,7 @@
-use oar_scheduler_core::model::configuration::{Configuration, QuotasAllNbResourcesMode};
+use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::model::job::{Job, JobAssignment, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
+use oar_scheduler_core::platform;
 use oar_scheduler_core::platform::{PlatformConfig, ResourceSet};
-use oar_scheduler_core::scheduler::calendar::QuotasConfig;
 use oar_scheduler_core::scheduler::hierarchy::{Hierarchy, HierarchyRequest, HierarchyRequests};
 use pyo3::ffi::c_str;
 use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 /// Builds a PlatformConfig Rust struct from a Python resource set.
 pub fn build_platform_config(py_res_set: Bound<PyAny>, config: Configuration) -> PlatformConfig {
     let resource_set = build_resource_set(&py_res_set);
-    let quotas_config = build_quotas_config(&config, &resource_set);
+    let quotas_config = platform::build_quotas_config(&config, &resource_set);
 
     PlatformConfig {
         quotas_config,
@@ -115,24 +115,6 @@ fn build_proc_sets(py_proc_sets: &Bound<PyAny>) -> Box<[ProcSet]> {
                 .fold(ProcSet::new(), |acc, x| acc | x)
         })
         .collect::<Box<[ProcSet]>>()
-}
-/// Builds a QuotasConfig Rust struct from the configuration file got from Python
-fn build_quotas_config(config: &Configuration, res_set: &ResourceSet) -> QuotasConfig {
-    if config.quotas {
-        if config.quotas_conf_file.is_none() {
-            panic!("Quotas are enabled but no quotas configuration file is provided.");
-        }
-        if config.quotas_window_time_limit.is_none() {
-            panic!("Quotas are enabled but no quotas window time limit is provided.");
-        }
-        let all_value = match &config.quotas_all_nb_resources_mode {
-            QuotasAllNbResourcesMode::DefaultNotDead => res_set.default_intervals.core_count() as i64, // In a rust implementation, this should exclude dead cores
-            QuotasAllNbResourcesMode::All => res_set.default_intervals.core_count() as i64,
-        };
-        QuotasConfig::load_from_file(config.quotas_conf_file.clone().unwrap().as_str(), true, all_value, config.quotas_window_time_limit.unwrap())
-    } else {
-        QuotasConfig::new(false, None, Default::default(), Box::new([]))
-    }
 }
 /// Transforms a Python job object into a Rust Job struct.
 pub fn build_job(py_job: &Bound<PyAny>) -> Job {

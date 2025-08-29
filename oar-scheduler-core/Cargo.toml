@@ -8,11 +8,9 @@ default = ["benchmark_disable", "benchmark_disable_hy"]
 benchmark_disable = ["auto_bench_fct/disable"]
 benchmark_disable_hy = ["auto_bench_fct/disable_hy"]
 pyo3-abi3-py38 = ["pyo3/abi3-py38"]
-pyo3 = ["oar-scheduler-db/pyo3"]
 
 [dependencies]
 log = "0.4"
-oar-scheduler-db = { path = "../oar-scheduler-db" }
 range-set-blaze = { version = "0.3.0", default-features = false }
 indexmap = "2.10.0"
 prettytable-rs = "^0.10"
@@ -23,6 +21,7 @@ pyo3 = { version = "0.25", optional = true }
 auto_bench_fct = { version = "1", features = ["log"] }
 lazy_static = "1.5.0"
 chrono = "0.4.41"
+toml = "0.9.5"
 
 [dev-dependencies]
 env_logger = "0.11.8"

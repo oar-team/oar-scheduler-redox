@@ -264,7 +264,7 @@ impl NewJob {
                             },
                             Expr::val(idx as i64),
                         ])
-                        .fetch_one(session)
+                        .execute(session)
                         .await?;
                 }
             }
@@ -277,12 +277,12 @@ impl NewJob {
                     .into_table(JobTypes::Table)
                     .columns(vec![Alias::new(JobTypes::JobId.to_string()), Alias::new(JobTypes::Type.to_string())])
                     .values_panic(vec![Expr::val(job_id), Expr::val(typ)])
-                    .fetch_one(session)
+                    .execute(session)
                     .await?;
             }
         }
 
-        let _ = created_moldable_ids; // currently not returned
+        // let _ = created_moldable_ids; // currently not returned
         Ok(job_id)
     }
 }

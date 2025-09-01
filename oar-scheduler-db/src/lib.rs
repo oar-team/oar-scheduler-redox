@@ -185,11 +185,19 @@ impl Session {
 
 trait SessionInsertStatement {
     async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error>;
+    async fn execute<'q>(&'q self, session: &Session) -> Result<u64, Error>;
 }
 impl SessionInsertStatement for InsertStatement {
     async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error> {
         let (sql, values) = session.backend.build_insert(&self);
+        info!("SQL: {}   VALUES: {:?}", sql, values);
         sqlx::query_with(sql.as_str(), values).fetch_one(&session.pool).await
+    }
+    async fn execute<'q>(&'q self, session: &Session) -> Result<u64, Error> {
+        let (sql, values) = session.backend.build_insert(&self);
+        info!("SQL: {}   VALUES: {:?}", sql, values);
+        let result = sqlx::query_with(sql.as_str(), values).execute(&session.pool).await?;
+        Ok(result.rows_affected())
     }
 }
 trait SessionSelectStatement {

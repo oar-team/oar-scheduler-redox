@@ -5,7 +5,7 @@ mod test;
 
 use dotenvy::dotenv;
 use log::LevelFilter;
-use oar_scheduler_core::model::configuration::{Configuration, DEFAULT_CONFIG_FILE};
+use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_db::Session;
 use platform::Platform;
@@ -22,7 +22,7 @@ async fn main() {
         .init();
 
     // Load configuration
-    let config = Configuration::load_from_file(DEFAULT_CONFIG_FILE);
+    let config = Configuration::load();
 
     // Initialize database connection
     let session = Session::new("sqlite::memory:", 1).await;
@@ -37,8 +37,3 @@ async fn main() {
     meta_schedule::meta_schedule(&mut platform).await;
 
 }
-
-
-
-
-

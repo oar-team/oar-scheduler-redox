@@ -30,8 +30,14 @@ pub struct Configuration {
 
 impl Configuration {
     /// Load configuration from a file, in a .conf format (key=value).
-    pub fn load_from_file(path: &str) -> Self {
-        let contents = std::fs::read_to_string(path).ok();
+    pub fn load() -> Self {
+        let path = if let Ok(path) = std::env::var("OARCONFFILE") {
+            path
+        } else {
+            DEFAULT_CONFIG_FILE.to_string()
+        };
+
+        let contents = std::fs::read_to_string(&path).ok();
         if let Some(contents) = contents {
             toml::from_str(&contents).unwrap_or_else(|e| {
                 eprintln!(

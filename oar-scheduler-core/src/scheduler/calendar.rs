@@ -102,7 +102,7 @@ pub struct Calendar {
     /// Periodicals are applied until the end of the week containing the instant (now + quotas_window_time_limit).
     quotas_window_time_limit: i64,
 
-    rules_map: HashMap<i32, (Rc<QuotasMap>, Rc<QuotasTree>)>,
+    pub rules_map: HashMap<i32, (Rc<QuotasMap>, Rc<QuotasTree>)>,
     ordered_periodicals: Vec<PeriodicalEntry>,
     ordered_oneshot: Vec<OneshotEntry>,
 }
@@ -517,13 +517,13 @@ pub mod parsing {
 
     impl OneshotEntry {
         pub(crate) fn from_json_entry(entry: &OneshotJsonEntry, config_entries: &mut QuotasConfigEntries) -> Self {
-            let begin_time = parse_datetime(&entry.begin).unwrap_or_else(|e| {
+            let begin_time = parse_datetime(format!("{}:00", &entry.begin).as_str()).unwrap_or_else(|e| {
                 panic!(
                     "Invalid begin time format '{}' in oneshot entry. Expected format: YYYY-MM-DD hh:mm. Error: {}",
                     entry.begin, e
                 )
             });
-            let end_time = parse_datetime(&entry.end).unwrap_or_else(|e| {
+            let end_time = parse_datetime(format!("{}:00", &entry.end).as_str()).unwrap_or_else(|e| {
                 panic!(
                     "Invalid end time format '{}' in oneshot entry. Expected format: YYYY-MM-DD hh:mm. Error: {}",
                     entry.end, e

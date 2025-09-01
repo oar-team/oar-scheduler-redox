@@ -1,5 +1,5 @@
 use crate::platform::Platform;
-use crate::test::setup;
+use crate::test::setup_for_tests;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::{PlatformTrait, ProcSet};
 use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
@@ -40,8 +40,8 @@ async fn create_resources_hierarchy(session: &Session, config: &mut Configuratio
 }
 
 #[tokio::test]
-async fn create_resources() {
-    let (session, mut config) = setup().await;
+async fn create_resources_test() {
+    let (session, mut config) = setup_for_tests().await;
 
     create_resources_hierarchy(&session, &mut config).await;
 

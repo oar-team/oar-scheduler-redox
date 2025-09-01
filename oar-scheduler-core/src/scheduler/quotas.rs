@@ -95,13 +95,13 @@ impl QuotasValue {
             .map(|v| match v {
                 Value::Number(n) => {
                     let n = n
-                        .as_i64()
-                        .expect(format!("Invalid quotas value number: expected i64, got {}", n).as_str());
-                    if n < 0 { None } else { Some(n) }
+                        .as_f64()
+                        .expect(format!("Invalid quotas value number: expected f64, got {}", n).as_str());
+                    if n < 0f64 { None } else { Some(n) }
                 }
                 Value::String(s) => {
                     if s == "ALL" {
-                        Some(all_value)
+                        Some(all_value as f64)
                     } else if s.ends_with("*ALL") {
                         Some(
                             (s[..s.len() - 4].parse::<f64>().expect(
@@ -110,23 +110,23 @@ impl QuotasValue {
                                     s[..s.len() - 4].to_string()
                                 )
                                 .as_str(),
-                            ) * all_value as f64) as i64,
+                            ) * all_value as f64),
                         )
                     } else {
                         let n = s
-                            .parse::<i64>()
+                            .parse::<f64>()
                             .expect(format!("Invalid quotas value number: excepted i64, got {}", s).as_str());
-                        if n < 0 { None } else { Some(n) }
+                        if n < 0f64 { None } else { Some(n) }
                     }
                 }
                 _ => None,
             })
-            .collect::<Vec<Option<i64>>>();
+            .collect::<Vec<Option<f64>>>();
 
         QuotasValue {
             resources: parsed[0].map(|i| i as u32),
             running_jobs: parsed[1].map(|i| i as u32),
-            resources_times: parsed[2].map(|i| i * 3600), // Converting hours to seconds
+            resources_times: parsed[2].map(|i| (i * 3600.0) as i64), // Converting hours to seconds
         }
     }
 }

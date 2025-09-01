@@ -116,7 +116,7 @@ pub fn build_quotas_config(config: &Configuration, res_set: &ResourceSet) -> Quo
             panic!("Quotas are enabled but no quotas window time limit is provided.");
         }
         let all_value = match &config.quotas_all_nb_resources_mode {
-            QuotasAllNbResourcesMode::DefaultNotDead => res_set.default_resources.core_count() as i64, // TODO: exclude dead cores
+            QuotasAllNbResourcesMode::DefaultNotDead => res_set.nb_resources_not_dead as i64,
             QuotasAllNbResourcesMode::All => res_set.default_resources.core_count() as i64,
         };
         QuotasConfig::load_from_file(config.quotas_conf_file.clone().unwrap().as_str(), true, all_value, config.quotas_window_time_limit.unwrap())

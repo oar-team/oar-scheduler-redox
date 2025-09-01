@@ -1,5 +1,4 @@
 use indexmap::IndexMap;
-use log::info;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::model::job::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
@@ -17,7 +16,6 @@ impl Platform {
     pub async fn from_database(session: Session, config: Configuration) -> Self {
         let now = session.get_now().await;
         let resource_set = session.get_resource_set(&config).await;
-        info!("Resource set loaded: {:?}", resource_set);
         let quotas_config = oar_scheduler_core::platform::build_quotas_config(&config, &resource_set);
 
         let platform_config = Rc::new(PlatformConfig {

@@ -1,5 +1,7 @@
 mod converters;
 mod platform;
+#[cfg(test)]
+mod test;
 
 use crate::platform::Platform;
 use indexmap::IndexMap;

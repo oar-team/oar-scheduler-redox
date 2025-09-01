@@ -16,7 +16,7 @@ fn container_platform_config() -> Rc<PlatformConfig> {
 #[test]
 fn test_single_inner_job_in_container() {
     let platform_config = container_platform_config();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let mut all_ss = HashMap::from([("default".into(), SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000))]);
 
     // Container job: slotset name "sub1", runs from 100 to 300
@@ -53,7 +53,7 @@ fn test_single_inner_job_in_container() {
 #[test]
 fn test_inner_job_in_two_disjoint_containers_same_slotset_name() {
     let platform_config = container_platform_config();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let mut all_ss = HashMap::from([("default".into(), SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000))]);
 
     // Container 1: slotset "sub2", 0-99
@@ -92,7 +92,7 @@ fn test_inner_job_in_two_disjoint_containers_same_slotset_name() {
 #[test]
 fn test_inner_job_in_two_overlapping_containers_same_slotset_name() {
     let platform_config = container_platform_config();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let mut all_ss = HashMap::from([("default".into(), SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000))]);
 
     // Container 1: sub-slot_set "sub3", 0-199, ressources 1-16

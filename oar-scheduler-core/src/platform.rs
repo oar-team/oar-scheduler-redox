@@ -67,11 +67,15 @@ pub struct PlatformConfig {
 }
 
 /// ResourceSet provide a resource description with the hierarchy of resources.
+/// Resources in the ProcSet are identified by an enumerated ID according to the sorting order (0..N-1).
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "pyo3-abi3-py38", pyclass(module = "oar_scheduler_redox"))]
 pub struct ResourceSet {
+    pub nb_resources_not_dead: u32,
+    pub nb_resources_default_not_dead: u32,
+    pub suspendable_resources: ProcSet,
     /// Default available resources for slot initialization.
-    pub default_intervals: ProcSet,
+    pub default_resources: ProcSet,
     /// For each `ProcSet`, the time until which it is available. Integrated through pseudo jobs.
     pub available_upto: Vec<(i64, ProcSet)>,
     pub hierarchy: Hierarchy,
@@ -86,7 +90,7 @@ impl<'a> IntoPyObject<'a> for &ResourceSet {
     fn into_pyobject(self, py: Python<'a>) -> Result<Self::Output, Self::Error> {
         let dict = PyDict::new(py);
 
-        let default_intervals = proc_set_to_python(py, &self.default_intervals);
+        let default_intervals = proc_set_to_python(py, &self.default_resources);
         dict.set_item("default_intervals", default_intervals)?;
 
         let available_upto = PyList::empty(py);
@@ -112,8 +116,8 @@ pub fn build_quotas_config(config: &Configuration, res_set: &ResourceSet) -> Quo
             panic!("Quotas are enabled but no quotas window time limit is provided.");
         }
         let all_value = match &config.quotas_all_nb_resources_mode {
-            QuotasAllNbResourcesMode::DefaultNotDead => res_set.default_intervals.core_count() as i64, // TODO: exclude dead cores
-            QuotasAllNbResourcesMode::All => res_set.default_intervals.core_count() as i64,
+            QuotasAllNbResourcesMode::DefaultNotDead => res_set.default_resources.core_count() as i64, // TODO: exclude dead cores
+            QuotasAllNbResourcesMode::All => res_set.default_resources.core_count() as i64,
         };
         QuotasConfig::load_from_file(config.quotas_conf_file.clone().unwrap().as_str(), true, all_value, config.quotas_window_time_limit.unwrap())
     } else {

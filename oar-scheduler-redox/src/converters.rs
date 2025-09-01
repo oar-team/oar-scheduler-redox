@@ -38,7 +38,7 @@ fn build_resource_set(py_res_set: &Bound<PyAny>) -> ResourceSet {
         .collect::<PyResult<Vec<_>>>()
         .unwrap();
 
-    let mut unit_partition = None;
+    let mut unit_partitions = vec![];
     let partitions = py_res_set
         .getattr("hierarchy")
         .unwrap()
@@ -55,18 +55,22 @@ fn build_resource_set(py_res_set: &Bound<PyAny>) -> ResourceSet {
         .into_iter()
         .filter(|(name, res)| {
             // If cores count is always 1, we can consider it a unit partition
-            if unit_partition.is_none() && res.into_iter().all(|proc_set| proc_set.core_count() == 1) {
-                unit_partition = Some((*name).clone());
+            if res.into_iter().all(|proc_set| proc_set.core_count() == 1) {
+                unit_partitions.push((*name).clone());
                 return false;
             }
             true
         })
         .collect();
 
+    let default_resources = build_proc_set(&py_default_intervals);
     ResourceSet {
-        default_intervals: build_proc_set(&py_default_intervals),
+        nb_resources_not_dead: default_resources.core_count(),
+        nb_resources_default_not_dead: default_resources.core_count(),
+        suspendable_resources: ProcSet::new(),
+        default_resources,
         available_upto,
-        hierarchy: Hierarchy::new_defined(partitions, unit_partition),
+        hierarchy: Hierarchy::new_defined(partitions, unit_partitions),
     }
 }
 /// Builds a Rust ProcSet (range-set-blaze lib) from a Python ProcSet (procset lib).

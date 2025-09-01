@@ -17,7 +17,7 @@ fn setup_platform() -> Rc<PlatformConfig> {
 fn placeholder_claim_and_regular_job() {
     // A placeholder job claims resources, and a regular job is scheduled outside the placeholder.
     let platform_config = setup_platform();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let mut all_ss = HashMap::from([("default".into(), SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000))]);
 
     let placeholder_job = JobBuilder::new(0)
@@ -48,7 +48,7 @@ fn placeholder_claim_and_regular_job() {
 fn allow_job_fully_inside_placeholder() {
     // An allow job is scheduled fully inside a placeholder job's claimed resources.
     let platform_config = setup_platform();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let mut all_ss = HashMap::from([("default".into(), SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000))]);
 
     let placeholder_job = JobBuilder::new(0)
@@ -79,7 +79,7 @@ fn allow_job_fully_inside_placeholder() {
 fn allow_job_partially_inside_placeholder() {
     // An allow job is scheduled partially inside and partially outside a placeholder job's claimed resources.
     let platform_config = setup_platform();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let mut all_ss = HashMap::from([("default".into(), SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000))]);
 
     let placeholder_job = JobBuilder::new(0)
@@ -110,7 +110,7 @@ fn allow_job_partially_inside_placeholder() {
 fn allow_job_outside_placeholder() {
     // An allow job is scheduled completely outside the placeholder job's claimed resources.
     let platform_config = setup_platform();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let mut all_ss = HashMap::from([("default".into(), SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000))]);
 
     let placeholder_job = JobBuilder::new(0)

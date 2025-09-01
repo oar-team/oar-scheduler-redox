@@ -1,17 +1,12 @@
-mod platform;
-mod queues_schedule;
-mod meta_schedule;
-mod test;
-
 use dotenvy::dotenv;
 use log::LevelFilter;
 use oar_scheduler_core::model::configuration::{Configuration, DEFAULT_CONFIG_FILE};
-use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_db::Session;
-use platform::Platform;
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() {
+#[cfg(test)]
+mod resources;
+
+async fn setup() -> (Session, Configuration) {
     // Load .env file if present
     dotenv().ok();
 
@@ -27,18 +22,8 @@ async fn main() {
     // Initialize database connection
     let session = Session::new("sqlite::memory:", 1).await;
 
-    // Seed database for testing
+    // Create schema
     session.create_schema().await;
 
-    // Create the platform instance
-    let mut platform = Platform::from_database(session, config).await;
-
-    // Meta scheduling
-    meta_schedule::meta_schedule(&mut platform).await;
-
+    (session, config)
 }
-
-
-
-
-

@@ -9,6 +9,8 @@ pub struct Configuration {
     pub cache_enabled: bool,
     // --- Resources configuration ---
     pub scheduler_resource_order: Option<String>,
+    pub scheduler_available_suspended_resource_type: Option<String>,
+    pub hierarchy_labels: Option<String>,
     // --- Quotas configuration ---
     pub quotas: bool,
     pub quotas_conf_file: Option<String>,
@@ -30,7 +32,7 @@ impl Configuration {
     /// Load configuration from a file, in a .conf format (key=value).
     pub fn load_from_file(path: &str) -> Self {
         let contents = std::fs::read_to_string(path).ok();
-        return if let Some(contents) = contents {
+        if let Some(contents) = contents {
             toml::from_str(&contents).unwrap_or_else(|e| {
                 eprintln!(
                     "Warning: could not parse configuration file '{}': {}, using default configuration.",
@@ -49,13 +51,19 @@ impl Default for Configuration {
         Configuration {
             scheduler_job_security_time: 60, // 1 minute
             cache_enabled: true,
+            // --- Resources configuration ---
             scheduler_resource_order: None,
+            scheduler_available_suspended_resource_type: None,
+            hierarchy_labels: None,
+            // --- Quotas configuration ---
             quotas: false,
             quotas_conf_file: None,
             quotas_window_time_limit: Some(60 * 24 * 3600), // 60 days
             quotas_all_nb_resources_mode: QuotasAllNbResourcesMode::DefaultNotDead,
+            // -- Job sorting configuration ---
             job_priority: JobPriority::Fifo,
             priority_conf_file: None,
+            // --- Job sorting: Fairshare configuration ---
             scheduler_fairsharing_window_size: None,
             scheduler_fairsharing_project_targets: None,
             scheduler_fairsharing_user_targets: None,

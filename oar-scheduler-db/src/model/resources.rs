@@ -1,6 +1,8 @@
 use crate::{Session, SessionInsertStatement, SessionSelectStatement};
-use sea_query::{Expr, Iden, Query};
+use indexmap::IndexMap;
+use sea_query::{Alias, Expr, Iden, Query};
 use sqlx::{Error, Row};
+use std::collections::HashMap;
 
 #[derive(Iden)]
 pub enum Resources {
@@ -112,43 +114,99 @@ pub struct NewResource {
     pub network_address: String,
     pub r#type: String,
     pub state: String,
+    pub labels: IndexMap<String, ResourceLabelValue>,
 }
 impl NewResource {
     pub async fn insert(&self, session: &Session) -> Result<i64, Error> {
+        let columns = vec![
+            Alias::new(Resources::NetworkAddress.to_string()),
+            Alias::new(Resources::Type.to_string()),
+            Alias::new(Resources::State.to_string()),
+        ]
+            .into_iter()
+            .chain(self.labels.keys().map(|k| Alias::new(k)))
+            .collect::<Vec<Alias>>();
+        let values = vec![Expr::val(&self.network_address), Expr::val(&self.r#type), Expr::val(&self.state)]
+            .into_iter()
+            .chain(self.labels.values().map(|v| match v {
+                ResourceLabelValue::Integer(i) => Expr::val(*i),
+                ResourceLabelValue::Varchar(s) => Expr::val(s),
+            }))
+            .collect::<Vec<Expr>>();
+
         let row = Query::insert()
             .into_table(Resources::Table)
-            .columns(vec![Resources::NetworkAddress, Resources::Type, Resources::State])
-            .values_panic(vec![
-                Expr::val(&self.network_address),
-                Expr::val(&self.r#type),
-                Expr::val(&self.state),
-            ])
+            .columns(columns)
+            .values_panic(values)
             .returning_col(Resources::ResourceId)
-            .fetch_one(session).await?;
+            .fetch_one(session)
+            .await?;
 
         Ok(row.try_get::<i64, _>(0)?)
     }
 }
 
+pub struct NewResourceColumn {
+    pub name: String,
+    pub r#type: String,
+}
+impl NewResourceColumn {
+    pub async fn insert(&self, session: &Session) -> Result<(), Error> {
+        match session.backend {
+            crate::Backend::Postgres => {
+                let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
+                sqlx::query(&sql).execute(&session.pool).await?;
+            }
+            crate::Backend::Sqlite => {
+                let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
+                sqlx::query(&sql).execute(&session.pool).await?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ResourceLabelValue {
+    Integer(i64),
+    Varchar(String),
+}
+
 impl Resources {
-    pub async fn get_all_sorted(session: &Session, order_by_clause: &str) -> Result<Vec<(i64, String, String, String)>, Error> {
+    /// Get all resources, sorted by the given order_by_clause (e.g., "type, network_address").
+    /// The labels parameter should contain column names to be included in the result.
+    /// Returns: (type, state, available_upto, label_name -> label_value)
+    pub async fn get_all_sorted(
+        session: &Session,
+        order_by_clause: &str,
+        labels: &Vec<Box<str>>,
+    ) -> Result<Vec<(String, String, Option<i64>, HashMap<Box<str>, ResourceLabelValue>)>, Error> {
         let rows = Query::select()
-            .columns(vec![Resources::ResourceId, Resources::NetworkAddress, Resources::Type, Resources::State])
+            .columns(vec![Resources::Type, Resources::State, Resources::AvailableUpto])
+            .columns(labels.iter().map(|s| Alias::new(s.as_ref())).collect::<Vec<Alias>>())
             .from(Resources::Table)
-            .order_by_expr(
-                sea_query::SimpleExpr::Custom(order_by_clause.to_string()),
-                sea_query::Order::Asc,
-            )
+            .order_by_expr(sea_query::SimpleExpr::Custom(order_by_clause.to_string()), sea_query::Order::Asc)
             .fetch_all(session)
             .await?;
 
         let mut results = Vec::new();
         for row in rows {
-            let resource_id: i64 = row.try_get("resource_id")?;
-            let network_address: String = row.try_get("network_address")?;
             let r#type: String = row.try_get("type")?;
             let state: String = row.try_get("state")?;
-            results.push((resource_id, network_address, r#type, state));
+            let available_upto: Option<i64> = row.try_get("available_upto")?;
+            let mut map = HashMap::new();
+            labels.iter().for_each(|label| {
+                let value: Result<i64, _> = row.try_get(label.as_ref());
+                if let Ok(v) = value {
+                    map.insert(label.clone(), ResourceLabelValue::Integer(v));
+                } else {
+                    let v: String = row
+                        .try_get(label.as_ref())
+                        .expect(format!("Failed to get resource label value for label {}", label).as_str());
+                    map.insert(label.clone(), ResourceLabelValue::Varchar(v));
+                }
+            });
+            results.push((r#type, state, available_upto, map));
         }
         Ok(results)
     }

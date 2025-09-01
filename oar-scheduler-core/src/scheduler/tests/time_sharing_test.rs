@@ -16,7 +16,7 @@ fn platform_config() -> Rc<PlatformConfig> {
 #[test]
 fn test_quotas_two_job_rules_nb_res_quotas_file() {
     let platform_config = platform_config();
-    let res = platform_config.as_ref().resource_set.default_intervals.clone();
+    let res = platform_config.as_ref().resource_set.default_resources.clone();
     // SlotSet with a single slot [0,1000] with all 64 procs
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000);
     let mut all_ss = HashMap::from([("default".into(), ss)]);

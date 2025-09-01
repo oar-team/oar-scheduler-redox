@@ -98,7 +98,7 @@ impl SlotSet {
     /// Create a `SlotSet` with slots covering the entire range from `begin` to `end` with a `ProcSet = platform_config.resource_set.default_intervals`.
     /// The procset will be splitted into multiple slots according to the temporal quotas defined in the `platform_config`.
     pub fn from_platform_config(platform_config: Rc<PlatformConfig>, begin: i64, end: i64) -> SlotSet {
-        let proc_set = platform_config.resource_set.default_intervals.clone();
+        let proc_set = platform_config.resource_set.default_resources.clone();
         let slot = Slot::new(Rc::clone(&platform_config), 1, None, None, begin, end, proc_set, None);
         let mut slotset = SlotSet::from_slot(slot);
         if let Some(calendar) = &platform_config.quotas_config.calendar {

@@ -28,8 +28,8 @@ class PlatformAdapter(Platform):
         begin = list(data['default_intervals'].intervals())[0].inf
         end = list(data['default_intervals'].intervals())[0].sup
         hy = data['hierarchy']['partitions']
-        if 'unit_partition' in data['hierarchy']:
-            hy[data['hierarchy']['unit_partition']] = [
+        for name in data['hierarchy']['unit_partitions']:
+            hy[name] = [
                 ProcSet(i, i) for i in range(begin, end+1)
             ]
         available_upto = {}

@@ -1,13 +1,15 @@
-use crate::model::{resources, NewResource, Resources};
+use crate::model::{resources, NewResource, ResourceLabelValue, Resources};
 use log::info;
+use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::{ProcSet, ResourceSet};
 use oar_scheduler_core::scheduler::hierarchy::Hierarchy;
-use sea_query::{InsertStatement, PostgresQueryBuilder, QueryBuilder, SelectStatement, SqliteQueryBuilder};
+use sea_query::{Iden, InsertStatement, PostgresQueryBuilder, QueryBuilder, SelectStatement, SqliteQueryBuilder};
 use sea_query_sqlx::{SqlxBinder, SqlxValues};
 use sqlx::any::{install_default_drivers, AnyRow};
 use sqlx::pool::PoolOptions;
 use sqlx::AnyPool;
 use sqlx::{Any, Error};
+use std::collections::HashMap;
 
 pub mod example;
 pub mod model;
@@ -44,31 +46,6 @@ pub struct Session {
     pool: AnyPool,
     backend: Backend,
 }
-impl Session {
-    pub async fn get_resource_set(&self) -> ResourceSet {
-
-        // Test to create a dummy resource
-        NewResource {
-            network_address: "test".to_string(),
-            r#type: "test".to_string(),
-            state: "active".to_string(),
-        }.insert(&self).await;
-
-        let resources = Resources::get_all_sorted(&self, "type, network_address").await.unwrap();
-        info!("Loaded {} resources from database", resources.len());
-        for (resource_id, network_address, r#type, state) in &resources {
-            info!("Resource {}: {} (type={}, state={})", resource_id, network_address, r#type, state);
-        }
-
-
-        let hierarchy = Hierarchy::new().add_unit_partition(Box::from("resource_id"));
-        ResourceSet {
-            default_intervals: ProcSet::default(),
-            available_upto: vec![],
-            hierarchy,
-        }
-    }
-}
 
 impl Session {
     pub async fn new(database_url: &str, max_connections: u32) -> Session {
@@ -84,10 +61,7 @@ impl Session {
         let backend = conn.backend_name().into();
         conn.close().await.unwrap();
 
-        Session {
-            pool,
-            backend,
-        }
+        Session { pool, backend }
     }
     pub async fn get_now(&self) -> i64 {
         match self.backend {
@@ -107,6 +81,90 @@ impl Session {
             }
         }
     }
+    pub async fn create_schema(&self) {
+        let sql = match self.backend {
+            Backend::Postgres => todo!(),
+            Backend::Sqlite => include_str!("sql/up-sqlite.sql"),
+        };
+        sqlx::query(sql).execute(&self.pool).await.expect("Failed to create schema");
+    }
+    pub async fn get_resource_set(&self, config: &Configuration) -> ResourceSet {
+        let labels = config
+            .hierarchy_labels
+            .clone()
+            .map(|s| s.split(',').map(|s| s.trim().to_string().into_boxed_str()).collect())
+            .unwrap_or(vec![Box::from("resource_id"), Box::from("network_address")]);
+
+
+        let order_by = config.scheduler_resource_order.clone().unwrap_or("type, network_address".to_string());
+        let resources = Resources::get_all_sorted(&self, order_by.as_str(), &labels).await.unwrap();
+        info!("Loaded {} resources from database", resources.len());
+        info!("Resource labels considered: {:?}", labels);
+
+        let suspended_types: Vec<String> = config.scheduler_available_suspended_resource_type.clone().unwrap_or("".to_string()).split(',').map(|s| s.trim().to_string()).collect();
+
+        let mut nb_resources_not_dead = 0;
+        let mut nb_resources_default_not_dead = 0;
+        let mut suspendable_resources = Vec::new();
+        let mut default_resources = Vec::new();
+        let mut available_upto_map: HashMap<i64, Vec<u32>> = HashMap::new();
+        // Mapping: resource label name -> (resource label value -> [enumerated id])
+        let mut hierarchy_resources: HashMap<Box<str>, HashMap<ResourceLabelValue, Vec<u32>>> = HashMap::new();
+
+        for (id, (r#type, state, available_upto, labels_map)) in resources.iter().enumerate() {
+            info!("Resource {}: type={}, state={} map={:?}", id, r#type, state, labels_map);
+            if r#state.to_lowercase() != "dead" {
+                nb_resources_not_dead += 1;
+                if r#type.to_lowercase() == "default" {
+                    nb_resources_default_not_dead += 1;
+                }
+            }
+            if state.to_lowercase() == "alive" || state.to_lowercase() == "absent" {
+                if r#type.to_lowercase() == "default" {
+                    default_resources.push(id as u32);
+                }
+                for (label, value) in labels_map.iter() {
+                    let entry = hierarchy_resources.entry(label.clone()).or_insert_with(HashMap::new);
+                    entry.entry(value.clone()).or_insert_with(Vec::new).push(id as u32);
+                }
+                if let Some(time) = available_upto {
+                    available_upto_map.entry(*time).or_insert_with(Vec::new).push(id as u32);
+                }
+                if suspended_types.contains(&r#type) {
+                    suspendable_resources.push(id as u32);
+                }
+            }
+        }
+
+        let mut hierarchy = Hierarchy::new();
+        for (label, map) in hierarchy_resources.into_iter() {
+            let mut partitions = Vec::new();
+            let mut is_unit = true;
+            for (_value, ids) in map.into_iter() {
+                if ids.len() > 1 {
+                    is_unit = false;
+                }
+                partitions.push(ProcSet::from_iter(ids.iter()));
+            }
+            hierarchy = if is_unit {
+                hierarchy.add_unit_partition(label)
+            } else {
+                hierarchy.add_partition(label, partitions.into_boxed_slice())
+            };
+        }
+
+        ResourceSet {
+            nb_resources_not_dead,
+            nb_resources_default_not_dead,
+            suspendable_resources: ProcSet::from_iter(suspendable_resources.iter()),
+            default_resources: ProcSet::from_iter(default_resources.iter()),
+            available_upto: available_upto_map
+                .into_iter()
+                .map(|(time, ids)| (time, ProcSet::from_iter(ids.iter())))
+                .collect(),
+            hierarchy,
+        }
+    }
 }
 
 trait SessionInsertStatement {
@@ -115,8 +173,7 @@ trait SessionInsertStatement {
 impl SessionInsertStatement for InsertStatement {
     async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error> {
         let (sql, values) = session.backend.build_insert(&self);
-        sqlx::query_with(sql.as_str(), values)
-            .fetch_one(&session.pool).await
+        sqlx::query_with(sql.as_str(), values).fetch_one(&session.pool).await
     }
 }
 trait SessionSelectStatement {
@@ -126,12 +183,10 @@ trait SessionSelectStatement {
 impl SessionSelectStatement for SelectStatement {
     async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error> {
         let (sql, values) = session.backend.build_select(&self);
-        sqlx::query_with(sql.as_str(), values)
-            .fetch_one(&session.pool).await
+        sqlx::query_with(sql.as_str(), values).fetch_one(&session.pool).await
     }
     async fn fetch_all<'q>(&'q self, session: &Session) -> Result<Vec<AnyRow>, Error> {
         let (sql, values) = session.backend.build_select(&self);
-        sqlx::query_with(sql.as_str(), values)
-            .fetch_all(&session.pool).await
+        sqlx::query_with(sql.as_str(), values).fetch_all(&session.pool).await
     }
 }

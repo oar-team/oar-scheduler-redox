@@ -17,7 +17,7 @@ fn dependencies_platform_config() -> Rc<PlatformConfig> {
 #[test]
 fn test_find_slots_for_moldable_with_dependencies() {
     let platform_config = dependencies_platform_config();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000);
     let mut all_ss = HashMap::from([("default".into(), ss)]);
 
@@ -60,7 +60,7 @@ fn test_find_slots_for_moldable_with_container_and_inner_jobs() {
 
 
     let platform_config = dependencies_platform_config();
-    let available = platform_config.resource_set.default_intervals.clone();
+    let available = platform_config.resource_set.default_resources.clone();
     let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 1000);
     let mut all_ss = HashMap::from([("default".into(), ss)]);
 

@@ -79,25 +79,6 @@ fn load_priority_yaml(path_opt: &Option<String>) -> PriorityYaml {
     }
 }
 
-fn job_requested_units(job: &Job, unit_name: &str) -> Option<u32> {
-    // Heuristic: take the first moldable and sum the unit level counts across its requests
-    job.moldables.first().map(|m| {
-        let mut total: u32 = 0;
-        for req in m.requests.0.iter() {
-            for (level, count) in req.level_nbs.iter() {
-                if level.as_ref() == unit_name {
-                    total = total.saturating_add(*count);
-                }
-            }
-        }
-        total
-    })
-}
-
-fn job_min_walltime(job: &Job) -> Option<i64> {
-    job.moldables.iter().map(|m| m.walltime).min()
-}
-
 /// Computes the karma for each job in waiting_jobs and saves it in the `job.karma` attribute.
 fn evaluate_jobs_karma<P: PlatformTrait>(
     platform: &P,
@@ -160,8 +141,8 @@ fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waitin
 
     let now = platform.get_now();
     let resource_set = &platform.get_platform_config().resource_set;
-    let cluster_size = resource_set.default_intervals.core_count() as f64;
-    let unit_name_opt = resource_set.hierarchy.unit_partition.clone();
+    let cluster_size = resource_set.default_resources.core_count() as f64;
+    let unit_names = resource_set.hierarchy.unit_partitions().clone();
 
     let max_time = platform.get_max_time() as f64;
 
@@ -189,17 +170,7 @@ fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waitin
         // work = nb_resources * walltime normalized to [0,1] by (cluster_size * max_time)
         if pyaml.work_weight > 0.0 && cluster_size > 0.0 && max_time > 0.0 {
             let mut work_norm: f64 = 0.0;
-            if let Some(unit_name) = unit_name_opt.as_ref() {
-                if let Some(size_units) = job_requested_units(job, unit_name.as_ref()) {
-                    if let Some(wt) = job_min_walltime(job) {
-                        let raw_work = (size_units as f64) * (wt as f64);
-                        let denom = cluster_size * max_time;
-                        if denom > 0.0 {
-                            work_norm = (raw_work / denom).clamp(0.0, 1.0);
-                        }
-                    }
-                }
-            }
+            // TODO: calculate the job work
             let factor = if pyaml.work_mode != 0.0 {
                 // big jobs prioritized
                 1.0 - 1.0 / work_norm.max(1e-12).min(1.0)
@@ -213,11 +184,7 @@ fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waitin
         // size
         if pyaml.size_weight > 0.0 && cluster_size > 0.0 {
             let mut size_frac: f64 = 0.0;
-            if let Some(unit_name) = unit_name_opt.as_ref() {
-                if let Some(size_units) = job_requested_units(job, unit_name.as_ref()) {
-                    size_frac = (size_units as f64 / cluster_size).clamp(0.0, 1.0);
-                }
-            }
+            // TODO: calculate the job size fraction
             let factor = if pyaml.size_mode != 0.0 {
                 // big jobs prioritized
                 size_frac

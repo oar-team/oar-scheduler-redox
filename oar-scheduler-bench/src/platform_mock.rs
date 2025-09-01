@@ -109,7 +109,10 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
         .add_unit_partition("cores".into());
 
     ResourceSet {
-        default_intervals: ProcSet::from_iter([1..=res_count]),
+        nb_resources_not_dead: res_count,
+        nb_resources_default_not_dead: res_count,
+        suspendable_resources: ProcSet::new(),
+        default_resources: ProcSet::from_iter([1..=res_count]),
         available_upto: vec![], // All resources available until max_time
         hierarchy,
     }

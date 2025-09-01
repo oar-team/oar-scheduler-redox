@@ -1,6 +1,5 @@
 use crate::converters::{build_job, build_platform_config, proc_set_to_python};
 use indexmap::{indexmap, IndexMap};
-use log::info;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::model::job::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
@@ -45,13 +44,13 @@ impl PlatformTrait for Platform {
     }
 
     fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
-        assigned_jobs.iter().for_each(|(_, job)| {
+        /*assigned_jobs.iter().for_each(|(_, job)| {
             if let Some(sd) = &job.assignment {
                 info!("Assigned job {}: start_time={}, end_time={}, moldable_id={}, proc_set={:?}, moldable_walltime={}", job.id, sd.begin, sd.end, job.moldables[sd.moldable_index].id, sd.proc_set, job.moldables[sd.moldable_index].walltime);
             } else {
                 info!("Job {} has no assignment!", job.id);
             }
-        });
+        });*/
 
         Python::with_gil(|py| -> PyResult<()> {
             // Update python scheduled jobs

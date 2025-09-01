@@ -93,15 +93,18 @@ impl<'a> IntoPyObject<'a> for &HierarchyRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hierarchy {
     partitions: HashMap<Box<str>, Box<[ProcSet]>>, // Level name, partitions of that level
-    pub(crate) unit_partition: Option<Box<str>>,   // Name of a virtual unitary partition (correspond to a single u32 in ProcSet), e.g. "core"
+    unit_partitions: Vec<Box<str>>, // Name of a virtuals unitary partition (correspond to a single u32 in ProcSet), e.g. "core" or "resource_id"
 }
 
 impl Hierarchy {
     pub fn new() -> Self {
-        Self::new_defined(HashMap::new(), None)
+        Self::new_defined(HashMap::new(), vec![])
     }
-    pub fn new_defined(partitions: HashMap<Box<str>, Box<[ProcSet]>>, unit_partition: Option<Box<str>>) -> Self {
-        Hierarchy { partitions, unit_partition }
+    pub fn new_defined(partitions: HashMap<Box<str>, Box<[ProcSet]>>, unit_partition: Vec<Box<str>>) -> Self {
+        Hierarchy {
+            partitions,
+            unit_partitions: unit_partition,
+        }
     }
     pub fn add_partition(mut self, name: Box<str>, partitions: Box<[ProcSet]>) -> Self {
         if self.has_partition(&name) {
@@ -114,14 +117,14 @@ impl Hierarchy {
         if self.has_partition(&name) {
             panic!("A partition with the name {} already exists.", name);
         }
-        if self.unit_partition.is_some() {
-            panic!("A unit partition is already defined.");
-        }
-        self.unit_partition = Some(name);
+        self.unit_partitions.push(name);
         self
     }
     pub fn has_partition(&self, name: &Box<str>) -> bool {
-        self.partitions.contains_key(name.as_ref()) || Some(name) == self.unit_partition.as_ref()
+        self.partitions.contains_key(name.as_ref()) || self.unit_partitions.contains(name)
+    }
+    pub fn unit_partitions(&self) -> &Vec<Box<str>> {
+        &self.unit_partitions
     }
     #[auto_bench_fct_hy]
     pub fn request(&self, available_proc_set: &ProcSet, request: &HierarchyRequests) -> Option<ProcSet> {
@@ -135,7 +138,7 @@ impl Hierarchy {
     pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {
         let (name, request) = &level_requests[0];
         // Optimization for core that should correspond to a single proc.
-        if Some(name) == self.unit_partition.as_ref() {
+        if self.unit_partitions.contains(name) {
             return available_proc_set.sub_proc_set_with_cores(*request);
         }
 
@@ -145,7 +148,7 @@ impl Hierarchy {
                 .filter_map(|proc_set| {
                     if level_requests.len() > 1 {
                         // If the next level is core, do not iterate over it and do the check directly. The core level should correspond to a single proc.
-                        if Some(name) == self.unit_partition.as_ref() {
+                        if self.unit_partitions.contains(name) {
                             proc_set.sub_proc_set_with_cores(level_requests[1].1)
                         } else {
                             self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])
@@ -187,13 +190,13 @@ impl<'a> IntoPyObject<'a> for &Hierarchy {
             }
             partitions_dict.set_item(name.to_string(), partitions_list).unwrap();
         }
-        dict.set_item("partitions", partitions_dict).unwrap();
 
-        if let Some(unit_partition) = &self.unit_partition {
-            dict.set_item("unit_partition", unit_partition.to_string()).unwrap();
-        } else {
-            dict.set_item("unit_partition", py.None()).unwrap();
-        }
+        dict.set_item("partitions", partitions_dict).unwrap();
+        dict.set_item(
+            "unit_partitions",
+            self.unit_partitions.iter().map(|name| name.to_string()).collect::<Vec<String>>(),
+        )
+            .unwrap();
 
         Ok(dict)
     }

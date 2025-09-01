@@ -6,8 +6,9 @@ use oar_scheduler_db::Session;
 #[cfg(test)]
 mod resources_test;
 mod quotas_test;
+mod job_test;
 
-async fn setup_for_tests() -> (Session, Configuration) {
+fn setup_for_tests() -> (Session, Configuration) {
     // Load .env file if present
     dotenv().ok();
 
@@ -22,10 +23,10 @@ async fn setup_for_tests() -> (Session, Configuration) {
     let config = Configuration::load();
 
     // Initialize database connection
-    let session = Session::new("sqlite::memory:", 1).await;
+    let session = Session::new("sqlite::memory:", 1);
 
     // Create schema
-    session.create_schema().await;
+    session.create_schema();
 
     (session, config)
 }

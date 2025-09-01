@@ -6,44 +6,40 @@ use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyReques
 use oar_scheduler_db::model::{NewResource, NewResourceColumn, ResourceLabelValue};
 use oar_scheduler_db::Session;
 
-async fn create_resources_hierarchy(session: &Session, config: &mut Configuration) {
+fn create_resources_hierarchy(session: &Session, config: &mut Configuration) {
     NewResourceColumn {
         name: "core".to_string(),
         r#type: "Integer".to_string(),
     }
         .insert(session)
-        .await
         .expect("Failed to insert test resource column");
     NewResourceColumn {
         name: "cpu".to_string(),
         r#type: "Integer".to_string(),
     }
         .insert(session)
-        .await
         .expect("Failed to insert test resource column");
     NewResourceColumn {
         name: "host".to_string(),
         r#type: "Varchar(255)".to_string(),
     }
         .insert(session)
-        .await
         .expect("Failed to insert test resource column");
     NewResourceColumn {
         name: "mem".to_string(),
         r#type: "Integer".to_string(),
     }
         .insert(session)
-        .await
         .expect("Failed to insert test resource column");
 
     config.hierarchy_labels = Some("resource_id,network_address,core,cpu,host,mem".to_string());
 }
 
-#[tokio::test]
-async fn create_resources_test() {
-    let (session, mut config) = setup_for_tests().await;
+#[test]
+fn create_resources_test() {
+    let (session, mut config) = setup_for_tests();
 
-    create_resources_hierarchy(&session, &mut config).await;
+    create_resources_hierarchy(&session, &mut config);
 
     NewResource {
         network_address: "100.64.0.1".to_string(),
@@ -57,7 +53,6 @@ async fn create_resources_test() {
         },
     }
         .insert(&session)
-        .await
         .expect("Failed to insert test resource");
 
     NewResource {
@@ -72,7 +67,6 @@ async fn create_resources_test() {
         },
     }
         .insert(&session)
-        .await
         .expect("Failed to insert test resource");
 
     NewResource {
@@ -87,10 +81,9 @@ async fn create_resources_test() {
         },
     }
         .insert(&session)
-        .await
         .expect("Failed to insert test resource");
 
-    let platform = Platform::from_database(session, config).await;
+    let platform = Platform::from_database(session, config);
     let resource_set = &platform.get_platform_config().resource_set;
     assert_eq!(resource_set.default_resources, ProcSet::from_iter(0..=2));
 

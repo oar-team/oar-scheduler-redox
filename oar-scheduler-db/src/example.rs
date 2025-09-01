@@ -5,17 +5,6 @@ use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 
-#[cfg(test)]
-#[allow(dead_code)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn it_works() {
-        sqlx_sea_query_example().await
-    }
-}
-
 #[derive(Iden)]
 #[allow(dead_code)]
 pub enum Users {

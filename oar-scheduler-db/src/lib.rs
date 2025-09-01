@@ -10,6 +10,7 @@ use sqlx::pool::PoolOptions;
 use sqlx::AnyPool;
 use sqlx::{Any, Error};
 use std::collections::HashMap;
+use tokio::runtime::Runtime;
 
 pub mod example;
 pub mod model;
@@ -45,50 +46,65 @@ impl Backend {
 pub struct Session {
     pool: AnyPool,
     backend: Backend,
+    runtime: Runtime,
 }
 
 impl Session {
-    pub async fn new(database_url: &str, max_connections: u32) -> Session {
-        install_default_drivers();
+    pub fn new(database_url: &str, max_connections: u32) -> Session {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
-        let pool = PoolOptions::<Any>::new()
-            .max_connections(max_connections)
-            .connect(database_url)
-            .await
-            .expect("Failed to create connection pool");
+        let (pool, backend) = runtime.block_on(async {
+            install_default_drivers();
 
-        let conn = pool.acquire().await.expect("Failed to acquire connection");
-        let backend = conn.backend_name().into();
-        conn.close().await.unwrap();
+            let pool = PoolOptions::<Any>::new()
+                .max_connections(max_connections)
+                .connect(database_url)
+                .await
+                .expect("Failed to create connection pool");
 
-        Session { pool, backend }
+            let conn = pool.acquire().await.expect("Failed to acquire connection");
+            let backend = conn.backend_name().into();
+            conn.close().await.unwrap();
+            (pool, backend)
+        });
+
+        Session { pool, backend, runtime }
     }
-    pub async fn get_now(&self) -> i64 {
+    pub fn get_now(&self) -> i64 {
         match self.backend {
             Backend::Postgres => {
-                let row: (i64,) = sqlx::query_as("SELECT EXTRACT(EPOCH FROM current_timestamp)::BIGINT")
-                    .fetch_one(&self.pool)
-                    .await
-                    .expect("Failed to fetch current time");
+                let row: (i64,) = self.runtime.block_on(async {
+                    sqlx::query_as("SELECT EXTRACT(EPOCH FROM current_timestamp)::BIGINT")
+                        .fetch_one(&self.pool)
+                        .await
+                        .expect("Failed to fetch current time")
+                });
                 row.0
             }
             Backend::Sqlite => {
-                let row: (i64,) = sqlx::query_as("SELECT CAST(strftime('%s','now') AS INTEGER)")
-                    .fetch_one(&self.pool)
-                    .await
-                    .expect("Failed to fetch current time");
+                let row: (i64,) = self.runtime.block_on(async {
+                    sqlx::query_as("SELECT CAST(strftime('%s','now') AS INTEGER)")
+                        .fetch_one(&self.pool)
+                        .await
+                        .expect("Failed to fetch current time")
+                });
                 row.0
             }
         }
     }
-    pub async fn create_schema(&self) {
+    pub fn create_schema(&self) {
         let sql = match self.backend {
             Backend::Postgres => todo!(),
             Backend::Sqlite => include_str!("sql/up-sqlite.sql"),
         };
-        sqlx::query(sql).execute(&self.pool).await.expect("Failed to create schema");
+        self.runtime.block_on(async {
+            sqlx::query(sql).execute(&self.pool).await.expect("Failed to create schema");
+        });
     }
-    pub async fn get_resource_set(&self, config: &Configuration) -> ResourceSet {
+    pub fn get_resource_set(&self, config: &Configuration) -> ResourceSet {
         let labels = config
             .hierarchy_labels
             .clone()
@@ -97,7 +113,7 @@ impl Session {
 
 
         let order_by = config.scheduler_resource_order.clone().unwrap_or("type, network_address".to_string());
-        let resources = Resources::get_all_sorted(&self, order_by.as_str(), &labels).await.unwrap();
+        let resources = Resources::get_all_sorted(&self, order_by.as_str(), &labels).unwrap();
         info!("Loaded {} resources from database", resources.len());
         info!("Resource labels considered: {:?}", labels);
 
@@ -183,10 +199,12 @@ trait SessionSelectStatement {
 impl SessionSelectStatement for SelectStatement {
     async fn fetch_one<'q>(&'q self, session: &Session) -> Result<AnyRow, Error> {
         let (sql, values) = session.backend.build_select(&self);
+
         sqlx::query_with(sql.as_str(), values).fetch_one(&session.pool).await
     }
     async fn fetch_all<'q>(&'q self, session: &Session) -> Result<Vec<AnyRow>, Error> {
         let (sql, values) = session.backend.build_select(&self);
+
         sqlx::query_with(sql.as_str(), values).fetch_all(&session.pool).await
     }
 }

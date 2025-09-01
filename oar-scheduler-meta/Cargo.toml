@@ -9,7 +9,6 @@ env_logger = "0.11.8"
 oar-scheduler-core = { path = "../oar-scheduler-core" }
 oar-scheduler-hooks = { path = "../oar-scheduler-hooks" }
 oar-scheduler-db = { path = "../oar-scheduler-db" }
-tokio = { version = "1", features = [] }
 indexmap = "2.10.0"
 dotenvy = "0.15.7"
 tempfile = "3.21.0"

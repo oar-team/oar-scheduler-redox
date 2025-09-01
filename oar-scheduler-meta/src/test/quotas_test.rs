@@ -9,7 +9,7 @@ use oar_scheduler_db::Session;
 const OAR_CONFIG: &str = include_str!("../../oar_config.toml");
 const QUOTAS_CONFIG: &str = include_str!("../../quotas_config.json");
 
-async fn quotas_setup() -> Platform {
+fn quotas_setup() -> Platform {
     // Create temp files for configs
     let oar_config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file for oar config");
     std::fs::write(oar_config_file.path(), OAR_CONFIG).expect("Failed to write oar config to temp file");
@@ -21,16 +21,16 @@ async fn quotas_setup() -> Platform {
         std::env::set_var("OARCONFFILE", oar_config_file.path());
     }
 
-    let (session, mut config) = setup_for_tests().await;
+    let (session, mut config) = setup_for_tests();
     info!("quotas config path: {}", quotas_config_file.path().to_str().unwrap());
     config.quotas_conf_file = Some(quotas_config_file.path().to_str().unwrap().to_string());
 
-    Platform::from_database(session, config).await
+    Platform::from_database(session, config)
 }
 
-#[tokio::test]
-async fn quotas_loading_test() {
-    let platform = quotas_setup().await;
+#[test]
+fn quotas_loading_test() {
+    let platform = quotas_setup();
     let quotas_config = &platform.get_platform_config().quotas_config;
     println!("Quotas config: {:?}", quotas_config);
 

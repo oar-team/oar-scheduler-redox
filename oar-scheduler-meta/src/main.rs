@@ -10,8 +10,7 @@ use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_db::Session;
 use platform::Platform;
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() {
+fn main() {
     // Load .env file if present
     dotenv().ok();
 
@@ -25,15 +24,15 @@ async fn main() {
     let config = Configuration::load();
 
     // Initialize database connection
-    let session = Session::new("sqlite::memory:", 1).await;
+    let session = Session::new("sqlite::memory:", 1);
 
     // Seed database for testing
-    session.create_schema().await;
+    session.create_schema();
 
     // Create the platform instance
-    let mut platform = Platform::from_database(session, config).await;
+    let mut platform = Platform::from_database(session, config);
 
     // Meta scheduling
-    meta_schedule::meta_schedule(&mut platform).await;
+    meta_schedule::meta_schedule(&mut platform);
 
 }

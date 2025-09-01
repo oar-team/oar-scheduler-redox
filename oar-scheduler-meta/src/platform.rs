@@ -13,9 +13,9 @@ pub struct Platform {
 }
 
 impl Platform {
-    pub async fn from_database(session: Session, config: Configuration) -> Self {
-        let now = session.get_now().await;
-        let resource_set = session.get_resource_set(&config).await;
+    pub fn from_database(session: Session, config: Configuration) -> Self {
+        let now = session.get_now();
+        let resource_set = session.get_resource_set(&config);
         let quotas_config = oar_scheduler_core::platform::build_quotas_config(&config, &resource_set);
 
         let platform_config = Rc::new(PlatformConfig {

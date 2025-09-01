@@ -117,7 +117,7 @@ pub struct NewResource {
     pub labels: IndexMap<String, ResourceLabelValue>,
 }
 impl NewResource {
-    pub async fn insert(&self, session: &Session) -> Result<i64, Error> {
+    pub fn insert(&self, session: &Session) -> Result<i64, Error> {
         let columns = vec![
             Alias::new(Resources::NetworkAddress.to_string()),
             Alias::new(Resources::Type.to_string()),
@@ -134,14 +134,15 @@ impl NewResource {
             }))
             .collect::<Vec<Expr>>();
 
-        let row = Query::insert()
-            .into_table(Resources::Table)
-            .columns(columns)
-            .values_panic(values)
-            .returning_col(Resources::ResourceId)
-            .fetch_one(session)
-            .await?;
-
+        let row = session.runtime.block_on(async {
+            Query::insert()
+                .into_table(Resources::Table)
+                .columns(columns)
+                .values_panic(values)
+                .returning_col(Resources::ResourceId)
+                .fetch_one(session)
+                .await
+        })?;
         Ok(row.try_get::<i64, _>(0)?)
     }
 }
@@ -151,18 +152,20 @@ pub struct NewResourceColumn {
     pub r#type: String,
 }
 impl NewResourceColumn {
-    pub async fn insert(&self, session: &Session) -> Result<(), Error> {
-        match session.backend {
-            crate::Backend::Postgres => {
-                let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
-                sqlx::query(&sql).execute(&session.pool).await?;
+    pub fn insert(&self, session: &Session) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            match session.backend {
+                crate::Backend::Postgres => {
+                    let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
+                    sqlx::query(&sql).execute(&session.pool).await?;
+                }
+                crate::Backend::Sqlite => {
+                    let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
+                    sqlx::query(&sql).execute(&session.pool).await?;
+                }
             }
-            crate::Backend::Sqlite => {
-                let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
-                sqlx::query(&sql).execute(&session.pool).await?;
-            }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
@@ -176,18 +179,20 @@ impl Resources {
     /// Get all resources, sorted by the given order_by_clause (e.g., "type, network_address").
     /// The labels parameter should contain column names to be included in the result.
     /// Returns: (type, state, available_upto, label_name -> label_value)
-    pub async fn get_all_sorted(
+    pub fn get_all_sorted(
         session: &Session,
         order_by_clause: &str,
         labels: &Vec<Box<str>>,
     ) -> Result<Vec<(String, String, Option<i64>, HashMap<Box<str>, ResourceLabelValue>)>, Error> {
-        let rows = Query::select()
-            .columns(vec![Resources::Type, Resources::State, Resources::AvailableUpto])
-            .columns(labels.iter().map(|s| Alias::new(s.as_ref())).collect::<Vec<Alias>>())
-            .from(Resources::Table)
-            .order_by_expr(sea_query::SimpleExpr::Custom(order_by_clause.to_string()), sea_query::Order::Asc)
-            .fetch_all(session)
-            .await?;
+        let rows = session.runtime.block_on(async {
+            Query::select()
+                .columns(vec![Resources::Type, Resources::State, Resources::AvailableUpto])
+                .columns(labels.iter().map(|s| Alias::new(s.as_ref())).collect::<Vec<Alias>>())
+                .from(Resources::Table)
+                .order_by_expr(sea_query::SimpleExpr::Custom(order_by_clause.to_string()), sea_query::Order::Asc)
+                .fetch_all(session)
+                .await
+        })?;
 
         let mut results = Vec::new();
         for row in rows {

@@ -214,7 +214,7 @@ impl SessionSelectStatement for SelectStatement {
     }
     async fn fetch_all<'q>(&'q self, session: &Session) -> Result<Vec<AnyRow>, Error> {
         let (sql, values) = session.backend.build_select(&self);
-
+        info!("SQL: {}   VALUES: {:?}", sql, values);
         sqlx::query_with(sql.as_str(), values).fetch_all(&session.pool).await
     }
 }

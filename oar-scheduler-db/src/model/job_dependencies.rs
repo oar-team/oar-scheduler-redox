@@ -1,6 +1,6 @@
 use crate::model::Jobs;
 use crate::{Session, SessionSelectStatement};
-use sea_query::{Expr, ExprTrait, Iden, Query};
+use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::{Error, Row};
 use std::collections::HashMap;
 
@@ -27,24 +27,26 @@ impl AllJobDependencies {
             });
         }
 
+        let dependant_job_id_alias = Alias::new("dependant_job_id");
         let dependencies = Query::select()
             .columns(vec![
-                JobDependencies::JobId.to_string(),
+                dependant_job_id_alias.to_string(),
                 JobDependencies::RequiredJobId.to_string(),
                 Jobs::State.to_string(),
                 Jobs::ExitCode.to_string(),
             ])
             .from(JobDependencies::Table)
-            .inner_join(Jobs::Table, Expr::col(JobDependencies::RequiredJobId).equals(Jobs::Id))
-            .and_where(Expr::col(JobDependencies::JobId).is_in(jobs))
-            .and_where(Expr::col(JobDependencies::Index).eq("CURRENT"))
+            .expr_as(Expr::col((JobDependencies::Table, JobDependencies::JobId)), dependant_job_id_alias.clone())
+            .inner_join(Jobs::Table, Expr::col((JobDependencies::Table, JobDependencies::RequiredJobId)).equals((Jobs::Table, Jobs::Id)))
+            .and_where(Expr::col((JobDependencies::Table, JobDependencies::JobId)).is_in(jobs))
+            .and_where(Expr::col((JobDependencies::Table, JobDependencies::Index)).eq("CURRENT"))
             .to_owned()
             .fetch_all(session)
             .await?
             .iter()
             .map(|r| {
                 (
-                    r.get::<i64, &str>(JobDependencies::JobId.to_string().as_str()),
+                    r.get::<i64, &str>(dependant_job_id_alias.to_string().as_str()),
                     r.get::<i64, &str>(JobDependencies::RequiredJobId.to_string().as_str()),
                     r.get::<String, &str>(Jobs::State.to_string().as_str()).into_boxed_str(),
                     r.try_get::<i32, &str>(Jobs::ExitCode.to_string().as_str()).ok(),

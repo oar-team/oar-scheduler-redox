@@ -1,6 +1,7 @@
 use crate::{Session, SessionSelectStatement};
 use oar_scheduler_core::model::job::Moldable;
-use oar_scheduler_core::scheduler::hierarchy::HierarchyRequests;
+use oar_scheduler_core::model::job::ProcSet;
+use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use sea_query::{Expr, ExprTrait, Iden, Query};
 use sqlx::{Error, Row};
 use std::collections::HashMap;
@@ -57,9 +58,11 @@ impl AllJobMoldables {
         if jobs.is_empty() {
             return Ok(Self { moldables: HashMap::new() });
         }
-
+        // Sleep 1s
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let moldables = Query::select()
             .columns(vec![
+                MoldableJobDescriptions::Id.to_string(),
                 MoldableJobDescriptions::JobId.to_string(),
                 MoldableJobDescriptions::Walltime.to_string(),
                 MoldableJobDescriptions::Index.to_string(),
@@ -78,7 +81,6 @@ impl AllJobMoldables {
                 JobResourceDescriptions::Table,
                 Expr::col(JobResourceGroups::Id).equals(JobResourceDescriptions::GroupId),
             )
-
             .and_where(Expr::col(MoldableJobDescriptions::JobId).is_in(jobs))
             .and_where(Expr::col(MoldableJobDescriptions::Index).eq("CURRENT"))
             .and_where(Expr::col(JobResourceGroups::Index).eq("CURRENT"))
@@ -89,17 +91,47 @@ impl AllJobMoldables {
             .fetch_all(session)
             .await?
             .iter()
-            .map(|row| {
-                let job_id = row.get::<i64, &str>(MoldableJobDescriptions::JobId.to_string().as_str());
+            .fold(
+                // job_id -> moldable_id -> (walltime, group_id -> level_nbs)
+                HashMap::<i64, HashMap<i64, (i64, HashMap<i64, Vec<(Box<str>, u32)>>)>>::new(),
+                |mut acc, row| {
+                    let job_id: i64 = row.get(MoldableJobDescriptions::JobId.to_string().as_str());
+                    let mld_id: i64 = row.get(MoldableJobDescriptions::Id.to_string().as_str());
+                    let walltime: i64 = row.get(MoldableJobDescriptions::Walltime.to_string().as_str());
+                    let group_id: i64 = row.get(JobResourceGroups::Id.to_string().as_str());
+                    let rtype: String = row.get(JobResourceDescriptions::ResourceType.to_string().as_str());
+                    let rvalue: i64 = row.get(JobResourceDescriptions::Value.to_string().as_str());
 
-                // TODO: load moldable.
-
-                (job_id, Moldable::new(1, 1, HierarchyRequests::from_requests(vec![])))
+                    acc.entry(job_id)
+                        .or_insert_with(HashMap::new)
+                        .entry(mld_id)
+                        .or_insert_with(|| (walltime, HashMap::<i64, Vec<(Box<str>, u32)>>::new()))
+                        .1
+                        .entry(group_id)
+                        .or_insert_with(Vec::new)
+                        .push((rtype.into_boxed_str(), rvalue as u32));
+                    acc
+                },
+            )
+            .into_iter()
+            .map(|(job_id, mlds)| {
+                let molds = mlds
+                    .into_iter()
+                    .map(|(mld_id, (walltime, groups_map))| {
+                        // Build one HierarchyRequest per resource group
+                        let mut group_ids: Vec<i64> = groups_map.keys().cloned().collect();
+                        group_ids.sort_unstable();
+                        let reqs: Vec<HierarchyRequest> = group_ids
+                            .into_iter()
+                            .filter_map(|gid| groups_map.get(&gid).cloned())
+                            .map(|levels| HierarchyRequest::new(!ProcSet::new(), levels))
+                            .collect();
+                        Moldable::new(mld_id, walltime, HierarchyRequests::from_requests(reqs))
+                    })
+                    .collect::<Vec<Moldable>>();
+                (job_id, molds)
             })
-            .fold(HashMap::new(), |mut acc, (job_id, moldable)| {
-                acc.entry(job_id).or_insert_with(Vec::new).push(moldable);
-                acc
-            });
+            .collect::<HashMap<i64, Vec<Moldable>>>();
 
         Ok(Self { moldables })
     }

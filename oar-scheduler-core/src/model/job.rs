@@ -53,7 +53,7 @@ pub struct Moldable {
     pub cache_key: Box<str>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TimeSharingType {
     /// timesharing=\*,\*
     AllAll,
@@ -80,7 +80,9 @@ impl TimeSharingType {
         match (user, job) {
             ("*", "*") => TimeSharingType::AllAll,
             ("*", "name") => TimeSharingType::AllName,
+            ("name", "*") => TimeSharingType::AllName,
             ("user", "*") => TimeSharingType::UserAll,
+            ("*", "user") => TimeSharingType::UserAll,
             ("user", "name") => TimeSharingType::UserName,
             _ => {
                 warn!("Invalid time sharing type: user={}, job={}", user, job);

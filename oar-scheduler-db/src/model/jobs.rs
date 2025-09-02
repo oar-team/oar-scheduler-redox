@@ -1,6 +1,6 @@
 use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
-use crate::model::moldable::{JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
+use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
 use crate::{Session, SessionInsertStatement, SessionSelectStatement};
 use indexmap::IndexMap;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
@@ -124,7 +124,6 @@ pub enum Challenges {
     SshPublicKey,
 }
 
-
 pub fn get_waiting_jobs(session: &Session, queues: Option<Vec<String>>, reservation: String) -> Result<IndexMap<i64, Job>, Error> {
     let jobs = session.runtime.block_on(async {
         let rows = Query::select()
@@ -153,40 +152,23 @@ pub fn get_waiting_jobs(session: &Session, queues: Option<Vec<String>>, reservat
             .collect::<Vec<i64>>();
 
         let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
-        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids).await?;
+        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await?;
+        let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
 
-        let jobs = IndexMap::new();
+        let mut jobs = IndexMap::new();
         for row in rows {
-            let id: i64 = row.get("job_id");
+            let id: i64 = row.get(Jobs::Id.to_string().as_str());
             let types = jobs_types.get_job_types(id);
 
-            // TODO: get moldable requests
+            // TODO: get data for assignment if any, and for advance_reservation_start_time if any.
 
-            // TODO: compute depending on types the values of: no_quotas, time_sharing, placeholder
-
-            // Moldable {
-            //     id: 0,
-            //     walltime: 0,
-            //     requests: HierarchyRequests(),
-            //     cache_key: Box::new(()),
-            // };
-
-            Job {
-                id: 0,
-                name: row
-                    .try_get::<String, &str>(Jobs::Name.to_string().as_str())
-                    .map(|s| s.into_boxed_str())
-                    .ok(),
-                user: row
-                    .try_get::<String, &str>(Jobs::User.to_string().as_str())
-                    .map(|s| s.into_boxed_str())
-                    .ok(),
-                project: row
-                    .try_get::<String, &str>(Jobs::Project.to_string().as_str())
-                    .map(|s| s.into_boxed_str())
-                    .ok(),
+            let job = Job {
+                id,
+                name: row.try_get(Jobs::Name.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok(),
+                user: row.try_get(Jobs::User.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok(),
+                project: row.try_get(Jobs::Project.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok(),
                 queue: row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str(),
-                moldables: vec![],
+                moldables: jobs_moldables.get_job_moldables(id),
                 no_quotas: types.contains_key("no_quotas"),
                 assignment: None,
                 quotas_hit_count: 0,
@@ -200,44 +182,34 @@ pub fn get_waiting_jobs(session: &Session, queues: Option<Vec<String>>, reservat
                 nice: 0.0,
                 karma: 0.0,
             };
+            jobs.insert(id, job);
         }
         Ok::<IndexMap<i64, Job>, Error>(jobs)
     })?;
     Ok(jobs)
 }
 
-/// Struct to insert a new job with related entries into the database.
-/// Big unstructured piece of code since it should only be used by tests.
-///
-/// Defaults applied (if not provided):
-/// - queue_name: "default"
-/// - launching_directory: "" (internal default)
-/// - checkpoint_signal: 0 (internal default)
-/// - properties: "" (internal default)
-/// - res: vec![(60, vec![("resource_id=1".to_string(), "".to_string())])]
-/// - types: []
-///
-/// Return: job_id
 pub struct NewJob {
     pub user: Option<String>, // jobs.job_user
-    pub queue_name: Option<String>,
+    pub queue_name: String,
     /// res = [(walltime, [("res_hierarchy", "properties_sql"), ...]), ...]
     pub res: Vec<(i64, Vec<(String, String)>)>,
-    pub types: Option<Vec<String>>,
+    pub types: Vec<String>,
 }
 
 impl NewJob {
     pub fn insert(&self, session: &Session) -> Result<i64, Error> {
         session.runtime.block_on(async { self.insert_async(session).await })
     }
+    /// Big unstructured piece of code since it should only be used by tests.
     async fn insert_async(&self, session: &Session) -> Result<i64, Error> {
         let launching_directory = "".to_string();
         let checkpoint_signal: i64 = 0;
         let properties = "".to_string();
-        let queue_name = self.queue_name.clone().unwrap_or_else(|| "default".to_string());
+        let queue_name = self.queue_name.clone();
         let job_user = self.user.clone().unwrap_or_else(|| "".to_string());
 
-        let types: Vec<String> = self.types.clone().unwrap_or_default();
+        let types: Vec<String> = self.types.clone();
 
         // Insert job
         let row = Query::insert()

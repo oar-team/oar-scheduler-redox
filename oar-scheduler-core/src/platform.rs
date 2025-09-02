@@ -25,12 +25,12 @@ pub trait PlatformTrait {
     /// Returns the jobs waiting to be scheduled for the provided queues.
     /// Jobs should be sorted according to the meta-scheduler sorting algorithm.
     /// Using `IndexMap` to keep jobs ordered while still allowing O(1) access by job ID.
-    fn get_waiting_jobs(&self) -> IndexMap<u32, Job>;
+    fn get_waiting_jobs(&self) -> IndexMap<i64, Job>;
 
     /// Save the scheduled jobs assignments.
     /// This function is called after scheduling jobs to remove the assigned jobs from the waiting list,
     /// to add them to the scheduled list, and to save them to the database
-    fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>);
+    fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>);
 
     // --- Accounting DB access ---
     /// Returns summed accounting for all queues in [window_start, window_stop):

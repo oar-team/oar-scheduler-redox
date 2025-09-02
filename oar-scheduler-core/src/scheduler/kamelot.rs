@@ -47,7 +47,7 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
         let assigned_jobs = waiting_jobs
             .into_iter()
             .filter(|(_id, job)| job.assignment.is_some())
-            .collect::<IndexMap<u32, Job>>();
+            .collect::<IndexMap<i64, Job>>();
         platform.save_assignments(assigned_jobs);
 
         return slot_sets.get("default").unwrap().slot_count();

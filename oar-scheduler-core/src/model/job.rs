@@ -8,7 +8,7 @@ pub type ProcSet = RangeSetBlaze<u32>;
 
 #[derive(Debug, Clone)]
 pub struct Job {
-    pub id: u32,
+    pub id: i64,
     pub name: Option<Box<str>>,
     pub user: Option<Box<str>>,
     pub project: Option<Box<str>>,
@@ -24,7 +24,7 @@ pub struct Job {
     pub time_sharing: Option<TimeSharingType>,
     pub placeholder: PlaceholderType,
     /// List of job dependencies, tuples of (job_id, state, exit_code)
-    pub dependencies: Vec<(u32, Box<str>, Option<i32>)>,
+    pub dependencies: Vec<(i64, Box<str>, Option<i32>)>,
     /// Attribute used to store the start time of advance reservation jobs before they get an assignment.
     pub advance_reservation_start_time: Option<i64>,
     /// Job submission epoch seconds (used for multifactor age)
@@ -46,7 +46,7 @@ pub struct JobAssignment {
 
 #[derive(Debug, Clone)]
 pub struct Moldable {
-    pub id: u32,
+    pub id: i64,
     pub walltime: i64,
     pub requests: HierarchyRequests,
     /// Cache key is only calculated at initialization. If fields are changed, the cache key must be recalculated.
@@ -88,9 +88,41 @@ impl TimeSharingType {
             }
         }
     }
+    pub fn from_types(types: &HashMap<Box<str>, Option<Box<str>>>) -> Option<Self> {
+        if let Some(value) = types.get(&Box::from("timesharing")) {
+            if let Some(value) = value {
+                let parts: Vec<&str> = value.split(',').collect();
+                if parts.len() == 2 {
+                    return Some(TimeSharingType::from_str(parts[0], parts[1]));
+                } else {
+                    warn!("Invalid time sharing type: {}", value);
+                }
+            } else {
+                warn!("Invalid time sharing type: missing value");
+            }
+        }
+        None
+    }
 }
 
 impl PlaceholderType {
+    pub fn from_types(types: &HashMap<Box<str>, Option<Box<str>>>) -> Self {
+        if let Some(value) = types.get(&Box::from("placeholder")) {
+            if let Some(name) = value {
+                return PlaceholderType::Placeholder(name.clone());
+            } else {
+                warn!("Invalid placeholder type: missing name");
+            }
+        }
+        if let Some(value) = types.get(&Box::from("allow")) {
+            if let Some(name) = value {
+                return PlaceholderType::Allow(name.clone());
+            } else {
+                warn!("Invalid allow type: missing name");
+            }
+        }
+        PlaceholderType::None
+    }
     pub fn is_placeholder(&self) -> bool {
         matches!(self, PlaceholderType::Placeholder(_))
     }
@@ -146,7 +178,7 @@ impl Job {
 }
 
 pub struct JobBuilder {
-    id: u32,
+    id: i64,
     name: Option<Box<str>>,
     user: Option<Box<str>>,
     project: Option<Box<str>>,
@@ -156,12 +188,12 @@ pub struct JobBuilder {
     assignment: Option<JobAssignment>,
     time_sharing: Option<TimeSharingType>,
     placeholder: PlaceholderType,
-    dependencies: Vec<(u32, Box<str>, Option<i32>)>,
+    dependencies: Vec<(i64, Box<str>, Option<i32>)>,
     advance_reservation_start_time: Option<i64>,
 }
 
 impl JobBuilder {
-    pub fn new(id: u32) -> Self {
+    pub fn new(id: i64) -> Self {
         JobBuilder {
             id,
             name: None,
@@ -177,7 +209,7 @@ impl JobBuilder {
             advance_reservation_start_time: None,
         }
     }
-    pub fn moldable_auto(mut self, id: u32, walltime: i64, requests: HierarchyRequests) -> Self {
+    pub fn moldable_auto(mut self, id: i64, walltime: i64, requests: HierarchyRequests) -> Self {
         self.moldables.push(Moldable::new(id, walltime, requests));
         self
     }
@@ -237,11 +269,11 @@ impl JobBuilder {
         self.assignment = Some(assignment);
         self
     }
-    pub fn add_dependency(mut self, dep_job_id: u32, dep_job_state: Box<str>, dep_job_exit_code: Option<i32>) -> Self {
+    pub fn add_dependency(mut self, dep_job_id: i64, dep_job_state: Box<str>, dep_job_exit_code: Option<i32>) -> Self {
         self.dependencies.push((dep_job_id, dep_job_state, dep_job_exit_code));
         self
     }
-    pub fn add_valid_dependency(self, dep_job_id: u32) -> Self {
+    pub fn add_valid_dependency(self, dep_job_id: i64) -> Self {
         self.add_dependency(dep_job_id, "Waiting".into(), None)
     }
     pub fn set_advance_reservation_start_time(mut self, start_time: i64) -> Self {
@@ -287,7 +319,7 @@ impl JobAssignment {
 }
 
 impl Moldable {
-    pub fn new(id: u32, walltime: i64, requests: HierarchyRequests) -> Moldable {
+    pub fn new(id: i64, walltime: i64, requests: HierarchyRequests) -> Moldable {
         Moldable {
             cache_key: format!("{}-{}", walltime, requests.get_cache_key()).into(),
             id,

@@ -117,7 +117,7 @@ async fn detect_differences(seed: u64) -> bool {
 }
 
 #[allow(dead_code)]
-fn display_job_comparison(waiting_jobs: &IndexMap<u32, Job>, rust_scheduled: &Vec<Job>, python_scheduled: &Vec<Job>) {
+fn display_job_comparison(waiting_jobs: &IndexMap<i64, Job>, rust_scheduled: &Vec<Job>, python_scheduled: &Vec<Job>) {
     println!("\n=== JOB COMPARISON ===");
 
     println!("\nOriginal waiting jobs:");

@@ -11,7 +11,7 @@ thread_local! {
 
 pub trait HooksHandler {
     /// Overrides the job sorting process. This hook should sort the `waiting_jobs` in place.
-    fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>) -> bool;
+    fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<i64, Job>) -> bool;
 
     /// Overrides the single job scheduling on a slot set process. This hook should define the `assignment` property of `Job`.
     /// It will override quotas, timesharing, and placeholders, but not container/inner jobs.
@@ -51,7 +51,7 @@ impl HooksManager {
         let _ = self.hooks_handler.set(Box::new(hooks_handler));
     }
 
-    pub fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>) -> bool {
+    pub fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<i64, Job>) -> bool {
         if self.hooks_handler.get().is_none() {
             return false;
         }

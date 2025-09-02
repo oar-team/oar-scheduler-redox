@@ -52,7 +52,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
             .extract(py)
             .unwrap();
         for job_py in scheduled_jobs_py {
-            let id: u32 = job_py.get_item("id").unwrap().unwrap().extract::<u32>().unwrap();
+            let id: i64 = job_py.get_item("id").unwrap().unwrap().extract::<i64>().unwrap();
             let quotas_hit_count: u32 = job_py.get_item("quotas_hit_count").unwrap().unwrap().extract().unwrap();
             let begin: i64 = job_py.get_item("begin").unwrap().unwrap().extract().unwrap();
             let end: i64 = job_py.get_item("end").unwrap().unwrap().extract().unwrap();

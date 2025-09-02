@@ -12,7 +12,7 @@ use std::rc::Rc;
 pub struct PlatformBenchMock {
     platform_config: Rc<PlatformConfig>,
     scheduled_jobs: Vec<Job>,
-    waiting_jobs: IndexMap<u32, Job>,
+    waiting_jobs: IndexMap<i64, Job>,
 }
 impl PlatformTrait for PlatformBenchMock {
     fn get_now(&self) -> i64 {
@@ -28,11 +28,11 @@ impl PlatformTrait for PlatformBenchMock {
     fn get_scheduled_jobs(&self) -> &Vec<Job> {
         &self.scheduled_jobs
     }
-    fn get_waiting_jobs(&self) -> IndexMap<u32, Job> {
+    fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
         self.waiting_jobs.clone()
     }
 
-    fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
+    fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>) {
         // Move assigned jobs from waiting map to scheduled vec
         self.waiting_jobs.retain(|id, _job| !assigned_jobs.contains_key(id));
         self.scheduled_jobs.extend(assigned_jobs.into_values());
@@ -51,7 +51,7 @@ impl PlatformTrait for PlatformBenchMock {
     }
 }
 impl PlatformBenchMock {
-    pub fn new(platform_config: PlatformConfig, scheduled_jobs: Vec<Job>, waiting_jobs: IndexMap<u32, Job>) -> PlatformBenchMock {
+    pub fn new(platform_config: PlatformConfig, scheduled_jobs: Vec<Job>, waiting_jobs: IndexMap<i64, Job>) -> PlatformBenchMock {
         PlatformBenchMock {
             platform_config: Rc::new(platform_config),
             scheduled_jobs,

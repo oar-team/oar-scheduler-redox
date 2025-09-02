@@ -328,7 +328,7 @@ impl BenchmarkConfig {
     }
 }
 
-pub fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> IndexMap<u32, Job> {
+pub fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: WaitingJobsSampleType, seed: u64) -> IndexMap<i64, Job> {
     let last_remaining = jobs_count - ((2 * jobs_count / 5) * 2 + (jobs_count / 10));
     let jobs = match sample_type {
         WaitingJobsSampleType::Normal => RandomJobGenerator {
@@ -544,7 +544,7 @@ pub fn get_sample_waiting_jobs(res_count: u32, jobs_count: usize, sample_type: W
     };
     jobs.into_iter()
         .map(|j| (j.id, j))
-        .collect::<IndexMap<u32, Job>>()
+        .collect::<IndexMap<i64, Job>>()
 }
 struct RandomJobGeneratorMerged {
     generators: Vec<RandomJobGenerator>,
@@ -569,7 +569,7 @@ impl RandomJobGeneratorMerged {
 struct RandomJobGenerator {
     rand: StdRng,
     count: usize,
-    id_offset: u32,
+    id_offset: i64,
     total_res: u32,
     job_type: String,
 
@@ -602,8 +602,8 @@ impl RandomJobGenerator {
 
             let request = HierarchyRequest::new(ProcSet::from_iter(1..=self.total_res), hierarchy_req);
             jobs.push(
-                JobBuilder::new(i as u32 + self.id_offset)
-                    .moldable_auto(i as u32 + self.id_offset, walltime, HierarchyRequests::from_requests(vec![request]))
+                JobBuilder::new(i as i64 + self.id_offset)
+                    .moldable_auto(i as i64 + self.id_offset, walltime, HierarchyRequests::from_requests(vec![request]))
                     .add_type_key(self.job_type.clone().into())
                     .build(),
             );
@@ -621,7 +621,7 @@ impl RandomJobGenerator {
     }
 }
 
-fn count_cache_hits(waiting_jobs: &IndexMap<u32, Job>) -> usize {
+fn count_cache_hits(waiting_jobs: &IndexMap<i64, Job>) -> usize {
     let mut cache = HashSet::new();
     let mut cache_hits = 0;
     for (_job_id, job) in waiting_jobs.iter() {

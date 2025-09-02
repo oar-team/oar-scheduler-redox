@@ -1,7 +1,12 @@
 use crate::model::gantt::{JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
-use crate::{Session, SessionInsertStatement};
-use sea_query::Iden;
+use crate::model::job_dependencies::AllJobDependencies;
+use crate::model::job_types::{AllJobTypes, JobTypes};
+use crate::{Session, SessionInsertStatement, SessionSelectStatement};
+use indexmap::IndexMap;
+use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
+use oar_scheduler_core::platform::Job;
 use sea_query::{Alias, Expr, Query};
+use sea_query::{ExprTrait, Iden};
 use sqlx::{Error, Row};
 
 // jobs and related tables
@@ -117,30 +122,6 @@ pub enum Challenges {
     SshPrivateKey,
     #[iden = "ssh_public_key"]
     SshPublicKey,
-}
-
-#[derive(Iden)]
-pub enum JobTypes {
-    #[iden = "job_types"]
-    Table,
-    #[iden = "job_type_id"]
-    JobTypeId,
-    #[iden = "job_id"]
-    JobId,
-    #[iden = "type"]
-    Type,
-}
-
-#[derive(Iden)]
-pub enum JobDependencies {
-    #[iden = "job_dependencies"]
-    Table,
-    #[iden = "job_id"]
-    JobId,
-    #[iden = "job_id_required"]
-    JobIdRequired,
-    #[iden = "job_dependency_index"]
-    JobDependencyIndex,
 }
 
 /// Struct to insert a new job with related entries into the database.
@@ -285,4 +266,83 @@ impl NewJob {
     }
 }
 
+pub fn get_waiting_jobs(session: &Session, queues: Option<Vec<String>>, reservation: String) -> Result<IndexMap<i64, Job>, Error> {
+    let jobs = session.runtime.block_on(async {
+        let rows = Query::select()
+            .columns(vec![
+                Jobs::JobId,
+                Jobs::JobName,
+                Jobs::JobUser,
+                Jobs::Project,
+                Jobs::QueueName,
+                Jobs::SubmissionTime,
+            ])
+            .from(Jobs::Table)
+            .and_where(Expr::col(Jobs::State).eq("Waiting"))
+            .and_where(Expr::col(Jobs::Reservation).eq(reservation))
+            .apply_if(queues, |req, queues| {
+                req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
+            })
+            .order_by(Jobs::JobId, sea_query::Order::Asc)
+            .to_owned()
+            .fetch_all(session)
+            .await?;
 
+        let job_ids = rows
+            .iter()
+            .map(|r| r.get::<i64, &str>(Jobs::JobId.to_string().as_str()))
+            .collect::<Vec<i64>>();
+
+        let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
+        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids).await?;
+
+        let jobs = IndexMap::new();
+        for row in rows {
+            let id: i64 = row.get("job_id");
+            let types = jobs_types.get_job_types(id);
+
+            // TODO: get moldable requests
+
+            // TODO: compute depending on types the values of: no_quotas, time_sharing, placeholder
+
+            // Moldable {
+            //     id: 0,
+            //     walltime: 0,
+            //     requests: HierarchyRequests(),
+            //     cache_key: Box::new(()),
+            // };
+
+            Job {
+                id: 0,
+                name: row
+                    .try_get::<String, &str>(Jobs::JobName.to_string().as_str())
+                    .map(|s| s.into_boxed_str())
+                    .ok(),
+                user: row
+                    .try_get::<String, &str>(Jobs::JobUser.to_string().as_str())
+                    .map(|s| s.into_boxed_str())
+                    .ok(),
+                project: row
+                    .try_get::<String, &str>(Jobs::Project.to_string().as_str())
+                    .map(|s| s.into_boxed_str())
+                    .ok(),
+                queue: row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str(),
+                moldables: vec![],
+                no_quotas: types.contains_key("no_quotas"),
+                assignment: None,
+                quotas_hit_count: 0,
+                time_sharing: TimeSharingType::from_types(&types),
+                placeholder: PlaceholderType::from_types(&types),
+                dependencies: jobs_dependencies.get_job_dependencies(id),
+                advance_reservation_start_time: None,
+                submission_time: row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()),
+                types,
+                qos: 0.0,
+                nice: 0.0,
+                karma: 0.0,
+            };
+        }
+        Ok::<IndexMap<i64, Job>, Error>(jobs)
+    })?;
+    Ok(jobs)
+}

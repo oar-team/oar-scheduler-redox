@@ -49,10 +49,10 @@ impl PlatformTrait for Platform {
     fn get_scheduled_jobs(&self) -> &Vec<Job> {
         todo!()
     }
-    fn get_waiting_jobs(&self) -> IndexMap<u32, Job> {
+    fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
         todo!()
     }
-    fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
+    fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>) {
         todo!()
     }
 

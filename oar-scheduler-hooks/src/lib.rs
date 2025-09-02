@@ -18,7 +18,7 @@ impl Hooks {
 
 #[allow(unused_variables)]
 impl HooksHandler for Hooks {
-    fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>) -> bool {
+    fn hook_sort(&self, platform_config: &PlatformConfig, queues: &Vec<String>, waiting_jobs: &mut IndexMap<i64, Job>) -> bool {
         debug!("Sort hook called");
         false
     }

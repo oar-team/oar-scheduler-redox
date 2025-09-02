@@ -4,6 +4,8 @@ pub mod gantt;
 pub mod resources;
 pub mod admin;
 pub mod queues;
+mod job_types;
+mod job_dependencies;
 
 pub use admin::*;
 pub use events::*;

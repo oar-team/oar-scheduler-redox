@@ -133,7 +133,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
     // Load jobs to schedule for the queue
     platform.load_waiting_jobs(&py_queue, Some(&"toSchedule".to_string()));
 
-    let jobs: IndexMap<u32, Job> = platform.get_waiting_jobs();
+    let jobs: IndexMap<i64, Job> = platform.get_waiting_jobs();
     if jobs.is_empty() {
         return;
     }
@@ -203,7 +203,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
     }
 }
 
-fn set_job_resa_state(job_handling: &Bound<PyModule>, platform: &Platform, job_id: u32, state: &str, message: Option<&str>, scheduled: bool) {
+fn set_job_resa_state(job_handling: &Bound<PyModule>, platform: &Platform, job_id: i64, state: &str, message: Option<&str>, scheduled: bool) {
     job_handling
         .getattr("set_job_state")
         .unwrap()
@@ -224,13 +224,13 @@ fn set_job_resa_state(job_handling: &Bound<PyModule>, platform: &Platform, job_i
             .unwrap();
     }
 }
-fn set_job_resa_scheduled(job_handling: &Bound<PyModule>, platform: &Platform, job_id: u32, error: Option<&str>) {
+fn set_job_resa_scheduled(job_handling: &Bound<PyModule>, platform: &Platform, job_id: i64, error: Option<&str>) {
     if let Some(error) = error {
         set_job_resa_state(job_handling, platform, job_id, "toError", Some(error), true);
     } else {
         set_job_resa_state(job_handling, platform, job_id, "toAckReservation", None, true);
     }
 }
-fn set_job_resa_not_scheduled(job_handling: &Bound<PyModule>, platform: &Platform, job_id: u32, error: &str) {
+fn set_job_resa_not_scheduled(job_handling: &Bound<PyModule>, platform: &Platform, job_id: i64, error: &str) {
     set_job_resa_state(job_handling, platform, job_id, "Error", Some(error), false);
 }

@@ -189,7 +189,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
 
                 let proc_set: ProcSet = build_proc_set(&py_job.getattr("res_set").unwrap());
 
-                let moldables_id: u32 = py_job.getattr("moldable_id").unwrap().extract().unwrap();
+                let moldables_id: i64 = py_job.getattr("moldable_id").unwrap().extract().unwrap();
                 let moldable_index = moldables.iter().position(|m| m.id == moldables_id).unwrap_or(0);
 
                 assignment = Some(JobAssignment {
@@ -213,7 +213,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
     }
 
     // Dependencies (scheduled jobs do not have mdl_res_rqts defined)
-    let dependencies: Vec<(u32, Box<str>, Option<i32>)> = if py_job.hasattr("deps").unwrap() {
+    let dependencies: Vec<(i64, Box<str>, Option<i32>)> = if py_job.hasattr("deps").unwrap() {
         py_job
             .getattr("deps")
             .unwrap()
@@ -222,7 +222,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
             .iter()
             .map(|dep| {
                 let dep = dep.downcast::<PyTuple>().unwrap();
-                let id: u32 = dep.get_item(0).unwrap().extract().unwrap();
+                let id: i64 = dep.get_item(0).unwrap().extract().unwrap();
                 let name: String = dep.get_item(1).unwrap().extract().unwrap();
                 let state: Option<i32> = dep.get_item(2).unwrap().extract().unwrap();
                 Ok((id, name.into_boxed_str(), state))
@@ -237,7 +237,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
     let no_quotas: bool = py_job.getattr_opt("no_quotas").unwrap().map(|o| o.extract()).unwrap_or(Ok(false)).unwrap();
 
     Job {
-        id: py_job.getattr("id").unwrap().extract::<u32>().unwrap(),
+        id: py_job.getattr("id").unwrap().extract::<i64>().unwrap(),
         name: name.map(|n| n.into_boxed_str()),
         user: user.map(|u| u.into_boxed_str()),
         project: project.map(|p| p.into_boxed_str()),
@@ -259,7 +259,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
 }
 /// Builds a Moldable Rust struct from a Python moldable object.
 fn build_moldable(py_moldable: &Bound<PyAny>) -> Moldable {
-    let id: u32 = py_moldable.get_item(0).unwrap().extract().unwrap();
+    let id: i64 = py_moldable.get_item(0).unwrap().extract().unwrap();
     let walltime: i64 = py_moldable.get_item(1).unwrap().extract().unwrap();
 
     let requests: Vec<HierarchyRequest> = py_moldable

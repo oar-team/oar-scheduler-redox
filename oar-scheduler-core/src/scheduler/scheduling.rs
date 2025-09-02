@@ -10,8 +10,8 @@ use std::cmp::max;
 use std::collections::HashMap;
 
 /// Schedule loop with support for jobs container - can be recursive
-pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &mut IndexMap<u32, Job>) {
-    let job_ids = waiting_jobs.keys().into_iter().cloned().collect::<Box<[u32]>>();
+pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &mut IndexMap<i64, Job>) {
+    let job_ids = waiting_jobs.keys().into_iter().cloned().collect::<Box<[i64]>>();
     for job_id in job_ids {
         // Check job dependencies
         let dependencies = waiting_jobs.get(&job_id).unwrap().dependencies.clone();

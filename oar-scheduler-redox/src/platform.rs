@@ -15,7 +15,7 @@ pub struct Platform {
     platform_config: Rc<PlatformConfig>,
     scheduled_jobs: Vec<Job>,
 
-    waiting_jobs: Option<IndexMap<u32, Job>>,
+    waiting_jobs: Option<IndexMap<i64, Job>>,
     py_waiting_jobs_map: Option<Py<PyDict>>,
 
     py_platform: Py<PyAny>,
@@ -37,13 +37,13 @@ impl PlatformTrait for Platform {
     fn get_scheduled_jobs(&self) -> &Vec<Job> {
         &self.scheduled_jobs
     }
-    fn get_waiting_jobs(&self) -> IndexMap<u32, Job> {
+    fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
         self.waiting_jobs
             .clone()
             .expect("Waiting jobs not loaded. Call `Platform::load_waiting_jobs` before starting the scheduling.")
     }
 
-    fn save_assignments(&mut self, assigned_jobs: IndexMap<u32, Job>) {
+    fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>) {
         /*assigned_jobs.iter().for_each(|(_, job)| {
             if let Some(sd) = &job.assignment {
                 info!("Assigned job {}: start_time={}, end_time={}, moldable_id={}, proc_set={:?}, moldable_walltime={}", job.id, sd.begin, sd.end, job.moldables[sd.moldable_index].id, sd.proc_set, job.moldables[sd.moldable_index].walltime);
@@ -189,11 +189,11 @@ impl PlatformTrait for Platform {
 impl Platform {
     /// Updates the Python waiting jobs in `self.py_waiting_jobs_map` with the assignments from the Rust `assigned_jobs` parameter.
     /// Returns a dictionary containing the jobs of `self.py_waiting_jobs_map` filtered by keeping only the assigned jobs.
-    fn save_assignments_python<'s>(&self, py: Python<'s>, assigned_jobs: &'s IndexMap<u32, Job>) -> Bound<'s, PyDict> {
+    fn save_assignments_python<'s>(&self, py: Python<'s>, assigned_jobs: &'s IndexMap<i64, Job>) -> Bound<'s, PyDict> {
         let py_scheduled_jobs = PyDict::new(py);
         if let Some(py_waiting_jobs_map) = &self.py_waiting_jobs_map {
             for (py_job_id, py_job) in py_waiting_jobs_map.bind(py) {
-                if let Some(job) = assigned_jobs.get(&py_job_id.extract::<u32>().unwrap()) {
+                if let Some(job) = assigned_jobs.get(&py_job_id.extract::<i64>().unwrap()) {
                     if let Some(sd) = &job.assignment {
                         py_job.setattr("start_time", sd.begin).unwrap();
                         py_job.setattr("walltime", sd.end - sd.begin + 1).unwrap();
@@ -323,11 +323,11 @@ impl Platform {
                 .unwrap()
                 .iter()
                 .map(|py_id| {
-                    let id: u32 = py_id.extract().unwrap();
+                    let id: i64 = py_id.extract().unwrap();
                     let py_job = py_waiting_jobs_map.get_item(py_id).unwrap().unwrap();
                     Ok((id, build_job(&py_job)))
                 })
-                .collect::<PyResult<IndexMap<u32, Job>>>()
+                .collect::<PyResult<IndexMap<i64, Job>>>()
                 .unwrap(),
         );
     }

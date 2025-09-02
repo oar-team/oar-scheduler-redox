@@ -83,7 +83,7 @@ fn load_priority_yaml(path_opt: &Option<String>) -> PriorityYaml {
 fn evaluate_jobs_karma<P: PlatformTrait>(
     platform: &P,
     queues: &Vec<String>,
-    waiting_jobs: &mut IndexMap<u32, Job>,
+    waiting_jobs: &mut IndexMap<i64, Job>,
 ) {
     let cfg = &platform.get_platform_config().config;
     assert!(cfg.scheduler_fairsharing_window_size.is_some(), "SCHEDULER_FAIRSHARING_WINDOW_SIZE must be set");
@@ -129,7 +129,7 @@ fn evaluate_jobs_karma<P: PlatformTrait>(
 }
 
 /// Compute multifactor priority for each job from YAML config and sort waiting_jobs by priority desc.
-fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>) {
+fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waiting_jobs: &mut IndexMap<i64, Job>) {
     // Load YAML config
     let cfg = &platform.get_platform_config().config;
     let pyaml = load_priority_yaml(&cfg.priority_conf_file);
@@ -147,7 +147,7 @@ fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waitin
     let max_time = platform.get_max_time() as f64;
 
     // Precompute priorities
-    let mut prio: HashMap<u32, f64> = HashMap::with_capacity(waiting_jobs.len());
+    let mut prio: HashMap<i64, f64> = HashMap::with_capacity(waiting_jobs.len());
     for (jid, job) in waiting_jobs.iter() {
         let mut p: f64 = 0.0;
 
@@ -222,7 +222,7 @@ fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waitin
     waiting_jobs.reverse(); // descending
 }
 
-pub fn sort_jobs<P>(platform: &P, queues: &Vec<String>, waiting_jobs: &mut IndexMap<u32, Job>)
+pub fn sort_jobs<P>(platform: &P, queues: &Vec<String>, waiting_jobs: &mut IndexMap<i64, Job>)
 where
     P: PlatformTrait,
 {

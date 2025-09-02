@@ -1,6 +1,6 @@
-use crate::model::gantt::{JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
 use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
+use crate::model::moldable::{JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
 use crate::{Session, SessionInsertStatement, SessionSelectStatement};
 use indexmap::IndexMap;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
@@ -15,15 +15,15 @@ pub enum Jobs {
     #[iden = "jobs"]
     Table,
     #[iden = "job_id"]
-    JobId,
+    Id,
     #[iden = "job_name"]
-    JobName,
+    Name,
     #[iden = "job_env"]
-    JobEnv,
+    Env,
     #[iden = "cpuset"]
     CpuSet,
     #[iden = "job_type"]
-    JobType,
+    Type,
     #[iden = "info_type"]
     InfoType,
     #[iden = "state"]
@@ -33,11 +33,11 @@ pub enum Jobs {
     #[iden = "message"]
     Message,
     #[iden = "job_user"]
-    JobUser,
+    User,
     #[iden = "project"]
     Project,
     #[iden = "job_group"]
-    JobGroup,
+    Group,
     #[iden = "command"]
     Command,
     #[iden = "exit_code"]
@@ -87,7 +87,7 @@ pub enum JobStateLogs {
     #[iden = "job_state_logs"]
     Table,
     #[iden = "job_state_log_id"]
-    JobStateLogId,
+    Id,
     #[iden = "job_id"]
     JobId,
     #[iden = "job_state"]
@@ -124,8 +124,90 @@ pub enum Challenges {
     SshPublicKey,
 }
 
+
+pub fn get_waiting_jobs(session: &Session, queues: Option<Vec<String>>, reservation: String) -> Result<IndexMap<i64, Job>, Error> {
+    let jobs = session.runtime.block_on(async {
+        let rows = Query::select()
+            .columns(vec![
+                Jobs::Id,
+                Jobs::Name,
+                Jobs::User,
+                Jobs::Project,
+                Jobs::QueueName,
+                Jobs::SubmissionTime,
+            ])
+            .from(Jobs::Table)
+            .and_where(Expr::col(Jobs::State).eq("Waiting"))
+            .and_where(Expr::col(Jobs::Reservation).eq(reservation))
+            .apply_if(queues, |req, queues| {
+                req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
+            })
+            .order_by(Jobs::Id, sea_query::Order::Asc)
+            .to_owned()
+            .fetch_all(session)
+            .await?;
+
+        let job_ids = rows
+            .iter()
+            .map(|r| r.get::<i64, &str>(Jobs::Id.to_string().as_str()))
+            .collect::<Vec<i64>>();
+
+        let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
+        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids).await?;
+
+        let jobs = IndexMap::new();
+        for row in rows {
+            let id: i64 = row.get("job_id");
+            let types = jobs_types.get_job_types(id);
+
+            // TODO: get moldable requests
+
+            // TODO: compute depending on types the values of: no_quotas, time_sharing, placeholder
+
+            // Moldable {
+            //     id: 0,
+            //     walltime: 0,
+            //     requests: HierarchyRequests(),
+            //     cache_key: Box::new(()),
+            // };
+
+            Job {
+                id: 0,
+                name: row
+                    .try_get::<String, &str>(Jobs::Name.to_string().as_str())
+                    .map(|s| s.into_boxed_str())
+                    .ok(),
+                user: row
+                    .try_get::<String, &str>(Jobs::User.to_string().as_str())
+                    .map(|s| s.into_boxed_str())
+                    .ok(),
+                project: row
+                    .try_get::<String, &str>(Jobs::Project.to_string().as_str())
+                    .map(|s| s.into_boxed_str())
+                    .ok(),
+                queue: row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str(),
+                moldables: vec![],
+                no_quotas: types.contains_key("no_quotas"),
+                assignment: None,
+                quotas_hit_count: 0,
+                time_sharing: TimeSharingType::from_types(&types),
+                placeholder: PlaceholderType::from_types(&types),
+                dependencies: jobs_dependencies.get_job_dependencies(id),
+                advance_reservation_start_time: None,
+                submission_time: row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()),
+                types,
+                qos: 0.0,
+                nice: 0.0,
+                karma: 0.0,
+            };
+        }
+        Ok::<IndexMap<i64, Job>, Error>(jobs)
+    })?;
+    Ok(jobs)
+}
+
 /// Struct to insert a new job with related entries into the database.
-/// Only used by tests.
+/// Big unstructured piece of code since it should only be used by tests.
 ///
 /// Defaults applied (if not provided):
 /// - queue_name: "default"
@@ -134,14 +216,6 @@ pub enum Challenges {
 /// - properties: "" (internal default)
 /// - res: vec![(60, vec![("resource_id=1".to_string(), "".to_string())])]
 /// - types: []
-///
-/// Behavior:
-/// - Insert into `jobs` with mapped fields (user -> job_user).
-/// - For each res entry (walltime, groups):
-///   - insert into `moldable_job_descriptions` (moldable_job_id, moldable_walltime).
-///   - For each group: insert `job_resource_groups` with (res_group_moldable_id, res_group_property).
-///   - For each resource description in the group ("k=v" split by "/"): insert `job_resource_descriptions` with order preserved.
-/// - Insert job types into `job_types`.
 ///
 /// Return: job_id
 pub struct NewJob {
@@ -173,7 +247,7 @@ impl NewJob {
                 Alias::new(Jobs::CheckpointSignal.to_string()),
                 Alias::new(Jobs::Properties.to_string()),
                 Alias::new(Jobs::QueueName.to_string()),
-                Alias::new(Jobs::JobUser.to_string()),
+                Alias::new(Jobs::User.to_string()),
             ])
             .values_panic(vec![
                 Expr::val(&launching_directory),
@@ -182,7 +256,7 @@ impl NewJob {
                 Expr::val(&queue_name),
                 Expr::val(&job_user),
             ])
-            .returning_col(Jobs::JobId)
+            .returning_col(Jobs::Id)
             .fetch_one(session)
             .await?;
         let job_id: i64 = row.try_get(0)?;
@@ -194,11 +268,11 @@ impl NewJob {
             let mld_row = Query::insert()
                 .into_table(MoldableJobDescriptions::Table)
                 .columns(vec![
-                    Alias::new(MoldableJobDescriptions::MoldableJobId.to_string()),
-                    Alias::new(MoldableJobDescriptions::MoldableWalltime.to_string()),
+                    Alias::new(MoldableJobDescriptions::JobId.to_string()),
+                    Alias::new(MoldableJobDescriptions::Walltime.to_string()),
                 ])
                 .values_panic(vec![Expr::val(job_id), Expr::val(*walltime)])
-                .returning_col(MoldableJobDescriptions::MoldableId)
+                .returning_col(MoldableJobDescriptions::Id)
                 .fetch_one(session)
                 .await?;
             let moldable_id: i64 = mld_row.try_get(0)?;
@@ -209,11 +283,11 @@ impl NewJob {
                 let grp_row = Query::insert()
                     .into_table(JobResourceGroups::Table)
                     .columns(vec![
-                        Alias::new(JobResourceGroups::ResGroupMoldableId.to_string()),
-                        Alias::new(JobResourceGroups::ResGroupProperty.to_string()),
+                        Alias::new(JobResourceGroups::MoldableId.to_string()),
+                        Alias::new(JobResourceGroups::Property.to_string()),
                     ])
                     .values_panic(vec![Expr::val(moldable_id), Expr::val(prop_sql)])
-                    .returning_col(JobResourceGroups::ResGroupId)
+                    .returning_col(JobResourceGroups::Id)
                     .fetch_one(session)
                     .await?;
                 let group_id: i64 = grp_row.try_get(0)?;
@@ -229,10 +303,10 @@ impl NewJob {
                     Query::insert()
                         .into_table(JobResourceDescriptions::Table)
                         .columns(vec![
-                            Alias::new(JobResourceDescriptions::ResJobGroupId.to_string()),
-                            Alias::new(JobResourceDescriptions::ResJobResourceType.to_string()),
-                            Alias::new(JobResourceDescriptions::ResJobValue.to_string()),
-                            Alias::new(JobResourceDescriptions::ResJobOrder.to_string()),
+                            Alias::new(JobResourceDescriptions::GroupId.to_string()),
+                            Alias::new(JobResourceDescriptions::ResourceType.to_string()),
+                            Alias::new(JobResourceDescriptions::Value.to_string()),
+                            Alias::new(JobResourceDescriptions::Order.to_string()),
                         ])
                         .values_panic(vec![
                             Expr::val(group_id),
@@ -264,85 +338,4 @@ impl NewJob {
         // let _ = created_moldable_ids; // currently not returned
         Ok(job_id)
     }
-}
-
-pub fn get_waiting_jobs(session: &Session, queues: Option<Vec<String>>, reservation: String) -> Result<IndexMap<i64, Job>, Error> {
-    let jobs = session.runtime.block_on(async {
-        let rows = Query::select()
-            .columns(vec![
-                Jobs::JobId,
-                Jobs::JobName,
-                Jobs::JobUser,
-                Jobs::Project,
-                Jobs::QueueName,
-                Jobs::SubmissionTime,
-            ])
-            .from(Jobs::Table)
-            .and_where(Expr::col(Jobs::State).eq("Waiting"))
-            .and_where(Expr::col(Jobs::Reservation).eq(reservation))
-            .apply_if(queues, |req, queues| {
-                req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
-            })
-            .order_by(Jobs::JobId, sea_query::Order::Asc)
-            .to_owned()
-            .fetch_all(session)
-            .await?;
-
-        let job_ids = rows
-            .iter()
-            .map(|r| r.get::<i64, &str>(Jobs::JobId.to_string().as_str()))
-            .collect::<Vec<i64>>();
-
-        let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
-        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids).await?;
-
-        let jobs = IndexMap::new();
-        for row in rows {
-            let id: i64 = row.get("job_id");
-            let types = jobs_types.get_job_types(id);
-
-            // TODO: get moldable requests
-
-            // TODO: compute depending on types the values of: no_quotas, time_sharing, placeholder
-
-            // Moldable {
-            //     id: 0,
-            //     walltime: 0,
-            //     requests: HierarchyRequests(),
-            //     cache_key: Box::new(()),
-            // };
-
-            Job {
-                id: 0,
-                name: row
-                    .try_get::<String, &str>(Jobs::JobName.to_string().as_str())
-                    .map(|s| s.into_boxed_str())
-                    .ok(),
-                user: row
-                    .try_get::<String, &str>(Jobs::JobUser.to_string().as_str())
-                    .map(|s| s.into_boxed_str())
-                    .ok(),
-                project: row
-                    .try_get::<String, &str>(Jobs::Project.to_string().as_str())
-                    .map(|s| s.into_boxed_str())
-                    .ok(),
-                queue: row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str(),
-                moldables: vec![],
-                no_quotas: types.contains_key("no_quotas"),
-                assignment: None,
-                quotas_hit_count: 0,
-                time_sharing: TimeSharingType::from_types(&types),
-                placeholder: PlaceholderType::from_types(&types),
-                dependencies: jobs_dependencies.get_job_dependencies(id),
-                advance_reservation_start_time: None,
-                submission_time: row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()),
-                types,
-                qos: 0.0,
-                nice: 0.0,
-                karma: 0.0,
-            };
-        }
-        Ok::<IndexMap<i64, Job>, Error>(jobs)
-    })?;
-    Ok(jobs)
 }

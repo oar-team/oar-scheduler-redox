@@ -11,9 +11,9 @@ pub enum JobDependencies {
     #[iden = "job_id"]
     JobId,
     #[iden = "job_id_required"]
-    JobIdRequired,
+    RequiredJobId,
     #[iden = "job_dependency_index"]
-    JobDependencyIndex,
+    Index,
 }
 
 pub struct AllJobDependencies {
@@ -30,14 +30,14 @@ impl AllJobDependencies {
         let dependencies = Query::select()
             .columns(vec![
                 JobDependencies::JobId.to_string(),
-                JobDependencies::JobIdRequired.to_string(),
+                JobDependencies::RequiredJobId.to_string(),
                 Jobs::State.to_string(),
                 Jobs::ExitCode.to_string(),
             ])
             .from(JobDependencies::Table)
-            .inner_join(Jobs::Table, Expr::col(JobDependencies::JobIdRequired).equals(Jobs::JobId))
+            .inner_join(Jobs::Table, Expr::col(JobDependencies::RequiredJobId).equals(Jobs::Id))
             .and_where(Expr::col(JobDependencies::JobId).is_in(jobs))
-            .and_where(Expr::col(JobDependencies::JobDependencyIndex).eq("CURRENT"))
+            .and_where(Expr::col(JobDependencies::Index).eq("CURRENT"))
             .to_owned()
             .fetch_all(session)
             .await?
@@ -45,7 +45,7 @@ impl AllJobDependencies {
             .map(|r| {
                 (
                     r.get::<i64, &str>(JobDependencies::JobId.to_string().as_str()),
-                    r.get::<i64, &str>(JobDependencies::JobIdRequired.to_string().as_str()),
+                    r.get::<i64, &str>(JobDependencies::RequiredJobId.to_string().as_str()),
                     r.get::<String, &str>(Jobs::State.to_string().as_str()).into_boxed_str(),
                     r.try_get::<i32, &str>(Jobs::ExitCode.to_string().as_str()).ok(),
                 )

@@ -8,7 +8,7 @@ pub enum JobTypes {
     #[iden = "job_types"]
     Table,
     #[iden = "job_type_id"]
-    JobTypeId,
+    Id,
     #[iden = "job_id"]
     JobId,
     #[iden = "type"]

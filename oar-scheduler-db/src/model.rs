@@ -6,6 +6,7 @@ pub mod admin;
 pub mod queues;
 mod job_types;
 mod job_dependencies;
+mod moldable;
 
 pub use admin::*;
 pub use events::*;

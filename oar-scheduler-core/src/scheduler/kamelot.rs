@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -> usize {
+pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: &Vec<String>) -> usize {
     // Insert the already-scheduled besteffort jobs into the slot sets only if scheduling this queue.
     let allow_besteffort = queues.len() == 1 && queues[0] == "besteffort";
     let mut slot_sets = init_slot_sets(platform, allow_besteffort);
@@ -15,7 +15,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: Vec<String>) -
     internal_schedule_cycle(platform, &mut slot_sets, queues)
 }
 
-pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &mut HashMap<Box<str>, SlotSet>, queues: Vec<String>) -> usize {
+pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &mut HashMap<Box<str>, SlotSet>, queues: &Vec<String>) -> usize {
     let _platform_config = platform.get_platform_config();
     let mut waiting_jobs = platform.get_waiting_jobs();
 
@@ -38,7 +38,7 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
 
     if waiting_jobs.len() > 0 {
         // Sorting
-        sort_jobs(platform, &queues, &mut waiting_jobs);
+        sort_jobs(platform, queues, &mut waiting_jobs);
 
         // Scheduling
         schedule_jobs(slot_sets, &mut waiting_jobs);

@@ -4,9 +4,13 @@ use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_db::Session;
 
 #[cfg(test)]
-mod resources_test;
-mod quotas_test;
 mod job_test;
+#[cfg(test)]
+mod queues_test;
+#[cfg(test)]
+mod quotas_test;
+#[cfg(test)]
+mod resources_test;
 
 fn setup_for_tests() -> (Session, Configuration) {
     // Load .env file if present
@@ -17,7 +21,8 @@ fn setup_for_tests() -> (Session, Configuration) {
         .is_test(true)
         .filter(None, LevelFilter::Info)
         .filter(Some("oar3_rust::scheduler::hierarchy"), LevelFilter::Debug)
-        .try_init().ok();
+        .try_init()
+        .ok();
 
     // Load configuration
     let config = Configuration::load();

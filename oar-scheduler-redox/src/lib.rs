@@ -45,7 +45,7 @@ fn schedule_cycle_external(py_session: Bound<PyAny>, py_config: Bound<PyAny>, py
 
     // Scheduling (Platform automatically calls py_platform.save_assigns upon saving scheduled jobs.)
     let queues: Vec<String> = py_queues.extract().unwrap();
-    kamelot::schedule_cycle(&mut platform, queues);
+    kamelot::schedule_cycle(&mut platform, &queues);
 
     Ok(())
 }
@@ -113,7 +113,7 @@ fn schedule_cycle_internal(platform: Bound<PlatformHandle>, slot_sets: Bound<Slo
         kamelot::add_already_scheduled_jobs_to_slot_set(&mut *slot_sets, &mut *platform, true, false);
     }
 
-    kamelot::internal_schedule_cycle(&mut *platform, &mut *slot_sets, queues);
+    kamelot::internal_schedule_cycle(&mut *platform, &mut *slot_sets, &queues);
     Ok(())
 }
 

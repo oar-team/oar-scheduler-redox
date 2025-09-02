@@ -62,7 +62,7 @@ async fn detect_differences(seed: u64) -> bool {
     let mut rust_platform = PlatformBenchMock::new(platform_config, vec![], waiting_jobs.clone());
     let queues = vec!["default".to_string()];
 
-    schedule_cycle(&mut rust_platform, queues.clone());
+    schedule_cycle(&mut rust_platform, &queues);
     let rust_scheduled_jobs = rust_platform.get_scheduled_jobs().clone();
 
     // Run Python scheduler

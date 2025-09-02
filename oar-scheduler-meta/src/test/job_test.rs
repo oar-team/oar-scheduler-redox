@@ -2,12 +2,7 @@ use crate::platform::Platform;
 use crate::test::setup_for_tests;
 use oar_scheduler_db::model::NewJob;
 
-#[test]
-fn test_insert_and_retrive_job() {
-    let (session, config) = setup_for_tests();
-    let mut platform = Platform::from_database(session, config);
-
-    // Create 5 dummy jobs (not scheduled). No randomness used.
+fn insert_jobs_for_tests(platform: &Platform) {
     let j1 = NewJob {
         user: Some("user1".to_string()),
         queue_name: None,
@@ -59,4 +54,13 @@ fn test_insert_and_retrive_job() {
         .expect("insert job 5");
 
     assert!(j1 > 0 && j2 > 0 && j3 > 0 && j4 > 0 && j5 > 0);
+}
+
+#[test]
+fn test_insert_and_retrive_job() {
+    let (session, config) = setup_for_tests();
+    let mut platform = Platform::from_database(session, config);
+    insert_jobs_for_tests(&platform);
+
+    // TODO: test job retrival
 }

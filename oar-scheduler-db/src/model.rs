@@ -3,6 +3,7 @@ pub mod events;
 pub mod gantt;
 pub mod resources;
 pub mod admin;
+pub mod queues;
 
 pub use admin::*;
 pub use events::*;

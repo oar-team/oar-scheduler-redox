@@ -1,4 +1,4 @@
-use crate::model::{resources, NewResource, ResourceLabelValue, Resources};
+use crate::model::{resources, NewResource, Resource, ResourceLabelValue};
 use log::info;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::{ProcSet, ResourceSet};
@@ -51,10 +51,7 @@ pub struct Session {
 
 impl Session {
     pub fn new(database_url: &str, max_connections: u32) -> Session {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
         let (pool, backend) = runtime.block_on(async {
             install_default_drivers();
@@ -111,13 +108,18 @@ impl Session {
             .map(|s| s.split(',').map(|s| s.trim().to_string().into_boxed_str()).collect())
             .unwrap_or(vec![Box::from("resource_id"), Box::from("network_address")]);
 
-
         let order_by = config.scheduler_resource_order.clone().unwrap_or("type, network_address".to_string());
-        let resources = Resources::get_all_sorted(&self, order_by.as_str(), &labels).unwrap();
+        let resources = Resource::get_all_sorted(&self, order_by.as_str(), &labels).unwrap();
         info!("Loaded {} resources from database", resources.len());
         info!("Resource labels considered: {:?}", labels);
 
-        let suspended_types: Vec<String> = config.scheduler_available_suspended_resource_type.clone().unwrap_or("".to_string()).split(',').map(|s| s.trim().to_string()).collect();
+        let suspended_types: Vec<String> = config
+            .scheduler_available_suspended_resource_type
+            .clone()
+            .unwrap_or("".to_string())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
 
         let mut nb_resources_not_dead = 0;
         let mut nb_resources_default_not_dead = 0;

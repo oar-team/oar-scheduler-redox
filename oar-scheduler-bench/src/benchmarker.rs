@@ -283,7 +283,7 @@ impl BenchmarkConfig {
                 let queues = vec!["default".to_string()];
 
                 let (scheduling_time, slot_count) = match target {
-                    BenchmarkTarget::Rust => measure_time(|| schedule_cycle(&mut platform, queues)),
+                    BenchmarkTarget::Rust => measure_time(|| schedule_cycle(&mut platform, &queues)),
                     BenchmarkTarget::Python => schedule_cycle_on_oar_python(&mut platform, queues, false),
                     BenchmarkTarget::RustFromPython => schedule_cycle_on_oar_python(&mut platform, queues, true),
                 };

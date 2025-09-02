@@ -164,7 +164,7 @@ pub enum JobDependencies {
 ///
 /// Return: job_id
 pub struct NewJob {
-    pub user: Option<String>, // mapped to jobs.job_user
+    pub user: Option<String>, // jobs.job_user
     pub queue_name: Option<String>,
     /// res = [(walltime, [("res_hierarchy", "properties_sql"), ...]), ...]
     pub res: Vec<(i64, Vec<(String, String)>)>,
@@ -176,7 +176,6 @@ impl NewJob {
         session.runtime.block_on(async { self.insert_async(session).await })
     }
     async fn insert_async(&self, session: &Session) -> Result<i64, Error> {
-        // Apply defaults
         let launching_directory = "".to_string();
         let checkpoint_signal: i64 = 0;
         let properties = "".to_string();
@@ -207,10 +206,10 @@ impl NewJob {
             .await?;
         let job_id: i64 = row.try_get(0)?;
 
-        // Insert moldable_job_descriptions, job_resource_groups, job_resource_descriptions
+        // For each moldable description
         let mut created_moldable_ids: Vec<i64> = Vec::new();
         for (walltime, groups) in self.res.iter() {
-            // moldable_job_descriptions
+            // Insert moldable_job_descriptions
             let mld_row = Query::insert()
                 .into_table(MoldableJobDescriptions::Table)
                 .columns(vec![
@@ -224,7 +223,7 @@ impl NewJob {
             let moldable_id: i64 = mld_row.try_get(0)?;
             created_moldable_ids.push(moldable_id);
 
-            // job_resource_groups for each group
+            // Insert job_resource_groups for each group
             for (res_hierarchy, prop_sql) in groups.iter() {
                 let grp_row = Query::insert()
                     .into_table(JobResourceGroups::Table)
@@ -257,7 +256,6 @@ impl NewJob {
                         .values_panic(vec![
                             Expr::val(group_id),
                             Expr::val(k),
-                            // In DB schema SQLite, res_job_value is INTEGER; keep behavior by parsing else default 0
                             match v.parse::<i64>() {
                                 Ok(i) => Expr::val(i),
                                 Err(_) => Expr::val(0),
@@ -286,3 +284,5 @@ impl NewJob {
         Ok(job_id)
     }
 }
+
+

@@ -5,7 +5,7 @@ use sqlx::{Error, Row};
 use std::collections::HashMap;
 
 #[derive(Iden)]
-pub enum Resources {
+enum Resources {
     #[iden = "resources"]
     Table,
     #[iden = "resource_id"]
@@ -39,7 +39,7 @@ pub enum Resources {
 }
 
 #[derive(Iden)]
-pub enum ResourceLogs {
+enum ResourceLogs {
     #[iden = "resource_logs"]
     Table,
     #[iden = "resource_log_id"]
@@ -59,7 +59,7 @@ pub enum ResourceLogs {
 }
 
 #[derive(Iden)]
-pub enum Files {
+enum Files {
     #[iden = "files"]
     Table,
     #[iden = "file_id"]
@@ -76,22 +76,10 @@ pub enum Files {
     Size,
 }
 
-#[derive(Iden)]
-pub enum Queues {
-    #[iden = "queues"]
-    Table,
-    #[iden = "queue_name"]
-    QueueName,
-    #[iden = "priority"]
-    Priority,
-    #[iden = "scheduler_policy"]
-    SchedulerPolicy,
-    #[iden = "state"]
-    State,
-}
+
 
 #[derive(Iden)]
-pub enum Accounting {
+enum Accounting {
     #[iden = "accounting"]
     Table,
     #[iden = "window_start"]
@@ -175,7 +163,8 @@ pub enum ResourceLabelValue {
     Varchar(String),
 }
 
-impl Resources {
+pub struct Resource {}
+impl Resource {
     /// Get all resources, sorted by the given order_by_clause (e.g., "type, network_address").
     /// The labels parameter should contain column names to be included in the result.
     /// Returns: (type, state, available_upto, label_name -> label_value)

@@ -28,7 +28,7 @@ fn setup_for_tests() -> (Session, Configuration) {
     let config = Configuration::load();
 
     // Initialize database connection
-    let session = Session::new("sqlite::memory:", 1);
+    let session = Session::new("sqlite::memory:");
 
     // Create schema
     session.create_schema();

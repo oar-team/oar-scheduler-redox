@@ -6,7 +6,7 @@ use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_db::Session;
 
-const OAR_CONFIG: &str = include_str!("../../oar_config.toml");
+const OAR_CONFIG: &str = include_str!("../../oar_config.env");
 const QUOTAS_CONFIG: &str = include_str!("../../quotas_config.json");
 
 fn quotas_setup() -> Platform {

@@ -21,7 +21,7 @@ pyo3 = { version = "0.25", optional = true }
 auto_bench_fct = { version = "1", features = ["log"] }
 lazy_static = "1.5.0"
 chrono = "0.4.41"
-toml = "0.9.5"
+serde-envfile = "0.3.0"
 
 [dev-dependencies]
 env_logger = "0.11.8"

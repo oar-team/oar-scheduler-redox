@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_CONFIG_FILE: &str = "/etc/oar/oar.conf";
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct Configuration {
     pub scheduler_job_security_time: i64,
     pub cache_enabled: bool,
@@ -39,7 +38,7 @@ impl Configuration {
 
         let contents = std::fs::read_to_string(&path).ok();
         if let Some(contents) = contents {
-            toml::from_str(&contents).unwrap_or_else(|e| {
+            serde_envfile::from_str(&contents).unwrap_or_else(|e| {
                 eprintln!(
                     "Warning: could not parse configuration file '{}': {}, using default configuration.",
                     path, e

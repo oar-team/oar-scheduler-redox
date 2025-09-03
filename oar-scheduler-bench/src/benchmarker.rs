@@ -205,7 +205,7 @@ impl BenchmarkConfig {
             BenchmarkTarget::Python => "py",
             BenchmarkTarget::RustFromPython => "rp",
         };
-        format!("./benchmarks/{}_{}_{}-{}.svg", prefix, profile, target, self.sample_type.to_string())
+        format!("./oar-scheduler-bench/benchmarks/{}_{}_{}-{}.svg", prefix, profile, target, self.sample_type.to_string())
     }
     pub fn benchmark_friendly_name(&self) -> String {
         #[cfg(debug_assertions)]

@@ -7,7 +7,7 @@ pub fn queues_schedule(platform: &mut Platform) {
     // TODO: Initialize gant visualization with the `gantt_init_with_running_jobs` behavior
 
     // Init slotset
-    let mut slot_sets = kamelot::init_slot_sets(&*platform, false);
+    let mut slot_sets = kamelot::init_slot_sets(platform, false);
 
     // Schedule each queue
     let grouped_queues: Vec<Vec<Queue>> = Queue::get_all_grouped_by_priority(&platform.session()).expect("Failed to get queues from database");
@@ -23,9 +23,9 @@ pub fn queues_schedule(platform: &mut Platform) {
         kamelot::internal_schedule_cycle(&mut *platform, &mut slot_sets, &active_queues);
 
         for queue in active_queues {
-            // TODO: Manage waiting reservation jobs with the `handle_waiting_reservation_jobs` behavior
+            // TODO: (MVP REQUIRED) Manage waiting reservation jobs with the `handle_waiting_reservation_jobs` behavior
 
-            // TODO: Check reservation jobs with the `check_reservation_jobs` behavior
+            // TODO: (MVP REQUIRED) Check reservation jobs with the `check_reservation_jobs` behavior
         }
     }
 }

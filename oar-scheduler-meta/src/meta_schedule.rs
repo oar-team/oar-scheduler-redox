@@ -9,7 +9,7 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
     // Schedule queues
     queues_schedule(platform);
 
-    // TODO: Implement `get_gantt_jobs_to_launch` with config values SCHEDULER_BESTEFFORT_KILL_DURATION_BEFORE_RESERVATION
+    // TODO: (MVP REQUIRED) Implement `get_gantt_jobs_to_launch` with config values SCHEDULER_BESTEFFORT_KILL_DURATION_BEFORE_RESERVATION
 
     // TODO: Implement the besteffort kill & jobs launch logic
 
@@ -21,9 +21,9 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
     // TODO: Notify users about the start prediction
 
-    // TODO: Process toAckReservation jobs
+    // TODO: (MVP REQUIRED) Process toAckReservation jobs
 
-    // TODO: Process toLaunch jobs
+    // TODO: (MVP REQUIRED) Process toLaunch jobs
 
     // Done
     exit_code

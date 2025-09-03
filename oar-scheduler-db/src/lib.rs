@@ -55,7 +55,8 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(database_url: &str, max_connections: u32) -> Session {
+    pub fn new(database_url: &str) -> Session {
+        let max_connections = 1; // Only one connection is needed since we are using a single-threaded runtime.
         let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
         let (pool, backend) = runtime.block_on(async {

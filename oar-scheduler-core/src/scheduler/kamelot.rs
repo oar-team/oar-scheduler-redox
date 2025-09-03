@@ -103,15 +103,16 @@ pub fn add_already_scheduled_jobs_to_slot_set<T>(slot_sets: &mut HashMap<Box<str
 where
     T: PlatformTrait,
 {
-    let mut scheduled_jobs = platform.get_scheduled_jobs().iter().collect::<Vec<&Job>>();
+    let scheduled_jobs = platform.get_scheduled_jobs();
+    let mut scheduled_jobs = scheduled_jobs.iter().collect::<Vec<&Job>>();
     scheduled_jobs.sort_by_key(|j| j.begin().unwrap());
     if allow_besteffort && !allow_other {
         // Retain only besteffort jobs
         scheduled_jobs.retain(|j| j.queue.as_ref() == "besteffort");
-    }else if !allow_besteffort && allow_other {
+    } else if !allow_besteffort && allow_other {
         // Retain only non-besteffort jobs
         scheduled_jobs.retain(|j| j.queue.as_ref() != "besteffort");
-    }else if !allow_besteffort && !allow_other {
+    } else if !allow_besteffort && !allow_other {
         return;
     }
     let mut slot_set_jobs: HashMap<Box<str>, Vec<&Job>> = HashMap::new();

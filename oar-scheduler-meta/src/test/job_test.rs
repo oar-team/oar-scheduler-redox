@@ -1,7 +1,7 @@
 use crate::platform::Platform;
 use crate::test::setup_for_tests;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
-use oar_scheduler_db::model::{get_waiting_jobs, NewJob};
+use oar_scheduler_db::model::{get_jobs, NewJob};
 use std::collections::HashMap;
 
 fn insert_jobs_for_tests(platform: &Platform) {
@@ -17,7 +17,7 @@ fn insert_jobs_for_tests(platform: &Platform) {
     let j2 = NewJob {
         user: Some("user2".to_string()),
         queue_name: "besteffort".to_string(),
-        res: vec![(120, vec![("nodes=2/cpu=1".to_string(), "".to_string())])],
+        res: vec![(120, vec![("nodes=1/cpu=2".to_string(), "".to_string()), ("nodes=1/cpu=3".to_string(), "lowpower=true".to_string())]), (30, vec![("nodes=1/cpu=8".to_string(), "".to_string())])],
         types: vec!["besteffort".to_string(), "container".to_string()],
     }
         .insert(platform.session())
@@ -65,8 +65,8 @@ fn test_insert_and_retrieve_job() {
     let platform = Platform::from_database(session, config);
     insert_jobs_for_tests(&platform);
 
-    let default_jobs = get_waiting_jobs(&platform.session(), Some(vec!["default".to_string()]), "None".to_string()).unwrap();
-    let besteffort_jobs = get_waiting_jobs(&platform.session(), Some(vec!["besteffort".to_string()]), "None".to_string()).unwrap();
+    let default_jobs = get_jobs(&platform.session(), Some(vec!["default".to_string()]), "None".to_string(), None).unwrap();
+    let besteffort_jobs = get_jobs(&platform.session(), Some(vec!["besteffort".to_string()]), "None".to_string(), None).unwrap();
 
     assert_eq!(default_jobs.len(), 3);
     assert_eq!(besteffort_jobs.len(), 2);
@@ -108,5 +108,48 @@ fn test_insert_and_retrieve_job() {
     assert_eq!(job_5.types, job_5_types);
 
     // Checking moldables
-    // TODO: test moldables requests
+
+    let mld_1 = &job_1.moldables[0];
+    let mut mld_2_1 = &job_2.moldables[0];
+    let mut mld_2_2 = &job_2.moldables[1];
+    let mld_3 = &job_3.moldables[0];
+    let mld_4 = &job_4.moldables[0];
+    let mld_5 = &job_5.moldables[0];
+    if mld_2_1.walltime < mld_2_2.walltime {
+        let mld_tmp = mld_2_1;
+        mld_2_1 = mld_2_2;
+        mld_2_2 = mld_tmp;
+    }
+    assert_eq!(mld_1.walltime, 60);
+    assert_eq!(mld_2_1.walltime, 120);
+    assert_eq!(mld_2_2.walltime, 30);
+    assert_eq!(mld_3.walltime, 30);
+    assert_eq!(mld_4.walltime, 300);
+    assert_eq!(mld_5.walltime, 90);
+
+    assert_eq!(mld_1.requests.0.len(), 1);
+    assert_eq!(mld_2_1.requests.0.len(), 2);
+    assert_eq!(mld_2_2.requests.0.len(), 1);
+    assert_eq!(mld_3.requests.0.len(), 1);
+    assert_eq!(mld_4.requests.0.len(), 2);
+    assert_eq!(mld_5.requests.0.len(), 1);
+
+    let req_1 = &mld_1.requests.0[0];
+    let req_2_1_1 = &mld_2_1.requests.0[0];
+    let req_2_1_2 = &mld_2_1.requests.0[1];
+    let req_2_2 = &mld_2_2.requests.0[0];
+    let req_3 = &mld_3.requests.0[0];
+    let req_4_1 = &mld_4.requests.0[0];
+    let req_4_2 = &mld_4.requests.0[1];
+    let req_5 = &mld_5.requests.0[0];
+
+    assert_eq!(req_1.level_nbs, Box::from([(Box::from("resource_id"), 1)]));
+    assert_eq!(req_2_1_1.level_nbs, Box::from([(Box::from("nodes"), 1), (Box::from("cpu"), 2)]));
+    assert_eq!(req_2_1_2.level_nbs, Box::from([(Box::from("nodes"), 1), (Box::from("cpu"), 3)]));
+    assert_eq!(req_2_2.level_nbs, Box::from([(Box::from("nodes"), 1), (Box::from("cpu"), 8)]));
+    assert_eq!(req_3.level_nbs, Box::from([(Box::from("nodes"), 1)]));
+    assert_eq!(req_4_1.level_nbs, Box::from([(Box::from("switch"), 1), (Box::from("nodes"), 4)]));
+    assert_eq!(req_4_2.level_nbs, Box::from([(Box::from("licence"), 20)]));
+    assert_eq!(req_5.level_nbs, Box::from([(Box::from("nodes"), 3)]));
+
 }

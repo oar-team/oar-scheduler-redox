@@ -26,8 +26,8 @@ impl PlatformTrait for PlatformBenchMock {
         &self.platform_config
     }
 
-    fn get_scheduled_jobs(&self) -> &Vec<Job> {
-        &self.scheduled_jobs
+    fn get_scheduled_jobs(&self) -> Vec<Job> {
+        self.scheduled_jobs.clone()
     }
     fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
         self.waiting_jobs.clone()

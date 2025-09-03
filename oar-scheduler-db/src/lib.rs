@@ -44,9 +44,14 @@ impl Backend {
 }
 
 pub struct Session {
+    /// sqlx connection pool.
     pool: AnyPool,
+    /// Database backend type (Postgres or Sqlite).
     backend: Backend,
+    /// Tokio runtime used to run async database operations in a sync context.
     runtime: Runtime,
+    /// Maps the database resource ID to the enumerated ID used in the ProcSet.
+    resource_id_to_resource_index: HashMap<i32, u32>,
 }
 
 impl Session {
@@ -67,8 +72,8 @@ impl Session {
             conn.close().await.unwrap();
             (pool, backend)
         });
-
-        Session { pool, backend, runtime }
+        let resource_id_to_resource_index = HashMap::new();
+        Session { pool, backend, runtime, resource_id_to_resource_index }
     }
     pub fn get_now(&self) -> i64 {
         match self.backend {
@@ -101,7 +106,8 @@ impl Session {
             sqlx::query(sql).execute(&self.pool).await.expect("Failed to create schema");
         });
     }
-    pub fn get_resource_set(&self, config: &Configuration) -> ResourceSet {
+    pub fn get_resource_set(&mut self, config: &Configuration) -> ResourceSet {
+        let mut resource_id_to_resource_index = HashMap::new();
         let labels = config
             .hierarchy_labels
             .clone()
@@ -129,27 +135,28 @@ impl Session {
         // Mapping: resource label name -> (resource label value -> [enumerated id])
         let mut hierarchy_resources: HashMap<Box<str>, HashMap<ResourceLabelValue, Vec<u32>>> = HashMap::new();
 
-        for (id, (r#type, state, available_upto, labels_map)) in resources.iter().enumerate() {
-            info!("Resource {}: type={}, state={} map={:?}", id, r#type, state, labels_map);
-            if r#state.to_lowercase() != "dead" {
+        for (enumerated_id, resource) in resources.iter().enumerate() {
+            resource_id_to_resource_index.insert(resource.id, enumerated_id as u32);
+            info!("Resource {}: id={} type={}, state={} map={:?}", enumerated_id, resource.id, resource.r#type, resource.state, resource.labels);
+            if resource.r#state.to_lowercase() != "dead" {
                 nb_resources_not_dead += 1;
-                if r#type.to_lowercase() == "default" {
+                if resource.r#type.to_lowercase() == "default" {
                     nb_resources_default_not_dead += 1;
                 }
             }
-            if state.to_lowercase() == "alive" || state.to_lowercase() == "absent" {
-                if r#type.to_lowercase() == "default" {
-                    default_resources.push(id as u32);
+            if resource.state.to_lowercase() == "alive" || resource.state.to_lowercase() == "absent" {
+                if resource.r#type.to_lowercase() == "default" {
+                    default_resources.push(enumerated_id as u32);
                 }
-                for (label, value) in labels_map.iter() {
+                for (label, value) in resource.labels.iter() {
                     let entry = hierarchy_resources.entry(label.clone()).or_insert_with(HashMap::new);
-                    entry.entry(value.clone()).or_insert_with(Vec::new).push(id as u32);
+                    entry.entry(value.clone()).or_insert_with(Vec::new).push(enumerated_id as u32);
                 }
-                if let Some(time) = available_upto {
-                    available_upto_map.entry(*time).or_insert_with(Vec::new).push(id as u32);
+                if let Some(time) = resource.available_upto {
+                    available_upto_map.entry(time).or_insert_with(Vec::new).push(enumerated_id as u32);
                 }
-                if suspended_types.contains(&r#type) {
-                    suspendable_resources.push(id as u32);
+                if suspended_types.contains(&resource.r#type) {
+                    suspendable_resources.push(enumerated_id as u32);
                 }
             }
         }
@@ -171,6 +178,7 @@ impl Session {
             };
         }
 
+        self.resource_id_to_resource_index = resource_id_to_resource_index;
         ResourceSet {
             nb_resources_not_dead,
             nb_resources_default_not_dead,
@@ -182,6 +190,9 @@ impl Session {
                 .collect(),
             hierarchy,
         }
+    }
+    pub fn resource_id_to_resource_index(&self, resource_id: i32) -> Option<u32> {
+        self.resource_id_to_resource_index.get(&resource_id).cloned()
     }
 }
 

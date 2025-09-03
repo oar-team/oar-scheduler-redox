@@ -30,5 +30,5 @@ pub enum AssignedResources {
     #[iden = "resource_id"]
     ResourceId,
     #[iden = "assigned_resource_index"]
-    AssignedResourceIndex,
+    Index,
 }

@@ -124,7 +124,7 @@ pub fn platform_to_dict<'a, P: PlatformTrait>(py: Python<'a>, platform: &P) -> B
     // Convert scheduled jobs
     let scheduled_jobs = PyList::empty(py);
     for job in platform.get_scheduled_jobs() {
-        scheduled_jobs.append(job).unwrap();
+        scheduled_jobs.append(&job).unwrap();
     }
     dict.set_item("scheduled_jobs", scheduled_jobs).unwrap();
 

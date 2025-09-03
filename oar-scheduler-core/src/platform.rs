@@ -20,7 +20,7 @@ pub trait PlatformTrait {
     fn get_platform_config(&self) -> &Rc<PlatformConfig>;
 
     /// Returns already scheduled jobs (in higher priority queues), or advanced reservations.
-    fn get_scheduled_jobs(&self) -> &Vec<Job>;
+    fn get_scheduled_jobs(&self) -> Vec<Job>;
 
     /// Returns the jobs waiting to be scheduled for the provided queues.
     /// Jobs should be sorted according to the meta-scheduler sorting algorithm.
@@ -73,6 +73,7 @@ pub struct PlatformConfig {
 pub struct ResourceSet {
     pub nb_resources_not_dead: u32,
     pub nb_resources_default_not_dead: u32,
+    /// Resources that contain a type in the config SCHEDULER_AVAILABLE_SUSPENDED_RESOURCE_TYPE list.
     pub suspendable_resources: ProcSet,
     /// Default available resources for slot initialization.
     pub default_resources: ProcSet,

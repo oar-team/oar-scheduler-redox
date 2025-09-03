@@ -2,6 +2,7 @@ use indexmap::IndexMap;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::model::job::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
+use oar_scheduler_db::model::get_jobs;
 use oar_scheduler_db::Session;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -13,7 +14,7 @@ pub struct Platform {
 }
 
 impl Platform {
-    pub fn from_database(session: Session, config: Configuration) -> Self {
+    pub fn from_database(mut session: Session, config: Configuration) -> Self {
         let now = session.get_now();
         let resource_set = session.get_resource_set(&config);
         let quotas_config = oar_scheduler_core::platform::build_quotas_config(&config, &resource_set);
@@ -46,11 +47,13 @@ impl PlatformTrait for Platform {
         &self.platform_config
     }
 
-    fn get_scheduled_jobs(&self) -> &Vec<Job> {
-        todo!()
+    fn get_scheduled_jobs(&self) -> Vec<Job> {
+        get_jobs(&self.session, Some(vec!["scheduled".to_string()]), "None".to_string(), Some("Scheduled".to_string())).unwrap()
+            .into_values()
+            .collect::<Vec<Job>>()
     }
     fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
-        todo!()
+        get_jobs(&self.session, Some(vec!["scheduled".to_string()]), "None".to_string(), Some("Waiting".to_string())).unwrap()
     }
     fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>) {
         todo!()

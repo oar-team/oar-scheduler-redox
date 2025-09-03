@@ -1,3 +1,4 @@
+use crate::model::AssignedResources;
 use crate::{Session, SessionSelectStatement};
 use oar_scheduler_core::model::job::Moldable;
 use oar_scheduler_core::model::job::ProcSet;
@@ -48,6 +49,21 @@ pub enum JobResourceGroups {
     Property,
     #[iden = "res_group_index"]
     Index,
+}
+
+pub(crate) async fn get_moldable_assigned_resources(session: &Session, moldable_id: i64) -> Result<ProcSet, Error> {
+    let resources = Query::select()
+        .columns(vec![AssignedResources::ResourceId])
+        .from(AssignedResources::Table)
+        .and_where(Expr::col(AssignedResources::MoldableJobId).eq(moldable_id))
+        .and_where(Expr::col(AssignedResources::Index).eq("CURRENT"))
+        .fetch_all(session)
+        .await?;
+    let resources: ProcSet = ProcSet::from_iter(resources.iter().map(|row| {
+        let res_id: i32 = row.get(AssignedResources::ResourceId.to_string().as_str());
+        session.resource_id_to_resource_index(res_id).expect("Resource not found. There might be a database concurrency issue.")
+    }));
+    Ok(resources)
 }
 
 pub struct AllJobMoldables {

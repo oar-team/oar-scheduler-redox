@@ -163,16 +163,20 @@ pub enum ResourceLabelValue {
     Varchar(String),
 }
 
-pub struct Resource {}
+pub struct Resource {
+    pub id: i32,
+    pub r#type: String,
+    pub state: String,
+    pub available_upto: Option<i64>,
+    pub labels: HashMap<Box<str>, ResourceLabelValue>,
+}
 impl Resource {
     /// Get all resources, sorted by the given order_by_clause (e.g., "type, network_address").
-    /// The labels parameter should contain column names to be included in the result.
-    /// Returns: (type, state, available_upto, label_name -> label_value)
     pub fn get_all_sorted(
         session: &Session,
         order_by_clause: &str,
         labels: &Vec<Box<str>>,
-    ) -> Result<Vec<(String, String, Option<i64>, HashMap<Box<str>, ResourceLabelValue>)>, Error> {
+    ) -> Result<Vec<Resource>, Error> {
         let rows = session.runtime.block_on(async {
             Query::select()
                 .columns(vec![Resources::Type, Resources::State, Resources::AvailableUpto])
@@ -185,9 +189,6 @@ impl Resource {
 
         let mut results = Vec::new();
         for row in rows {
-            let r#type: String = row.try_get("type")?;
-            let state: String = row.try_get("state")?;
-            let available_upto: Option<i64> = row.try_get("available_upto")?;
             let mut map = HashMap::new();
             labels.iter().for_each(|label| {
                 let value: Result<i64, _> = row.try_get(label.as_ref());
@@ -200,7 +201,13 @@ impl Resource {
                     map.insert(label.clone(), ResourceLabelValue::Varchar(v));
                 }
             });
-            results.push((r#type, state, available_upto, map));
+            results.push(Resource {
+                id: row.get("resource_id"),
+                r#type: row.get("type"),
+                state: row.get("state"),
+                available_upto: row.get("available_upto"),
+                labels: map,
+            });
         }
         Ok(results)
     }

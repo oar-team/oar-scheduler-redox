@@ -63,14 +63,14 @@ async fn detect_differences(seed: u64) -> bool {
     let queues = vec!["default".to_string()];
 
     schedule_cycle(&mut rust_platform, &queues);
-    let rust_scheduled_jobs = rust_platform.get_scheduled_jobs().clone();
+    let rust_scheduled_jobs = rust_platform.get_scheduled_jobs();
 
     // Run Python scheduler
     let platform_config = generate_mock_platform_config(true, res_count, 20, 5, 5, false);  // Generate again
     let mut python_platform = PlatformBenchMock::new(platform_config, vec![], waiting_jobs.clone());
 
     schedule_cycle_on_oar_python(&mut python_platform, queues, false);
-    let python_scheduled_jobs = python_platform.get_scheduled_jobs().clone();
+    let python_scheduled_jobs = python_platform.get_scheduled_jobs();
 
     // Compare results
     if rust_scheduled_jobs.len() != python_scheduled_jobs.len() {

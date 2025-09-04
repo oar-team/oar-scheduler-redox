@@ -6,6 +6,8 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
     // TODO: Implement `process_walltime_change_requests` with config values WALLTIME_CHANGE_ENABLED, WALLTIME_CHANGE_APPLY_TIME, WALLTIME_INCREMENT
 
+    // TODO: (MVP REQUIRED) Initialize gant (only tables gantt_jobs_resources and gantt_jobs_prediction) with the `gantt_init_with_running_jobs` behavior
+
     // Schedule queues
     queues_schedule(platform);
 
@@ -21,7 +23,7 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
     // TODO: Notify users about the start prediction
 
-    // TODO: (MVP REQUIRED) Process toAckReservation jobs
+    // TODO: Process toAckReservation jobs
 
     // TODO: (MVP REQUIRED) Process toLaunch jobs
 

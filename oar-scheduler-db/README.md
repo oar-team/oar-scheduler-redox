@@ -8,7 +8,7 @@ Queries are first built using sea-query to the target database (either PostgreSQ
 ### Notes about dynamic database schema
 
 The original OAR3 database schema is dynamic, meaning that tables and columns can be added or removed at any time.
-Only the `resources` table is concerned by this. Indeed, sysadmins can define custom rows in the `resources` table act as hierarchy identifiers.
+Only the `resources` table is concerned by this. Indeed, sysadmins can define custom rows in the `resources` table to act as hierarchy identifiers.
 For example, if the sysadmin wants to define a hierarchy `switch/node/cpu/core`, they can add the columns `switch`, `node`, `cpu` and `core` to the
 `resources` table, set the configuration value `HIERARCHY_LABELS=resource_id,network_address,core,cpu,host,mem`, and then make requests using these
 hierarchy levels.
@@ -18,7 +18,8 @@ To be compatible with the original OAR3 database schema, this crate support dyna
 
 ### Notes about asynchronous code
 
-`sqlx` is an asynchronous-only library. However, the scheduler is single-threaded and synchronous. This crates offers an entirely synchronous API to
+`sqlx` is an asynchronous-only library. However, the scheduler is single-threaded and synchronous. Then this crate offers an entirely synchronous API
+to
 isolate the rest of the scheduler from asynchronous code. It uses `tokio` under the hood only building a tokio runtime at the `Session`
 initialization, and then using that runtime to do `block_on` calls to run async code.
 
@@ -31,4 +32,4 @@ let database_url = "postgres://user:password@localhost/oar_db"; // Either Postgr
 let session = oar_scheduler_db::Session::new(database_url).await?;
 ```
 
-The session must then be passed to any function call involving database access.
+The session must then be passed to any function call involving database access (see module [`oar_scheduler_db::model`](src/model)).

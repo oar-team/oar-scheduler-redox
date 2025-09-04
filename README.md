@@ -17,10 +17,11 @@ This Rust implementation is 10 to 100 times faster than the original Python impl
 
 # Crates
 
-`oar-scheduler-redox` is the Python entrypoint of this Rust scheduler, but under the hood, the project is composed of six
+[`oar-scheduler-redox`](/oar-scheduler-redox) is the Python entrypoint of this Rust scheduler, but under the hood, the project is composed of six
 crates, allowing us to benefit from a low-coupling modular architecture.
 
-The crate `oar-scheduler-meta`, still a work in progress, aims to provide a full python-independent meta-scheduler implementation in Rust.
+The crate [`oar-scheduler-meta`](/oar-scheduler-meta), still a work in progress, aims to provide a full python-independent meta-scheduler
+implementation in Rust.
 
 Here is the DAG of the dependencies between the crates:
 
@@ -39,17 +40,17 @@ graph TD
 
 Each crate has its own README with full documentation:
 
-- [oar-scheduler-core](./oar-scheduler-core/README.md): core scheduling algorithms and data models.
-- [oar-scheduler-hooks](./oar-scheduler-hooks/README.md): hooks system allowing sysadmins to code plugins in Rust.
-- [oar-scheduler-db](./oar-scheduler-db/README.md): database integration for the meta-scheduler.
-- [oar-scheduler-bench](./oar-scheduler-bench/README.md) (cli entrypoint): benchmarking framework working with both Rust and Python schedulers.
-- [oar-scheduler-redox](./oar-scheduler-redox/README.md) (maturin entrypoint): Python bindings to integrate the Rust scheduler into OAR3.
-- [oar-scheduler-meta](./oar-scheduler-meta/README.md) (cli entrypoint): work in progress crate to provide a full meta-scheduler implementation in
+- [oar-scheduler-core](/oar-scheduler-core): core scheduling algorithms and data models.
+- [oar-scheduler-hooks](/oar-scheduler-hooks): hooks system allowing sysadmins to code plugins in Rust.
+- [oar-scheduler-db](/oar-scheduler-db): database integration for the meta-scheduler.
+- [oar-scheduler-bench](/oar-scheduler-bench) (cli entrypoint): benchmarking framework working with both Rust and Python schedulers.
+- [oar-scheduler-redox](/oar-scheduler-redox) (maturin entrypoint): Python bindings to integrate the Rust scheduler into OAR3.
+- [oar-scheduler-meta](/oar-scheduler-meta) (cli entrypoint): work in progress crate to provide a full meta-scheduler implementation in
   Rust.
 
 # Roadmap
 
-### Scheduler (`oar-scheduler-core`)
+### Scheduler ([`oar-scheduler-core`](/oar-scheduler-core))
 
 - [x] Basic scheduler, advance reservation & platform setup
 - [x] Hierarchies request support
@@ -62,31 +63,31 @@ Each crate has its own README with full documentation:
 - [x] Implement job sorting on the Rust side.
 - [ ] Envelopes support
 
-### Plugins support (`oar-scheduler-hooks`)
+### Plugins support ([`oar-scheduler-hooks`](/oar-scheduler-hooks))
 
 - [x] Rust hooks support (plugins developed in Rust)
 - [ ] Python hooks support (plugins developed in Python, called from Rust)
 
-### Database support (`oar-scheduler-db`)
+### Database support ([`oar-scheduler-db`](/oar-scheduler-db))
 
 - [x] Building a database framework around sqlx and sea-query supporting both PostgreSQL and SQLite for tests (schema must be dynamic).
 - [x] Support CRUD operations needed for Platform initialization (resources and jobs fetching).
 - [ ] Support CRUD operations needed for job updates (job scheduling, job messages and status, etc.).
 - [ ] Support CRUD operations needed for Gantt job visualization.
 
-### Benchmarking (`oar-scheduler-bench`)
+### Benchmarking ([`oar-scheduler-bench`](/oar-scheduler-bench))
 
 - [x] Benchmarking framework
 - [x] Calling the Python scheduler from the benchmarking framework
 - [x] Macros for function time measurement ([auto_bench_fct](https://crates.io/crates/auto_bench_fct))
 
-### Python integration (`oar-scheduler-redox`)
+### Python integration ([`oar-scheduler-redox`](/oar-scheduler-redox))
 
 - [x] Expose the Rust scheduler as a Python library
 - [x] Support external mode (convert platform: jobs, config, resources set, etc.)
 - [x] Support internal (mixed) mode (implement some parts of the meta-scheduler into Rust, and edit the Python meta-scheduler to add the integration)
 
-### Standalone meta-scheduler (`oar-scheduler-meta`)
+### Standalone meta-scheduler ([`oar-scheduler-meta`](/oar-scheduler-meta))
 
 - [x] Meta-scheduler base structure with core features.
 - [ ] Minimal meta-scheduler (no gantt visualization, no node management, only TOODs marked as `(MVP REQUIRED)` )

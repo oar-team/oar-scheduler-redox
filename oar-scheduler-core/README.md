@@ -4,15 +4,16 @@
 
 This crate is a Rust library that implements the core scheduling algorithms of OAR3. It also contains the main data models.
 
-This crate corresponds to all python code called after the kamelot.py file in OAR3.
+This crate corresponds to all python code called after the `kamelot.py` file in OAR3.
 
-Tha `Platform` trait and a mutable reference to a struct implementing this trait is the data access layer for the scheduler.
+The `Platform` trait and a mutable reference to a struct implementing this trait is the data access layer for the scheduler.
 The Platform struct has the same role as the Python `Platform` class, but it centralizes even more data. It should provide access to jobs, resource
 set, global configuration, quotas configuration and more.
 
 ## Usage
 
-Crates such as `oar-scheduler-redox` or `oar-scheduler-meta` can use this library to implement a full scheduler.
+Crates such as [`oar-scheduler-redox`](/oar-scheduler-redox) or [`oar-scheduler-meta`](/oar-scheduler-meta) can use this library to implement a full
+scheduler.
 
 A struct implementing the `Platform` trait must be initialized first. Then, the scheduling cycle can be started with:
 
@@ -41,3 +42,9 @@ kamelot::add_already_scheduled_jobs_to_slot_set( & mut slot_sets, & mut platform
 kamelot::internal_schedule_cycle( & mut platform, & mut slot_sets, & active_queues);
 }
 ```
+
+## Edge cases and important implementation details
+
+- The scheduler is single-threaded and synchronous. No async code should be used in this crate.
+- The job’s `JobAssignment` struct stores the index of the assigned moldable as `moldable_index`. This index corresponds to the index of the moldable
+  in the `job.moldables` vector, and not to the moldable’s id as it is in Python.

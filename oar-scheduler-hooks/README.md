@@ -5,14 +5,15 @@
 This crate allows sysadmins to define rust functions (hooks) that are called by the scheduler at specific points in the scheduling process, allowing
 to overwrite default behavior.
 
-The scheduler entrypoints, `oar-scheduler-redox` or `oar-scheduler-meta` are creating instances of the struct `oar_scheduler_hooks::Hooks` and call a
+The scheduler entrypoints, [`oar-scheduler-redox`](/oar-scheduler-redox) or [`oar-scheduler-meta`](/oar-scheduler-meta) are creating instances of the
+struct `oar_scheduler_hooks::Hooks` and call a
 function of
-`oar-scheduler-core` to register the hooks, allowing to keep a non-circular dependency graph:
+[`oar-scheduler-core`](/oar-scheduler-core) to register the hooks, allowing to keep a non-circular dependency graph:
 
 ```rust
 // Register plugin hooks from the oar-scheduler-hooks crate into the oar-scheduler-core crate
 if let Some(hooks) = oar_scheduler_hooks::Hooks::new() {
-oar_scheduler_core::hooks::set_hooks_handler(hooks);
+    oar_scheduler_core::hooks::set_hooks_handler(hooks);
 }
 ```
 
@@ -26,15 +27,24 @@ is returned, the default behavior is overridden.
 - `assign`: Overrides the job assignment logic for a single job on a given slotset.
 - `find`: Overrides the resources request evaluation logic.
 
-Look at `oar-scheduler-core/hooks.rs` for more details on the available hooks and their usage.
+Look at [`oar-scheduler-core/hooks.rs`](/oar-scheduler-core/hooks.rs) for more details on the available hooks and their usage.
 
 ## Usage
 
 This crate should keep a fixed structure exposing the struct `Hooks` with a `pub fn new() -> Option<Self>` function,
 and implementing the trait `HooksHandler`.
 
-To create custom hooks, either clone the repository and edit directly the `oar-scheduler-hooks` crate, or create a new crate with the same structure
-as `oar-scheduler-hooks`,
-and replace the `oar-scheduler-hooks` dependency in `oar-scheduler-redox/Cargo.toml` with your custom crate.
+To create custom hooks, either clone the repository and edit directly the [`oar-scheduler-hooks`](/oar-scheduler-hooks) crate, or create a new crate
+with the same structure
+as [`oar-scheduler-hooks`](/oar-scheduler-hooks),
+and replace the [`oar-scheduler-hooks`](/oar-scheduler-hooks) dependency in [`oar-scheduler-redox/Cargo.toml`](oar-scheduler-redox/Cargo.toml) with
+your custom crate.
 
 In either case, you will need to rebuild the Rust scheduler.
+
+## Edge cases and important implementation details
+
+- As described in the roadmap, it would be great to be able to define hooks in Python. Though would require converting Rust objects to Python
+  back and forth, which can be quite complex and error-prone. The implementation is already existing for some objects in [
+  `oar-scheduler-redox`](/oar-scheduler-redox)
+  and [`oar-scheduler-core`](/oar-scheduler-core) with the `pyo3` feature.

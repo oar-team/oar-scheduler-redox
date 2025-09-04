@@ -41,6 +41,7 @@ pub struct JobAssignment {
     pub begin: i64,
     pub end: i64,
     pub proc_set: ProcSet,
+    /// Index of the moldable used for this assignment in the job's moldables vector. In Python, this was the id of the moldable.
     pub moldable_index: usize,
 }
 
@@ -49,7 +50,7 @@ pub struct Moldable {
     pub id: i64,
     pub walltime: i64,
     pub requests: HierarchyRequests,
-    /// Cache key is only calculated at initialization. If fields are changed, the cache key must be recalculated.
+    /// Moldable’s cache key is only calculated at initialization. If fields are changed, the cache key must be recalculated.
     pub cache_key: Box<str>,
 }
 
@@ -57,9 +58,9 @@ pub struct Moldable {
 pub enum TimeSharingType {
     /// timesharing=\*,\*
     AllAll,
-    /// timesharing=user,*
+    /// timesharing=user,* or timesharing=*,user
     UserAll,
-    /// timesharing=*,name
+    /// timesharing=*,name or timesharing=name,*
     AllName,
     /// timesharing=user,name
     UserName,

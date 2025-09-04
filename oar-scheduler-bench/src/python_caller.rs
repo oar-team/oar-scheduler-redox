@@ -83,7 +83,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
             job.assignment = Some(JobAssignment {
                 begin,
                 end,
-                proc_set,
+                resources: proc_set,
                 moldable_index,
             });
         }

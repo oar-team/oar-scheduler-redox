@@ -85,7 +85,7 @@ fn allow_job_fully_inside_placeholder() {
     let allow_assignment = jobs.get(&1).unwrap().assignment.as_ref().unwrap();
     assert!(allow_assignment.begin >= ph_assignment.begin, "Allow job should start after or at placeholder begin");
     assert!(allow_assignment.end <= ph_assignment.end, "Allow job should end before or at placeholder end");
-    assert!(allow_assignment.proc_set.is_subset(&ph_assignment.proc_set), "Allow job should use subset of placeholder resources");
+    assert!(allow_assignment.resources.is_subset(&ph_assignment.resources), "Allow job should use subset of placeholder resources");
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn allow_job_partially_inside_placeholder() {
     let allow_assignment = jobs.get(&1).unwrap().assignment.as_ref().unwrap();
     assert_eq!(allow_assignment.begin, ph_assignment.begin, "Allow job should start at placeholder begin");
     assert!(allow_assignment.end > ph_assignment.end, "Allow job should end after placeholder end");
-    assert_eq!(allow_assignment.proc_set, ProcSet::from_iter(1..=96), "Allow job should use the proc_set [1..=96]");
+    assert_eq!(allow_assignment.resources, ProcSet::from_iter(1..=96), "Allow job should use the proc_set [1..=96]");
 }
 
 #[test]
@@ -157,5 +157,5 @@ fn allow_job_outside_placeholder() {
     assert_eq!(allow1_assignment.end, 29, "Allow job 1 should end at 30");
     assert_eq!(allow2_assignment.begin, 30, "Allow job 2 should start at 30");
     assert_eq!(allow2_assignment.end, 59, "Allow job 2 should end at 61");
-    assert_eq!(allow2_assignment.proc_set, ProcSet::from_iter(1..=96), "Allow job 2 should have proc_set [1..=96]");
+    assert_eq!(allow2_assignment.resources, ProcSet::from_iter(1..=96), "Allow job 2 should have proc_set [1..=96]");
 }

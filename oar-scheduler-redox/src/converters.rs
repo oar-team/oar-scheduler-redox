@@ -208,7 +208,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
                 assignment = Some(JobAssignment {
                     begin,
                     end,
-                    proc_set,
+                    resources: proc_set,
                     moldable_index,
                 });
             }

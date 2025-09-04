@@ -13,10 +13,11 @@
 
 use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
-use crate::model::moldable::{get_moldable_assigned_resources, AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
+use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
+use crate::model::GanttJobsPredictions;
 use crate::{Session, SessionInsertStatement, SessionSelectStatement};
 use indexmap::IndexMap;
-use oar_scheduler_core::model::job::{JobAssignment, PlaceholderType, TimeSharingType};
+use oar_scheduler_core::model::job::JobBuilder;
 use oar_scheduler_core::platform::Job;
 use sea_query::{Alias, Expr, Query};
 use sea_query::{ExprTrait, Iden};
@@ -137,11 +138,20 @@ pub enum Challenges {
     SshPublicKey,
 }
 
-/// Get jobs from database with various filters
-/// If `queues` is `Some`, only jobs in these queues are returned
-/// If `state` is `Some`, only jobs in this state are returned
+/// Get jobs from the database.
+/// If `queues` is `Some`, only jobs in these queues are returned.
+/// If `reservation` is `Some`, only jobs in this reservation value are returned.
+/// If `state` is `Some`, only jobs in one of the state are returned.
 /// Jobs are always ordered by start time and then by job id ascending, making the waiting jobs to be ordered by submission time, and scheduled/AR jobs by start time.
-pub fn get_jobs(session: &Session, queues: Option<Vec<String>>, reservation: String, state: Option<String>) -> Result<IndexMap<i64, Job>, Error> {
+///
+/// Inside queues_schedule, scheduled jobs resources and start time should be fetched from the `gantt_jobs_resources` and `gantt_jobs_prediction` tables
+/// and not from the `assigned_resources` table and `start_time` columns of the `jobs` table. Look at this function: `get_gantt_scheduled_jobs`.
+pub fn get_jobs(
+    session: &Session,
+    queues: Option<Vec<String>>,
+    reservation: Option<String>,
+    states: Option<Vec<String>>,
+) -> Result<IndexMap<i64, Job>, Error> {
     let jobs = session.runtime.block_on(async {
         let rows = Query::select()
             .columns(vec![
@@ -158,12 +168,14 @@ pub fn get_jobs(session: &Session, queues: Option<Vec<String>>, reservation: Str
                 Jobs::AssignedMoldableJob,
             ])
             .from(Jobs::Table)
-            .and_where(Expr::col(Jobs::Reservation).eq(reservation))
             .apply_if(queues, |req, queues| {
                 req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
             })
-            .apply_if(state, |req, state| {
-                req.and_where(Expr::col(Jobs::State).eq(state));
+            .apply_if(reservation, |req, reservation| {
+                req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
+            })
+            .apply_if(states, |req, states| {
+                req.and_where(Expr::col(Jobs::State).is_in(states));
             })
             .order_by(Jobs::StartTime, sea_query::Order::Asc)
             .order_by(Jobs::Id, sea_query::Order::Asc)
@@ -183,58 +195,106 @@ pub fn get_jobs(session: &Session, queues: Option<Vec<String>>, reservation: Str
         let mut jobs = IndexMap::new();
         for row in rows {
             let id: i64 = row.get(Jobs::Id.to_string().as_str());
-            let types = jobs_types.get_job_types(id);
             let moldables = jobs_moldables.get_job_moldables(id);
 
+            let mut job_builder = JobBuilder::new(id)
+                .types(jobs_types.get_job_types(id))
+                .name_opt(row.try_get(Jobs::Name.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
+                .user_opt(row.try_get(Jobs::User.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
+                .project_opt(row.try_get(Jobs::Project.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
+                .queue(row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str())
+                .dependencies(jobs_dependencies.get_job_dependencies(id))
+                .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()))
+                .assign_opt(jobs_moldables.get_job_assignment(session, &row, false).await)
+                .moldables(moldables);
             // Reservation jobs
-            let reservation: String = row.get(Jobs::Reservation.to_string().as_str());
-            let advance_reservation_start_time = if reservation == "toSchedule" {
-                Some(row.get::<i64, &str>(Jobs::StartTime.to_string().as_str()))
-            } else {
-                None
+            if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.to_string().as_str()) {
+                job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.to_string().as_str()));
             };
-
-            // Assigned jobs
-            let mut assignment = None;
-            let assigned_moldable_job: Option<i64> = row.try_get(Jobs::AssignedMoldableJob.to_string().as_str()).ok();
-            if let Some(assigned_id) = assigned_moldable_job {
-                if assigned_id != 0 {
-                    if let Some(index) = moldables.iter().position(|m| m.id == assigned_id) {
-                        assignment = Some(JobAssignment {
-                            begin: row.get::<i64, &str>(Jobs::StartTime.to_string().as_str()),
-                            end: row.get::<i64, &str>(Jobs::StopTime.to_string().as_str()),
-                            proc_set: get_moldable_assigned_resources(session, assigned_id).await?,
-                            moldable_index: index,
-                        })
-                    }
-                }
-            }
-
-            let job = Job {
-                id,
-                name: row.try_get(Jobs::Name.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok(),
-                user: row.try_get(Jobs::User.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok(),
-                project: row.try_get(Jobs::Project.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok(),
-                queue: row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str(),
-                moldables,
-                no_quotas: types.contains_key("no_quotas"),
-                assignment,
-                quotas_hit_count: 0,
-                time_sharing: TimeSharingType::from_types(&types),
-                placeholder: PlaceholderType::from_types(&types),
-                dependencies: jobs_dependencies.get_job_dependencies(id),
-                advance_reservation_start_time,
-                submission_time: row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()),
-                types,
-                qos: 0.0,
-                nice: 0.0,
-                karma: 0.0,
-            };
-            jobs.insert(id, job);
+            jobs.insert(id, job_builder.build());
         }
         Ok::<IndexMap<i64, Job>, Error>(jobs)
     })?;
     Ok(jobs)
+}
+
+/// Get jobs from the database, taking their assignments data from the gantt tables `gantt_jobs_resources` and `gantt_jobs_prediction`.
+/// If `queues` is `Some`, only jobs in these queues are returned.
+/// If `reservation` is `Some`, only jobs in this reservation value are returned.
+/// If `state` is `Some`, only jobs in one of the state are returned.
+/// Jobs are always ordered by start time and then by job id ascending, making the waiting jobs to be ordered by submission time, and scheduled/AR jobs by start time.
+pub fn get_gantt_scheduled_jobs(
+    session: &Session,
+    queues: Option<Vec<String>>,
+    reservation: Option<String>,
+    states: Option<Vec<String>>,
+) -> Result<Vec<Job>, Error> {
+    session.runtime.block_on(async {
+        let rows = Query::select()
+            .columns(vec![
+                Jobs::Id.to_string(),
+                Jobs::Name.to_string(),
+                Jobs::User.to_string(),
+                Jobs::Project.to_string(),
+                Jobs::QueueName.to_string(),
+                Jobs::SubmissionTime.to_string(),
+                GanttJobsPredictions::StartTime.to_string(),
+                Jobs::State.to_string(),
+                Jobs::Reservation.to_string(),
+                Jobs::AssignedMoldableJob.to_string(),
+            ])
+            .from(Jobs::Table)
+            .inner_join(
+                GanttJobsPredictions::Table,
+                Expr::col(Jobs::Id).equals(GanttJobsPredictions::MoldableJobId),
+            )
+            .apply_if(reservation, |req, reservation| {
+                req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
+            })
+            .apply_if(queues, |req, queues| {
+                req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
+            })
+            .apply_if(states, |req, states| {
+                req.and_where(Expr::col(Jobs::State).is_in(states));
+            })
+            .order_by(GanttJobsPredictions::StartTime, sea_query::Order::Asc)
+            .order_by(Jobs::Id, sea_query::Order::Asc)
+            .to_owned()
+            .fetch_all(session)
+            .await?;
+
+        let job_ids = rows
+            .iter()
+            .map(|r| r.get::<i64, &str>(Jobs::Id.to_string().as_str()))
+            .collect::<Vec<i64>>();
+
+        let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
+        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await?;
+        let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
+
+        let mut jobs: Vec<Job> = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id: i64 = row.get(Jobs::Id.to_string().as_str());
+            let moldables = jobs_moldables.get_job_moldables(id);
+
+            let mut job_builder = JobBuilder::new(id)
+                .types(jobs_types.get_job_types(id))
+                .name_opt(row.try_get(Jobs::Name.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
+                .user_opt(row.try_get(Jobs::User.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
+                .project_opt(row.try_get(Jobs::Project.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
+                .queue(row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str())
+                .dependencies(jobs_dependencies.get_job_dependencies(id))
+                .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()))
+                .assign_opt(jobs_moldables.get_job_assignment(session, &row, true).await)
+                .moldables(moldables);
+            // Reservation jobs
+            if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.to_string().as_str()) {
+                job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.to_string().as_str()));
+            };
+            jobs.push(job_builder.build());
+        }
+        Ok(jobs)
+    })
 }
 
 pub struct NewJob {

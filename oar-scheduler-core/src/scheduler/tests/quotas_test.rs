@@ -165,7 +165,7 @@ fn test_quotas_one_job_rule_nb_res_2() {
     let scheduled = &jobs[0].assignment;
     assert!(scheduled.is_some());
     let sched = scheduled.as_ref().unwrap();
-    assert_eq!(sched.proc_set.core_count(), 64);
+    assert_eq!(sched.resources.core_count(), 64);
 }
 
 #[test]
@@ -231,9 +231,9 @@ fn test_quotas_four_jobs_rule_1() {
     let sched3 = j3.assignment.as_ref().unwrap();
     let sched4 = j4.assignment.as_ref().unwrap();
     assert_eq!(sched3.begin, 20);
-    assert_eq!(sched3.proc_set, ProcSet::from_iter(9..=16));
+    assert_eq!(sched3.resources, ProcSet::from_iter(9..=16));
     assert_eq!(sched4.begin, 50);
-    assert_eq!(sched4.proc_set, ProcSet::from_iter(1..=8));
+    assert_eq!(sched4.resources, ProcSet::from_iter(1..=8));
 }
 
 #[test]
@@ -289,9 +289,9 @@ fn test_quotas_three_jobs_rule_1() {
     let sched2 = j2.assignment.as_ref().unwrap();
     let sched3 = j3.assignment.as_ref().unwrap();
     assert_eq!(sched2.begin, 150);
-    assert_eq!(sched2.proc_set, ProcSet::from_iter(1..=8));
+    assert_eq!(sched2.resources, ProcSet::from_iter(1..=8));
     assert_eq!(sched3.begin, 0);
-    assert_eq!(sched3.proc_set, ProcSet::from_iter(1..=8));
+    assert_eq!(sched3.resources, ProcSet::from_iter(1..=8));
 }
 
 #[test]
@@ -329,7 +329,7 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     assert!(j1.assignment.is_none(), "j1 should not be scheduled due to quotas");
     assert!(j2.assignment.is_some(), "j2 should be scheduled");
     let sched2 = j2.assignment.as_ref().unwrap();
-    assert_eq!(sched2.proc_set, ProcSet::from_iter(1..=16));
+    assert_eq!(sched2.resources, ProcSet::from_iter(1..=16));
 }
 
 #[test]

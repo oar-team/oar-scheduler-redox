@@ -70,14 +70,14 @@ fn test_quotas_two_job_rules_nb_res_quotas_file() {
     let j4 = jobs[3].clone().assignment.unwrap();
     let j5 = jobs[4].clone().assignment.unwrap();
 
-    assert_eq!(j1.proc_set, ProcSet::from_iter(1..=16));
+    assert_eq!(j1.resources, ProcSet::from_iter(1..=16));
     assert_eq!(j1.begin, 0);
-    assert_eq!(j2.proc_set, ProcSet::from_iter(17..=32));
+    assert_eq!(j2.resources, ProcSet::from_iter(17..=32));
     assert_eq!(j2.begin, 0);
-    assert_eq!(j3.proc_set, ProcSet::from_iter(17..=32));
+    assert_eq!(j3.resources, ProcSet::from_iter(17..=32));
     assert_eq!(j3.begin, 0);
-    assert_eq!(j4.proc_set, ProcSet::from_iter(1..=56));
+    assert_eq!(j4.resources, ProcSet::from_iter(1..=56));
     assert_eq!(j4.begin, 60);
-    assert_eq!(j5.proc_set, ProcSet::from_iter(1..=56));
+    assert_eq!(j5.resources, ProcSet::from_iter(1..=56));
     assert_eq!(j5.begin, 120);
 }

@@ -69,7 +69,7 @@ impl<'a> IntoPyObject<'a> for &Job {
             let assignment_dict = PyDict::new(py);
             assignment_dict.set_item("begin", assignment.begin)?;
             assignment_dict.set_item("end", assignment.end)?;
-            assignment_dict.set_item("proc_set", proc_set_to_python(py, &assignment.proc_set))?;
+            assignment_dict.set_item("proc_set", proc_set_to_python(py, &assignment.resources))?;
             assignment_dict.set_item("moldable_index", assignment.moldable_index)?;
             dict.set_item("assignment", assignment_dict)?;
         } else {

@@ -11,12 +11,13 @@
  *
  */
 
-use crate::model::AssignedResources;
+use crate::model::{AssignedResources, GanttJobsPredictions, GanttJobsResources, Jobs};
 use crate::{Session, SessionSelectStatement};
-use oar_scheduler_core::model::job::Moldable;
 use oar_scheduler_core::model::job::ProcSet;
+use oar_scheduler_core::model::job::{JobAssignment, Moldable};
 use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use sea_query::{Expr, ExprTrait, Iden, Query};
+use sqlx::any::AnyRow;
 use sqlx::{Error, Row};
 use std::collections::HashMap;
 
@@ -62,21 +63,6 @@ pub enum JobResourceGroups {
     Property,
     #[iden = "res_group_index"]
     Index,
-}
-
-pub(crate) async fn get_moldable_assigned_resources(session: &Session, moldable_id: i64) -> Result<ProcSet, Error> {
-    let resources = Query::select()
-        .columns(vec![AssignedResources::ResourceId])
-        .from(AssignedResources::Table)
-        .and_where(Expr::col(AssignedResources::MoldableJobId).eq(moldable_id))
-        .and_where(Expr::col(AssignedResources::Index).eq("CURRENT"))
-        .fetch_all(session)
-        .await?;
-    let resources: ProcSet = ProcSet::from_iter(resources.iter().map(|row| {
-        let res_id: i32 = row.get(AssignedResources::ResourceId.to_string().as_str());
-        session.resource_id_to_resource_index(res_id).expect("Resource not found. There might be a database concurrency issue.")
-    }));
-    Ok(resources)
 }
 
 pub struct AllJobMoldables {
@@ -164,7 +150,70 @@ impl AllJobMoldables {
 
         Ok(Self { moldables })
     }
+
     pub fn get_job_moldables(&self, job_id: i64) -> Vec<Moldable> {
         self.moldables.get(&job_id).unwrap_or(&Vec::new()).clone()
+    }
+
+    /// Get the moldable assignment for a job.
+    /// If `properties_from_gantt` is true, the resources are fetched from the gantt table `gantt_jobs_resources`,
+    /// and the start time from the `gantt_jobs_prediction` table.
+    /// Otherwise, they are fetched from the table `assigned_resources` and the job `start_time` column.
+    /// The `job_row` parameter is the row of the job in the jobs table. It should contain at least the columns `Jobs::Id`, `Jobs::AssignedMoldableJob`, and:
+    /// - if `properties_from_gantt` is false, `Jobs::StartTime` and `Jobs::StopTime`.
+    /// - if `properties_from_gantt` is true, `GanttJobsPredictions::StartTime` (in this case the end time is computed from the start time and the moldable walltime).
+    pub(crate) async fn get_job_assignment(&self, session: &Session, job_row: &AnyRow, properties_from_gantt: bool) -> Option<JobAssignment> {
+        let job_id: i64 = job_row.get(Jobs::Id.to_string().as_str());
+        let assigned_moldable_id: i64 = job_row.get(Jobs::AssignedMoldableJob.to_string().as_str());
+        if assigned_moldable_id == 0 {
+            return None;
+        }
+        let job_moldables = self.get_job_moldables(job_id);
+        let moldable_index = job_moldables.iter().position(|m| m.id == assigned_moldable_id)?;
+        let moldable = &job_moldables[moldable_index];
+
+        // Get assigned resources
+        let resources = if properties_from_gantt {
+            Query::select()
+                .columns(vec![GanttJobsResources::ResourceId])
+                .from(GanttJobsResources::Table)
+                .and_where(Expr::col(GanttJobsResources::MoldableJobId).eq(moldable.id))
+                .fetch_all(session)
+                .await
+                .unwrap()
+        } else {
+            Query::select()
+                .columns(vec![AssignedResources::ResourceId])
+                .from(AssignedResources::Table)
+                .and_where(Expr::col(AssignedResources::MoldableJobId).eq(moldable.id))
+                .and_where(Expr::col(AssignedResources::Index).eq("CURRENT"))
+                .fetch_all(session)
+                .await
+                .unwrap()
+        };
+        let resources: ProcSet = ProcSet::from_iter(resources.iter().map(|row| {
+            let res_id: i32 = row.get(AssignedResources::ResourceId.to_string().as_str());
+            session
+                .resource_id_to_resource_index(res_id)
+                .expect("Resource not found. There might be a database concurrency issue.")
+        }));
+
+        // Get assigned start time
+        let (begin, end) = if properties_from_gantt {
+            let start_time: i64 = job_row.get(GanttJobsPredictions::StartTime.to_string().as_str());
+            let stop_time = start_time + moldable.walltime - 1;
+            (start_time, stop_time)
+        } else {
+            let start_time: i64 = job_row.get(Jobs::StartTime.to_string().as_str());
+            let stop_time: i64 = job_row.get(Jobs::StopTime.to_string().as_str());
+            (start_time, stop_time)
+        };
+
+        Some(JobAssignment {
+            begin,
+            end,
+            resources,
+            moldable_index,
+        })
     }
 }

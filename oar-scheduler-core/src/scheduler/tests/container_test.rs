@@ -60,7 +60,7 @@ fn test_single_inner_job_in_container() {
     let sched_inner = j_inner.assignment.as_ref().unwrap();
     assert!(sched_inner.begin >= sched_container.begin, "Inner job should start after the container job begins");
     assert!(sched_inner.end <= sched_container.end, "Inner job should finish before the container job ends");
-    assert!(sched_inner.proc_set.is_subset(&sched_container.proc_set), "Inner job should use a subset of the container job's resources");
+    assert!(sched_inner.resources.is_subset(&sched_container.resources), "Inner job should use a subset of the container job's resources");
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn test_inner_job_in_two_disjoint_containers_same_slotset_name() {
     let sched_inner = j_inner.assignment.as_ref().unwrap();
     assert!(sched_inner.begin >= sched_c2.begin, "Inner job should start after the second container job begins");
     assert!(sched_inner.end <= sched_c2.end, "Inner job should finish before the second container job ends");
-    assert!(sched_inner.proc_set.is_subset(&sched_c2.proc_set), "Inner job should use a subset of the second container job's resources");
+    assert!(sched_inner.resources.is_subset(&sched_c2.resources), "Inner job should use a subset of the second container job's resources");
 }
 
 #[test]
@@ -149,5 +149,5 @@ fn test_inner_job_in_two_overlapping_containers_same_slotset_name() {
     assert_eq!(sched_c2.begin, 100, "Second container job should start right after the regular job, at time 100");
     assert_eq!(sched_inner.begin, 100, "Inner job should start at the beginning of the common area, at time 100");
     assert_eq!(sched_inner.end, 169, "Inner job should end at time 169, which is 70 after it started");
-    assert!(sched_inner.proc_set.is_subset(&(&sched_c2.proc_set | &sched_c1.proc_set)), "Inner job should use a subset of the c1 and c2 container jobs' resources");
+    assert!(sched_inner.resources.is_subset(&(&sched_c2.resources | &sched_c1.resources)), "Inner job should use a subset of the c1 and c2 container jobs' resources");
 }

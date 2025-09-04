@@ -115,8 +115,8 @@ async fn detect_differences(seed: u64) -> bool {
         let rust_end = rust_job.end().unwrap_or(-1);
         let python_end = python_job.end().unwrap_or(-1);
 
-        let rust_procset = rust_job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string());
-        let python_procset = python_job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string());
+        let rust_procset = rust_job.assignment.as_ref().map(|sd| format!("{:?}", sd.resources)).unwrap_or("None".to_string());
+        let python_procset = python_job.assignment.as_ref().map(|sd| format!("{:?}", sd.resources)).unwrap_or("None".to_string());
 
         if rust_begin != python_begin || rust_end != python_end || rust_procset != python_procset {
             println!("DIFFERENCE DETECTED: Job {} has different scheduling data!", rust_job.id);
@@ -144,7 +144,7 @@ fn display_job_comparison(waiting_jobs: &IndexMap<i64, Job>, rust_scheduled: &Ve
                  job.id,
                  job.begin().unwrap_or(-1),
                  job.end().unwrap_or(-1),
-                 job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string()));
+                 job.assignment.as_ref().map(|sd| format!("{:?}", sd.resources)).unwrap_or("None".to_string()));
     }
 
     println!("\nPython scheduled jobs:");
@@ -153,6 +153,6 @@ fn display_job_comparison(waiting_jobs: &IndexMap<i64, Job>, rust_scheduled: &Ve
                  job.id,
                  job.begin().unwrap_or(-1),
                  job.end().unwrap_or(-1),
-                 job.assignment.as_ref().map(|sd| format!("{:?}", sd.proc_set)).unwrap_or("None".to_string()));
+                 job.assignment.as_ref().map(|sd| format!("{:?}", sd.resources)).unwrap_or("None".to_string()));
     }
 }

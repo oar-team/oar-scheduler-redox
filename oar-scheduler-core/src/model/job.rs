@@ -53,7 +53,7 @@ pub struct Job {
 pub struct JobAssignment {
     pub begin: i64,
     pub end: i64,
-    pub proc_set: ProcSet,
+    pub resources: ProcSet,
     /// Index of the moldable used for this assignment in the job's moldables vector. In Python, this was the id of the moldable.
     pub moldable_index: usize,
 }
@@ -169,7 +169,7 @@ impl Job {
     }
     pub fn resource_count(&self) -> Option<u32> {
         if let Some(data) = &self.assignment {
-            Some(data.proc_set.core_count())
+            Some(data.resources.core_count())
         } else {
             None
         }
@@ -203,9 +203,10 @@ pub struct JobBuilder {
     moldables: Vec<Moldable>,
     assignment: Option<JobAssignment>,
     time_sharing: Option<TimeSharingType>,
-    placeholder: PlaceholderType,
+    placeholder: Option<PlaceholderType>,
     dependencies: Vec<(i64, Box<str>, Option<i32>)>,
     advance_reservation_start_time: Option<i64>,
+    submission_time: i64,
 }
 
 impl JobBuilder {
@@ -220,9 +221,10 @@ impl JobBuilder {
             moldables: vec![],
             assignment: None,
             time_sharing: None,
-            placeholder: PlaceholderType::None,
+            placeholder: None,
             dependencies: Vec::new(),
             advance_reservation_start_time: None,
+            submission_time: 0,
         }
     }
     pub fn moldable_auto(mut self, id: i64, walltime: i64, requests: HierarchyRequests) -> Self {
@@ -246,7 +248,7 @@ impl JobBuilder {
         self
     }
     pub fn placeholder(mut self, placeholder: PlaceholderType) -> Self {
-        self.placeholder = placeholder;
+        self.placeholder = Some(placeholder);
         self
     }
     pub fn name(mut self, name: Box<str>) -> Self {
@@ -269,8 +271,16 @@ impl JobBuilder {
         self.project = Some(project);
         self
     }
+    pub fn project_opt(mut self, project: Option<Box<str>>) -> Self {
+        self.project = project;
+        self
+    }
     pub fn queue(mut self, queue: Box<str>) -> Self {
         self.queue = Some(queue);
+        self
+    }
+    pub fn types(mut self, types: HashMap<Box<str>, Option<Box<str>>>) -> Self {
+        self.types = types;
         self
     }
     pub fn add_type(mut self, key: Box<str>, value: Box<str>) -> Self {
@@ -285,6 +295,14 @@ impl JobBuilder {
         self.assignment = Some(assignment);
         self
     }
+    pub fn assign_opt(mut self, assignment: Option<JobAssignment>) -> Self {
+        self.assignment = assignment;
+        self
+    }
+    pub fn dependencies(mut self, dependencies: Vec<(i64, Box<str>, Option<i32>)>) -> Self {
+        self.dependencies = dependencies;
+        self
+    }
     pub fn add_dependency(mut self, dep_job_id: i64, dep_job_state: Box<str>, dep_job_exit_code: Option<i32>) -> Self {
         self.dependencies.push((dep_job_id, dep_job_state, dep_job_exit_code));
         self
@@ -296,6 +314,11 @@ impl JobBuilder {
         self.advance_reservation_start_time = Some(start_time);
         self
     }
+    pub fn submission_time(mut self, submission_time: i64) -> Self {
+        self.submission_time = submission_time;
+        self
+    }
+    // Computes automatically the no_quotas from the types and TimeSharing and Placeholder if None.
     pub fn build(self) -> Job {
         Job {
             id: self.id,
@@ -304,15 +327,15 @@ impl JobBuilder {
             project: self.project,
             queue: self.queue.unwrap_or_else(|| Box::from("default")),
             no_quotas: self.types.contains_key(&Box::from("no_quotas")),
+            time_sharing: self.time_sharing.or(TimeSharingType::from_types(&self.types)),
+            placeholder: self.placeholder.unwrap_or(PlaceholderType::from_types(&self.types)),
             types: self.types,
             moldables: self.moldables,
             assignment: self.assignment,
             quotas_hit_count: 0,
-            time_sharing: self.time_sharing,
-            placeholder: self.placeholder,
             dependencies: self.dependencies,
             advance_reservation_start_time: self.advance_reservation_start_time,
-            submission_time: 0,
+            submission_time: self.submission_time,
             qos: 0.0,
             nice: 1.0,
             karma: 0.0,
@@ -325,12 +348,12 @@ impl JobAssignment {
         JobAssignment {
             begin,
             end,
-            proc_set,
+            resources: proc_set,
             moldable_index,
         }
     }
     pub fn count_resources(&self) -> u32 {
-        self.proc_set.len() as u32
+        self.resources.len() as u32
     }
 }
 

@@ -78,8 +78,8 @@ fn test_insert_and_retrieve_job() {
     let platform = Platform::from_database(session, config);
     insert_jobs_for_tests(&platform);
 
-    let default_jobs = get_jobs(&platform.session(), Some(vec!["default".to_string()]), "None".to_string(), None).unwrap();
-    let besteffort_jobs = get_jobs(&platform.session(), Some(vec!["besteffort".to_string()]), "None".to_string(), None).unwrap();
+    let default_jobs = get_jobs(&platform.session(), Some(vec!["default".to_string()]), None, None).unwrap();
+    let besteffort_jobs = get_jobs(&platform.session(), Some(vec!["besteffort".to_string()]), Some("None".to_string()), None).unwrap();
 
     assert_eq!(default_jobs.len(), 3);
     assert_eq!(besteffort_jobs.len(), 2);

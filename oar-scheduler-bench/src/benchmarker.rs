@@ -317,7 +317,7 @@ impl BenchmarkConfig {
                     .get_scheduled_jobs()
                     .iter()
                     .map(|j| j.assignment.clone().unwrap())
-                    .map(|sd| sd.proc_set.core_count() as i64 * (sd.end - sd.begin + 1))
+                    .map(|sd| sd.resources.core_count() as i64 * (sd.end - sd.begin + 1))
                     .sum::<i64>()
                     / res_count as i64) as u32;
 

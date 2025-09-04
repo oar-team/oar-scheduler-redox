@@ -212,7 +212,7 @@ impl Platform {
                         py_job.setattr("walltime", sd.end - sd.begin + 1).unwrap();
                         py_job.setattr("end_time", sd.end).unwrap();
                         py_job.setattr("moldable_id", job.moldables[sd.moldable_index].id).unwrap();
-                        py_job.setattr("res_set", proc_set_to_python(py_job.py(), &sd.proc_set)).unwrap();
+                        py_job.setattr("res_set", proc_set_to_python(py_job.py(), &sd.resources)).unwrap();
                         py_job.setattr("karma", job.karma).unwrap();
                         py_scheduled_jobs.set_item(py_job_id, py_job).unwrap();
                     }

@@ -391,12 +391,12 @@ impl SlotSet {
             .iter()
             .for_each(|slot_id| {
                 let slot = self.slots.get_mut(&slot_id).unwrap();
-                let proc_set = &assignment.proc_set;
+                let proc_set = &assignment.resources;
                 if sub_resources {
                     slot.sub_proc_set(proc_set);
                     if self.platform_config.quotas_config.enabled && !job.no_quotas && do_update_quotas {
                         slot.quotas
-                            .increment_for_job(job, slot.end - slot.begin + 1, assignment.proc_set.core_count());
+                            .increment_for_job(job, slot.end - slot.begin + 1, assignment.resources.core_count());
                     }
                 } else {
                     slot.add_proc_set(proc_set);

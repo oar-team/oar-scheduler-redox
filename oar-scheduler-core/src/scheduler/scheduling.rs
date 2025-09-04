@@ -276,7 +276,7 @@ pub fn update_container_job_slot_set(slotsets: &mut HashMap<Box<str>, SlotSet>, 
             .assign(JobAssignment::new(
                 assignment.begin,
                 assignment.end - platform_config.config.scheduler_job_security_time, // Removing the security time added by get_data_jobs.
-                assignment.proc_set.clone(),
+                assignment.resources.clone(),
                 0,
             ))
             .build();

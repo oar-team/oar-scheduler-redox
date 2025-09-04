@@ -48,8 +48,13 @@ impl Platform {
         &self.session
     }
 
+    // AR jobs that are scheduled still on waiting state
     pub fn get_waiting_scheduled_ar_jobs(&self, queue_name: String) -> Vec<Job> {
         Job::get_gantt_scheduled_jobs(&self.session, Some(vec![queue_name]), Some("Scheduled".to_string()), Some(vec!["Waiting".to_string()])).unwrap()
+    }
+    // AR jobs that are not yet scheduled
+    pub fn get_waiting_to_schedule_ar_jobs(&self, queue_name: String) -> IndexMap<i64, Job> {
+        Job::get_jobs(&self.session, Some(vec![queue_name]), Some("toSchedule".to_string()), Some(vec!["Waiting".to_string()])).unwrap()
     }
 }
 

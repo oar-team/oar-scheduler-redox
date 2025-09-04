@@ -117,6 +117,9 @@ impl Session {
             }
         }
     }
+    pub(crate) async fn begin(&self) -> sqlx::Transaction<'_, Any> {
+        self.pool.begin().await.expect("Failed to begin transaction")
+    }
     pub fn create_schema(&self) {
         let sql = match self.backend {
             Backend::Postgres => todo!(),

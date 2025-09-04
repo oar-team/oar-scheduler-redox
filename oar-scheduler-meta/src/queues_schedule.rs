@@ -43,9 +43,10 @@ pub fn queues_schedule(platform: &mut Platform) {
         kamelot::internal_schedule_cycle(&mut *platform, &mut slot_sets, &active_queues);
 
         for queue in active_queues {
-            // TODO: Manage waiting reservation jobs with the `handle_waiting_reservation_jobs` behavior
+            // TODO: Manage waiting reservation jobs with the `handle_waiting_reservation_jobs` behavior:
+            //   https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/kao/queues_sched.py#L421-L512
 
-            // Check reservation jobs with the `check_reservation_jobs` behavior (non-MVP required)
+            // Check new AR jobs
             check_reservation_jobs(platform, &mut slot_sets, &queue)
         }
     }
@@ -56,14 +57,14 @@ fn check_reservation_jobs(platform: &mut Platform, slot_sets: &mut HashMap<Box<s
     let job_security_time = platform_config.config.scheduler_job_security_time;
     let now = platform.get_now();
 
-    let jobs: Vec<Job> = platform.get_waiting_scheduled_ar_jobs(queue.clone());
+    let jobs: IndexMap<i64, Job> = platform.get_waiting_to_schedule_ar_jobs(queue.clone());
     if jobs.is_empty() {
         return;
     }
 
     // Process each job for reservation
     let mut assigned_jobs = IndexMap::new();
-    for mut job in jobs.into_iter() {
+    for mut job in jobs.into_values() {
         // Only process the first moldable for AR jobs
         let moldable = job.moldables.get(0).expect("No moldable found for job");
 

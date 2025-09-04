@@ -144,9 +144,6 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
     let mut slot_sets = slot_sets_handle_ref.inner.borrow_mut();
 
     // Load jobs to schedule for the queue
-    // TODO: This function call does not match the one done in Python.
-    //   It might be required to load jobs with the python function get_waiting_scheduled_AR_jobs,
-    //   defining a new function for calling in in Platform.
     platform.load_waiting_jobs(&py_queue, Some(&"toSchedule".to_string()));
 
     let jobs: IndexMap<i64, Job> = platform.get_waiting_jobs();

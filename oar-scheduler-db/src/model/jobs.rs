@@ -10,19 +10,19 @@
  * If not, see https://www.gnu.org/licenses/.
  *
  */
-
 use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
 use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
 use crate::model::GanttJobsPredictions;
 use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use indexmap::IndexMap;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use oar_scheduler_core::model::job::JobBuilder;
 use oar_scheduler_core::platform::Job;
 use sea_query::{Alias, Expr, Query};
 use sea_query::{ExprTrait, Iden};
 use sqlx::{Error, Row};
+use std::io::{stdout, Write};
 
 // jobs and related tables
 #[derive(Iden)]
@@ -313,6 +313,7 @@ impl JobDatabaseRequests for Job {
 
     fn set_state(&self, session: &Session, new_state: &str) -> Result<(), Error> {
         session.runtime.block_on(async {
+            let tx = session.begin().await;
             let mut states = vec![
                 "toLaunch",
                 "toError",
@@ -333,6 +334,7 @@ impl JobDatabaseRequests for Job {
                 .value(Jobs::State, new_state)
                 .execute(session)
                 .await?;
+            tx.commit().await.unwrap();
             if res == 0 {
                 warn!("Job is already terminated or in error or wanted state, job_id: {}, wanted state: {}", self.id, new_state);
                 return Ok(());

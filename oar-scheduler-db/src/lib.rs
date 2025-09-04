@@ -16,7 +16,7 @@ use log::{debug, info};
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::{ProcSet, ResourceSet};
 use oar_scheduler_core::scheduler::hierarchy::Hierarchy;
-use sea_query::{Iden, InsertStatement, PostgresQueryBuilder, QueryBuilder, SelectStatement, SqliteQueryBuilder, UpdateStatement};
+use sea_query::{DeleteStatement, Iden, InsertStatement, PostgresQueryBuilder, QueryBuilder, SelectStatement, SqliteQueryBuilder, UpdateStatement};
 use sea_query_sqlx::{SqlxBinder, SqlxValues};
 use sqlx::any::{install_default_drivers, AnyRow};
 use sqlx::pool::PoolOptions;
@@ -32,6 +32,8 @@ enum Backend {
     Postgres,
     Sqlite,
 }
+
+
 impl From<&str> for Backend {
     fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
@@ -55,6 +57,12 @@ impl Backend {
         }
     }
     fn build_update(&self, query: &UpdateStatement) -> (String, SqlxValues) {
+        match self {
+            Backend::Postgres => query.build_sqlx(PostgresQueryBuilder),
+            Backend::Sqlite => query.build_sqlx(SqliteQueryBuilder),
+        }
+    }
+    fn build_delete(&self, query: &DeleteStatement) -> (String, SqlxValues) {
         match self {
             Backend::Postgres => query.build_sqlx(PostgresQueryBuilder),
             Backend::Sqlite => query.build_sqlx(SqliteQueryBuilder),
@@ -258,6 +266,17 @@ trait SessionUpdateStatement {
 impl SessionUpdateStatement for sea_query::UpdateStatement {
     async fn execute<'q>(&'q self, session: &Session) -> Result<u64, Error> {
         let (sql, values) = session.backend.build_update(&self);
+        debug!("SQL: {}   VALUES: {:?}", sql, values);
+        let result = sqlx::query_with(sql.as_str(), values).execute(&session.pool).await?;
+        Ok(result.rows_affected())
+    }
+}
+trait SessionDeleteStatement {
+    async fn execute<'q>(&'q self, session: &Session) -> Result<u64, Error>;
+}
+impl SessionDeleteStatement for DeleteStatement {
+    async fn execute<'q>(&'q self, session: &Session) -> Result<u64, Error> {
+        let (sql, values) = session.backend.build_delete(&self);
         debug!("SQL: {}   VALUES: {:?}", sql, values);
         let result = sqlx::query_with(sql.as_str(), values).execute(&session.pool).await?;
         Ok(result.rows_affected())

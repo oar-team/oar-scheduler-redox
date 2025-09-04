@@ -10,16 +10,18 @@
  * If not, see https://www.gnu.org/licenses/.
  *
  */
-
 use crate::platform::Platform;
 use crate::queues_schedule::queues_schedule;
+use oar_scheduler_core::platform::PlatformTrait;
+use oar_scheduler_db::model::gantt_flush_tables;
 
 pub fn meta_schedule(platform: &mut Platform) -> i64 {
     let mut exit_code = 0;
 
     // TODO: Implement `process_walltime_change_requests` with config values WALLTIME_CHANGE_ENABLED, WALLTIME_CHANGE_APPLY_TIME, WALLTIME_INCREMENT
 
-    // TODO: (MVP REQUIRED) Initialize gant (only tables gantt_jobs_resources and gantt_jobs_prediction) with the `gantt_init_with_running_jobs` behavior
+    // Initialize gantt tables with running/already scheduled jobs so they are accessible from `platform.get_scheduled_jobs()`
+    gantt_init_with_running_jobs(platform);
 
     // Schedule queues
     queues_schedule(platform);
@@ -42,4 +44,11 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
     // Done
     exit_code
+}
+
+/// Initialize gantt tables with scheduled reservation jobs, Running jobs, toLaunch jobs and Launching jobs.
+fn gantt_init_with_running_jobs(platform: &mut Platform) {
+    gantt_flush_tables(&platform.session());
+    let current_jobs = platform.get_fully_scheduled_jobs();
+    platform.save_assignments(current_jobs);
 }

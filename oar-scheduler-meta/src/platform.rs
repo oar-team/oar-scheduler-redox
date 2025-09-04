@@ -56,6 +56,10 @@ impl Platform {
     pub fn get_waiting_to_schedule_ar_jobs(&self, queue_name: String) -> IndexMap<i64, Job> {
         Job::get_jobs(&self.session, Some(vec![queue_name]), Some("toSchedule".to_string()), Some(vec!["Waiting".to_string()])).unwrap()
     }
+    // Scheduled and at least toLaunch state jobs
+    pub fn get_fully_scheduled_jobs(&self) -> IndexMap<i64, Job> {
+        Job::get_jobs(&self.session, None, None, Some(vec!["Running".to_string(), "toLaunch".to_string(), "Launching".to_string(), "Finishing".to_string(), "Suspended".to_string(), "Resuming".to_string()])).unwrap()
+    }
 }
 
 impl PlatformTrait for Platform {

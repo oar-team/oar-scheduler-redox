@@ -80,7 +80,7 @@ pub enum Jobs {
     #[iden = "notify"]
     Notify,
     #[iden = "assigned_moldable_job"]
-    AssignedMoldableJob,
+    AssignedMoldableId,
     #[iden = "stdout_file"]
     StdoutFile,
     #[iden = "stderr_file"]
@@ -185,7 +185,7 @@ impl JobDatabaseRequests for Job {
                     Jobs::StopTime,
                     Jobs::State,
                     Jobs::Reservation,
-                    Jobs::AssignedMoldableJob,
+                    Jobs::AssignedMoldableId,
                 ])
                 .from(Jobs::Table)
                 .apply_if(queues, |req, queues| {
@@ -258,12 +258,12 @@ impl JobDatabaseRequests for Job {
                     GanttJobsPredictions::StartTime.unquoted(),
                     Jobs::State.unquoted(),
                     Jobs::Reservation.unquoted(),
-                    Jobs::AssignedMoldableJob.unquoted(),
+                    Jobs::AssignedMoldableId.unquoted(),
                 ])
                 .from(Jobs::Table)
                 .inner_join(
                     GanttJobsPredictions::Table,
-                    Expr::col(Jobs::Id).equals(GanttJobsPredictions::MoldableJobId),
+                    Expr::col(Jobs::AssignedMoldableId).equals(GanttJobsPredictions::MoldableId),
                 )
                 .apply_if(reservation, |req, reservation| {
                     req.and_where(Expr::col(Jobs::Reservation).eq(reservation));

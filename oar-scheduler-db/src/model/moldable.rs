@@ -11,7 +11,7 @@
  *
  */
 
-use crate::model::{AssignedResources, GanttJobsPredictions, GanttJobsResources, Jobs};
+use crate::model::{GanttJobsPredictions, GanttJobsResources, Jobs};
 use crate::{Session, SessionSelectStatement};
 use oar_scheduler_core::model::job::ProcSet;
 use oar_scheduler_core::model::job::{JobAssignment, Moldable};
@@ -34,7 +34,6 @@ pub enum MoldableJobDescriptions {
     #[iden = "moldable_index"]
     Index,
 }
-
 #[derive(Iden)]
 pub enum JobResourceDescriptions {
     #[iden = "job_resource_descriptions"]
@@ -50,7 +49,6 @@ pub enum JobResourceDescriptions {
     #[iden = "res_job_index"]
     Index,
 }
-
 #[derive(Iden)]
 pub enum JobResourceGroups {
     #[iden = "job_resource_groups"]
@@ -62,6 +60,17 @@ pub enum JobResourceGroups {
     #[iden = "res_group_property"]
     Property,
     #[iden = "res_group_index"]
+    Index,
+}
+#[derive(Iden)]
+pub enum AssignedResources {
+    #[iden = "assigned_resources"]
+    Table,
+    #[iden = "moldable_job_id"]
+    MoldableId,
+    #[iden = "resource_id"]
+    ResourceId,
+    #[iden = "assigned_resource_index"]
     Index,
 }
 
@@ -164,7 +173,7 @@ impl AllJobMoldables {
     /// - if `properties_from_gantt` is true, `GanttJobsPredictions::StartTime` (in this case the end time is computed from the start time and the moldable walltime).
     pub(crate) async fn get_job_assignment(&self, session: &Session, job_row: &AnyRow, properties_from_gantt: bool) -> Option<JobAssignment> {
         let job_id: i64 = job_row.get(Jobs::Id.unquoted());
-        let assigned_moldable_id: i64 = job_row.get(Jobs::AssignedMoldableJob.unquoted());
+        let assigned_moldable_id: i64 = job_row.get(Jobs::AssignedMoldableId.unquoted());
         if assigned_moldable_id == 0 {
             return None;
         }
@@ -177,7 +186,7 @@ impl AllJobMoldables {
             Query::select()
                 .columns(vec![GanttJobsResources::ResourceId])
                 .from(GanttJobsResources::Table)
-                .and_where(Expr::col(GanttJobsResources::MoldableJobId).eq(moldable.id))
+                .and_where(Expr::col(GanttJobsResources::MoldableId).eq(moldable.id))
                 .fetch_all(session)
                 .await
                 .unwrap()
@@ -185,7 +194,7 @@ impl AllJobMoldables {
             Query::select()
                 .columns(vec![AssignedResources::ResourceId])
                 .from(AssignedResources::Table)
-                .and_where(Expr::col(AssignedResources::MoldableJobId).eq(moldable.id))
+                .and_where(Expr::col(AssignedResources::MoldableId).eq(moldable.id))
                 .and_where(Expr::col(AssignedResources::Index).eq("CURRENT"))
                 .fetch_all(session)
                 .await

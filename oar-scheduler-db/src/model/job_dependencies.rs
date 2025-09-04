@@ -59,10 +59,10 @@ impl AllJobDependencies {
             .iter()
             .map(|r| {
                 (
-                    r.get::<i64, &str>(dependant_job_id_alias.to_string().as_str()),
-                    r.get::<i64, &str>(JobDependencies::RequiredJobId.to_string().as_str()),
-                    r.get::<String, &str>(Jobs::State.to_string().as_str()).into_boxed_str(),
-                    r.try_get::<i32, &str>(Jobs::ExitCode.to_string().as_str()).ok(),
+                    r.get::<i64, &str>(dependant_job_id_alias.unquoted()),
+                    r.get::<i64, &str>(JobDependencies::RequiredJobId.unquoted()),
+                    r.get::<String, &str>(Jobs::State.unquoted()).into_boxed_str(),
+                    r.try_get::<i32, &str>(Jobs::ExitCode.unquoted()).ok(),
                 )
             })
             .fold(

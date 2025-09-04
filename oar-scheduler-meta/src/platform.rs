@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::model::job::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
-use oar_scheduler_db::model::{get_gantt_scheduled_jobs, get_jobs};
+use oar_scheduler_db::model::JobDatabaseRequests;
 use oar_scheduler_db::Session;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -47,6 +47,10 @@ impl Platform {
     pub fn session(&self) -> &Session {
         &self.session
     }
+
+    pub fn get_waiting_scheduled_ar_jobs(&self, queue_name: String) -> Vec<Job> {
+        Job::get_gantt_scheduled_jobs(&self.session, Some(vec![queue_name]), Some("Scheduled".to_string()), Some(vec!["Waiting".to_string()])).unwrap()
+    }
 }
 
 impl PlatformTrait for Platform {
@@ -61,10 +65,10 @@ impl PlatformTrait for Platform {
     }
 
     fn get_scheduled_jobs(&self) -> Vec<Job> {
-        get_gantt_scheduled_jobs(&self.session, Some(vec!["scheduled".to_string()]), None, None).unwrap()
+        Job::get_gantt_scheduled_jobs(&self.session, Some(vec!["scheduled".to_string()]), None, None).unwrap()
     }
     fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
-        get_jobs(&self.session, Some(vec!["scheduled".to_string()]), Some("None".to_string()), Some(vec!["Waiting".to_string()])).unwrap()
+        Job::get_jobs(&self.session, Some(vec!["scheduled".to_string()]), Some("None".to_string()), Some(vec!["Waiting".to_string()])).unwrap()
     }
     fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>) {
         todo!()

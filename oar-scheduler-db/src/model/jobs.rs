@@ -15,8 +15,9 @@ use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
 use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
 use crate::model::GanttJobsPredictions;
-use crate::{Session, SessionInsertStatement, SessionSelectStatement};
+use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use indexmap::IndexMap;
+use log::{debug, warn};
 use oar_scheduler_core::model::job::JobBuilder;
 use oar_scheduler_core::platform::Job;
 use sea_query::{Alias, Expr, Query};
@@ -138,163 +139,243 @@ pub enum Challenges {
     SshPublicKey,
 }
 
-/// Get jobs from the database.
-/// If `queues` is `Some`, only jobs in these queues are returned.
-/// If `reservation` is `Some`, only jobs in this reservation value are returned.
-/// If `state` is `Some`, only jobs in one of the state are returned.
-/// Jobs are always ordered by start time and then by job id ascending, making the waiting jobs to be ordered by submission time, and scheduled/AR jobs by start time.
-///
-/// Inside queues_schedule, scheduled jobs resources and start time should be fetched from the `gantt_jobs_resources` and `gantt_jobs_prediction` tables
-/// and not from the `assigned_resources` table and `start_time` columns of the `jobs` table. Look at this function: `get_gantt_scheduled_jobs`.
-pub fn get_jobs(
-    session: &Session,
-    queues: Option<Vec<String>>,
-    reservation: Option<String>,
-    states: Option<Vec<String>>,
-) -> Result<IndexMap<i64, Job>, Error> {
-    let jobs = session.runtime.block_on(async {
-        let rows = Query::select()
-            .columns(vec![
-                Jobs::Id,
-                Jobs::Name,
-                Jobs::User,
-                Jobs::Project,
-                Jobs::QueueName,
-                Jobs::SubmissionTime,
-                Jobs::StartTime,
-                Jobs::StopTime,
-                Jobs::State,
-                Jobs::Reservation,
-                Jobs::AssignedMoldableJob,
-            ])
-            .from(Jobs::Table)
-            .apply_if(queues, |req, queues| {
-                req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
-            })
-            .apply_if(reservation, |req, reservation| {
-                req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
-            })
-            .apply_if(states, |req, states| {
-                req.and_where(Expr::col(Jobs::State).is_in(states));
-            })
-            .order_by(Jobs::StartTime, sea_query::Order::Asc)
-            .order_by(Jobs::Id, sea_query::Order::Asc)
-            .to_owned()
-            .fetch_all(session)
-            .await?;
-
-        let job_ids = rows
-            .iter()
-            .map(|r| r.get::<i64, &str>(Jobs::Id.to_string().as_str()))
-            .collect::<Vec<i64>>();
-
-        let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
-        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await?;
-        let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
-
-        let mut jobs = IndexMap::new();
-        for row in rows {
-            let id: i64 = row.get(Jobs::Id.to_string().as_str());
-            let moldables = jobs_moldables.get_job_moldables(id);
-
-            let mut job_builder = JobBuilder::new(id)
-                .types(jobs_types.get_job_types(id))
-                .name_opt(row.try_get(Jobs::Name.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
-                .user_opt(row.try_get(Jobs::User.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
-                .project_opt(row.try_get(Jobs::Project.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
-                .queue(row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str())
-                .dependencies(jobs_dependencies.get_job_dependencies(id))
-                .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()))
-                .assign_opt(jobs_moldables.get_job_assignment(session, &row, false).await)
-                .moldables(moldables);
-            // Reservation jobs
-            if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.to_string().as_str()) {
-                job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.to_string().as_str()));
-            };
-            jobs.insert(id, job_builder.build());
-        }
-        Ok::<IndexMap<i64, Job>, Error>(jobs)
-    })?;
-    Ok(jobs)
+pub trait JobDatabaseRequests {
+    fn get_jobs(
+        session: &Session,
+        queues: Option<Vec<String>>,
+        reservation: Option<String>,
+        states: Option<Vec<String>>,
+    ) -> Result<IndexMap<i64, Job>, Error>;
+    fn get_gantt_scheduled_jobs(
+        session: &Session,
+        queues: Option<Vec<String>>,
+        reservation: Option<String>,
+        states: Option<Vec<String>>,
+    ) -> Result<Vec<Job>, Error>;
+    fn set_state(&self, session: &Session, new_state: &str) -> Result<(), Error>;
+    fn set_message(&self, session: &Session, message: &str) -> Result<(), Error>;
+    fn set_resa_state(&self, session: &Session, new_resa_state: &str) -> Result<(), Error>;
 }
 
-/// Get jobs from the database, taking their assignments data from the gantt tables `gantt_jobs_resources` and `gantt_jobs_prediction`.
-/// If `queues` is `Some`, only jobs in these queues are returned.
-/// If `reservation` is `Some`, only jobs in this reservation value are returned.
-/// If `state` is `Some`, only jobs in one of the state are returned.
-/// Jobs are always ordered by start time and then by job id ascending, making the waiting jobs to be ordered by submission time, and scheduled/AR jobs by start time.
-pub fn get_gantt_scheduled_jobs(
-    session: &Session,
-    queues: Option<Vec<String>>,
-    reservation: Option<String>,
-    states: Option<Vec<String>>,
-) -> Result<Vec<Job>, Error> {
-    session.runtime.block_on(async {
-        let rows = Query::select()
-            .columns(vec![
-                Jobs::Id.to_string(),
-                Jobs::Name.to_string(),
-                Jobs::User.to_string(),
-                Jobs::Project.to_string(),
-                Jobs::QueueName.to_string(),
-                Jobs::SubmissionTime.to_string(),
-                GanttJobsPredictions::StartTime.to_string(),
-                Jobs::State.to_string(),
-                Jobs::Reservation.to_string(),
-                Jobs::AssignedMoldableJob.to_string(),
-            ])
-            .from(Jobs::Table)
-            .inner_join(
-                GanttJobsPredictions::Table,
-                Expr::col(Jobs::Id).equals(GanttJobsPredictions::MoldableJobId),
-            )
-            .apply_if(reservation, |req, reservation| {
-                req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
-            })
-            .apply_if(queues, |req, queues| {
-                req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
-            })
-            .apply_if(states, |req, states| {
-                req.and_where(Expr::col(Jobs::State).is_in(states));
-            })
-            .order_by(GanttJobsPredictions::StartTime, sea_query::Order::Asc)
-            .order_by(Jobs::Id, sea_query::Order::Asc)
-            .to_owned()
-            .fetch_all(session)
-            .await?;
+impl JobDatabaseRequests for Job {
+    /// Get jobs from the database.
+    /// If `queues` is `Some`, only jobs in these queues are returned.
+    /// If `reservation` is `Some`, only jobs in this reservation value are returned.
+    /// If `state` is `Some`, only jobs in one of the state are returned.
+    /// Jobs are always ordered by start time and then by job id ascending, making the waiting jobs to be ordered by submission time, and scheduled/AR jobs by start time.
+    ///
+    /// Inside queues_schedule, scheduled jobs resources and start time should be fetched from the `gantt_jobs_resources` and `gantt_jobs_prediction` tables
+    /// and not from the `assigned_resources` table and `start_time` columns of the `jobs` table. Look at this function: `get_gantt_scheduled_jobs`.
+    fn get_jobs(
+        session: &Session,
+        queues: Option<Vec<String>>,
+        reservation: Option<String>,
+        states: Option<Vec<String>>,
+    ) -> Result<IndexMap<i64, Job>, Error> {
+        let jobs = session.runtime.block_on(async {
+            let rows = Query::select()
+                .columns(vec![
+                    Jobs::Id,
+                    Jobs::Name,
+                    Jobs::User,
+                    Jobs::Project,
+                    Jobs::QueueName,
+                    Jobs::SubmissionTime,
+                    Jobs::StartTime,
+                    Jobs::StopTime,
+                    Jobs::State,
+                    Jobs::Reservation,
+                    Jobs::AssignedMoldableJob,
+                ])
+                .from(Jobs::Table)
+                .apply_if(queues, |req, queues| {
+                    req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
+                })
+                .apply_if(reservation, |req, reservation| {
+                    req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
+                })
+                .apply_if(states, |req, states| {
+                    req.and_where(Expr::col(Jobs::State).is_in(states));
+                })
+                .order_by(Jobs::StartTime, sea_query::Order::Asc)
+                .order_by(Jobs::Id, sea_query::Order::Asc)
+                .to_owned()
+                .fetch_all(session)
+                .await?;
 
-        let job_ids = rows
-            .iter()
-            .map(|r| r.get::<i64, &str>(Jobs::Id.to_string().as_str()))
-            .collect::<Vec<i64>>();
+            let job_ids = rows.iter().map(|r| r.get::<i64, &str>(Jobs::Id.unquoted())).collect::<Vec<i64>>();
 
-        let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
-        let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await?;
-        let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
+            let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
+            let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await?;
+            let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
 
-        let mut jobs: Vec<Job> = Vec::with_capacity(rows.len());
-        for row in rows {
-            let id: i64 = row.get(Jobs::Id.to_string().as_str());
-            let moldables = jobs_moldables.get_job_moldables(id);
+            let mut jobs = IndexMap::new();
+            for row in rows {
+                let id: i64 = row.get(Jobs::Id.unquoted());
+                let moldables = jobs_moldables.get_job_moldables(id);
 
-            let mut job_builder = JobBuilder::new(id)
-                .types(jobs_types.get_job_types(id))
-                .name_opt(row.try_get(Jobs::Name.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
-                .user_opt(row.try_get(Jobs::User.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
-                .project_opt(row.try_get(Jobs::Project.to_string().as_str()).map(|s: String| s.into_boxed_str()).ok())
-                .queue(row.get::<String, &str>(Jobs::QueueName.to_string().as_str()).into_boxed_str())
-                .dependencies(jobs_dependencies.get_job_dependencies(id))
-                .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.to_string().as_str()))
-                .assign_opt(jobs_moldables.get_job_assignment(session, &row, true).await)
-                .moldables(moldables);
-            // Reservation jobs
-            if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.to_string().as_str()) {
-                job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.to_string().as_str()));
-            };
-            jobs.push(job_builder.build());
-        }
+                let mut job_builder = JobBuilder::new(id)
+                    .types(jobs_types.get_job_types(id))
+                    .name_opt(row.try_get(Jobs::Name.unquoted()).map(|s: String| s.into_boxed_str()).ok())
+                    .user_opt(row.try_get(Jobs::User.unquoted()).map(|s: String| s.into_boxed_str()).ok())
+                    .project_opt(row.try_get(Jobs::Project.unquoted()).map(|s: String| s.into_boxed_str()).ok())
+                    .queue(row.get::<String, &str>(Jobs::QueueName.unquoted()).into_boxed_str())
+                    .dependencies(jobs_dependencies.get_job_dependencies(id))
+                    .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.unquoted()))
+                    .assign_opt(jobs_moldables.get_job_assignment(session, &row, false).await)
+                    .moldables(moldables);
+                // Reservation jobs
+                if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
+                    job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.unquoted()));
+                };
+                jobs.insert(id, job_builder.build());
+            }
+            Ok::<IndexMap<i64, Job>, Error>(jobs)
+        })?;
         Ok(jobs)
-    })
+    }
+
+    /// Get jobs from the database, taking their assignments data from the gantt tables `gantt_jobs_resources` and `gantt_jobs_prediction`.
+    /// If `queues` is `Some`, only jobs in these queues are returned.
+    /// If `reservation` is `Some`, only jobs in this reservation value are returned.
+    /// If `state` is `Some`, only jobs in one of the state are returned.
+    /// Jobs are always ordered by start time and then by job id ascending, making the waiting jobs to be ordered by submission time, and scheduled/AR jobs by start time.
+    fn get_gantt_scheduled_jobs(
+        session: &Session,
+        queues: Option<Vec<String>>,
+        reservation: Option<String>,
+        states: Option<Vec<String>>,
+    ) -> Result<Vec<Job>, Error> {
+        session.runtime.block_on(async {
+            let rows = Query::select()
+                .columns(vec![
+                    Jobs::Id.unquoted(),
+                    Jobs::Name.unquoted(),
+                    Jobs::User.unquoted(),
+                    Jobs::Project.unquoted(),
+                    Jobs::QueueName.unquoted(),
+                    Jobs::SubmissionTime.unquoted(),
+                    GanttJobsPredictions::StartTime.unquoted(),
+                    Jobs::State.unquoted(),
+                    Jobs::Reservation.unquoted(),
+                    Jobs::AssignedMoldableJob.unquoted(),
+                ])
+                .from(Jobs::Table)
+                .inner_join(
+                    GanttJobsPredictions::Table,
+                    Expr::col(Jobs::Id).equals(GanttJobsPredictions::MoldableJobId),
+                )
+                .apply_if(reservation, |req, reservation| {
+                    req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
+                })
+                .apply_if(queues, |req, queues| {
+                    req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
+                })
+                .apply_if(states, |req, states| {
+                    req.and_where(Expr::col(Jobs::State).is_in(states));
+                })
+                .order_by(GanttJobsPredictions::StartTime, sea_query::Order::Asc)
+                .order_by(Jobs::Id, sea_query::Order::Asc)
+                .to_owned()
+                .fetch_all(session)
+                .await?;
+
+            let job_ids = rows.iter().map(|r| r.get::<i64, &str>(Jobs::Id.unquoted())).collect::<Vec<i64>>();
+
+            let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
+            let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await?;
+            let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
+
+            let mut jobs: Vec<Job> = Vec::with_capacity(rows.len());
+            for row in rows {
+                let id: i64 = row.get(Jobs::Id.unquoted());
+                let moldables = jobs_moldables.get_job_moldables(id);
+
+                let mut job_builder = JobBuilder::new(id)
+                    .types(jobs_types.get_job_types(id))
+                    .name_opt(row.try_get(Jobs::Name.unquoted()).map(|s: String| s.into_boxed_str()).ok())
+                    .user_opt(row.try_get(Jobs::User.unquoted()).map(|s: String| s.into_boxed_str()).ok())
+                    .project_opt(row.try_get(Jobs::Project.unquoted()).map(|s: String| s.into_boxed_str()).ok())
+                    .queue(row.get::<String, &str>(Jobs::QueueName.unquoted()).into_boxed_str())
+                    .dependencies(jobs_dependencies.get_job_dependencies(id))
+                    .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.unquoted()))
+                    .assign_opt(jobs_moldables.get_job_assignment(session, &row, true).await)
+                    .moldables(moldables);
+                // Reservation jobs
+                if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
+                    job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.unquoted()));
+                };
+                jobs.push(job_builder.build());
+            }
+            Ok(jobs)
+        })
+    }
+
+    fn set_state(&self, session: &Session, new_state: &str) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            let mut states = vec![
+                "toLaunch",
+                "toError",
+                "toAckReservation",
+                "Launching",
+                "Running",
+                "Finishing",
+                "Waiting",
+                "Hold",
+                "Suspended",
+                "Resuming",
+            ];
+            states.remove(states.iter().position(|s| *s == new_state).expect("Invalid state"));
+            let res = Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .and_where(Expr::col(Jobs::State).is_in(states))
+                .value(Jobs::State, new_state)
+                .execute(session)
+                .await?;
+            if res == 0 {
+                warn!("Job is already terminated or in error or wanted state, job_id: {}, wanted state: {}", self.id, new_state);
+                return Ok(());
+            }
+
+            debug!("Job {} state changed to {}", self.id, new_state);
+
+            // TODO: update the JobStateLog table and notify user as done here:
+            //   https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/lib/job_handling.py#L1714-L1800
+
+            Ok(())
+        })
+    }
+
+    fn set_message(&self, session: &Session, message: &str) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            let res = Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .value(Jobs::Message, message)
+                .execute(session)
+                .await?;
+            if res == 0 {
+                warn!("Job not found when setting message, job_id: {}, message: {}", self.id, message);
+            }
+            Ok(())
+        })
+    }
+
+    fn set_resa_state(&self, session: &Session, new_resa_state: &str) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            let res = Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .value(Jobs::Reservation, new_resa_state)
+                .execute(session)
+                .await?;
+            if res == 0 {
+                warn!("Job not found when setting reservation state, job_id: {}, reservation state: {}", self.id, new_resa_state);
+            }
+            Ok(())
+        })
+    }
 }
 
 pub struct NewJob {

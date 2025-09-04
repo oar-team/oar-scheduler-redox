@@ -46,8 +46,8 @@ impl AllJobTypes {
             .await?
             .iter()
             .map(|r| {
-                let job_id = r.get::<i64, &str>(JobTypes::JobId.to_string().as_str());
-                let t = r.get::<String, &str>(JobTypes::Type.to_string().as_str());
+                let job_id = r.get::<i64, &str>(JobTypes::JobId.unquoted());
+                let t = r.get::<String, &str>(JobTypes::Type.unquoted());
                 let mut t = t.split('=');
                 (
                     job_id,

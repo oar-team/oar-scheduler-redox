@@ -110,12 +110,12 @@ impl AllJobMoldables {
                 // job_id -> moldable_id -> (walltime, group_id -> level_nbs)
                 HashMap::<i64, HashMap<i64, (i64, HashMap<i64, Vec<(Box<str>, u32)>>)>>::new(),
                 |mut acc, row| {
-                    let job_id: i64 = row.get(MoldableJobDescriptions::JobId.to_string().as_str());
-                    let mld_id: i64 = row.get(MoldableJobDescriptions::Id.to_string().as_str());
-                    let walltime: i64 = row.get(MoldableJobDescriptions::Walltime.to_string().as_str());
-                    let group_id: i64 = row.get(JobResourceGroups::Id.to_string().as_str());
-                    let rtype: String = row.get(JobResourceDescriptions::ResourceType.to_string().as_str());
-                    let rvalue: i64 = row.get(JobResourceDescriptions::Value.to_string().as_str());
+                    let job_id: i64 = row.get(MoldableJobDescriptions::JobId.unquoted());
+                    let mld_id: i64 = row.get(MoldableJobDescriptions::Id.unquoted());
+                    let walltime: i64 = row.get(MoldableJobDescriptions::Walltime.unquoted());
+                    let group_id: i64 = row.get(JobResourceGroups::Id.unquoted());
+                    let rtype: String = row.get(JobResourceDescriptions::ResourceType.unquoted());
+                    let rvalue: i64 = row.get(JobResourceDescriptions::Value.unquoted());
 
                     acc.entry(job_id)
                         .or_insert_with(HashMap::new)
@@ -163,8 +163,8 @@ impl AllJobMoldables {
     /// - if `properties_from_gantt` is false, `Jobs::StartTime` and `Jobs::StopTime`.
     /// - if `properties_from_gantt` is true, `GanttJobsPredictions::StartTime` (in this case the end time is computed from the start time and the moldable walltime).
     pub(crate) async fn get_job_assignment(&self, session: &Session, job_row: &AnyRow, properties_from_gantt: bool) -> Option<JobAssignment> {
-        let job_id: i64 = job_row.get(Jobs::Id.to_string().as_str());
-        let assigned_moldable_id: i64 = job_row.get(Jobs::AssignedMoldableJob.to_string().as_str());
+        let job_id: i64 = job_row.get(Jobs::Id.unquoted());
+        let assigned_moldable_id: i64 = job_row.get(Jobs::AssignedMoldableJob.unquoted());
         if assigned_moldable_id == 0 {
             return None;
         }
@@ -192,7 +192,7 @@ impl AllJobMoldables {
                 .unwrap()
         };
         let resources: ProcSet = ProcSet::from_iter(resources.iter().map(|row| {
-            let res_id: i32 = row.get(AssignedResources::ResourceId.to_string().as_str());
+            let res_id: i32 = row.get(AssignedResources::ResourceId.unquoted());
             session
                 .resource_id_to_resource_index(res_id)
                 .expect("Resource not found. There might be a database concurrency issue.")
@@ -200,12 +200,12 @@ impl AllJobMoldables {
 
         // Get assigned start time
         let (begin, end) = if properties_from_gantt {
-            let start_time: i64 = job_row.get(GanttJobsPredictions::StartTime.to_string().as_str());
+            let start_time: i64 = job_row.get(GanttJobsPredictions::StartTime.unquoted());
             let stop_time = start_time + moldable.walltime - 1;
             (start_time, stop_time)
         } else {
-            let start_time: i64 = job_row.get(Jobs::StartTime.to_string().as_str());
-            let stop_time: i64 = job_row.get(Jobs::StopTime.to_string().as_str());
+            let start_time: i64 = job_row.get(Jobs::StartTime.unquoted());
+            let stop_time: i64 = job_row.get(Jobs::StopTime.unquoted());
             (start_time, stop_time)
         };
 

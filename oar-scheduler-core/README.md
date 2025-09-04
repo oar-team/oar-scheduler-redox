@@ -35,11 +35,11 @@ let queues_grouped_by_priority = vec![vec!["admin".to_string()], vec!["default".
 let mut slot_sets = kamelot::init_slot_sets( & mut platform, false);
 
 for queues in queues_grouped_by_priority {
-// Insert scheduled besteffort jobs if queues = ['besteffort'].
-if active_queues.len() == 1 & & active_queues[0] == "besteffort" {
-kamelot::add_already_scheduled_jobs_to_slot_set( & mut slot_sets, & mut platform, true, false);
-}
-kamelot::internal_schedule_cycle( & mut platform, & mut slot_sets, & active_queues);
+    // Insert scheduled besteffort jobs if queues = ['besteffort'].
+    if active_queues.len() == 1 & & active_queues[0] == "besteffort" {
+        kamelot::add_already_scheduled_jobs_to_slot_set( & mut slot_sets, & mut platform, true, false);
+    }
+    kamelot::internal_schedule_cycle( & mut platform, & mut slot_sets, & active_queues);
 }
 ```
 

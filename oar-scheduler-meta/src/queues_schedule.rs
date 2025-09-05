@@ -35,6 +35,9 @@ pub fn queues_schedule(platform: &mut Platform) -> Vec<Job> {
             .filter(|q| q.state.to_lowercase() == "active")
             .map(|q| q.queue_name.clone())
             .collect::<Vec<String>>();
+        if active_queues.is_empty() {
+            continue;
+        }
 
         info!("Scheduling queue(s): {:?}", active_queues);
         info!("Slotset map: {:?}", slot_sets.keys().collect::<Vec<&Box<str>>>());

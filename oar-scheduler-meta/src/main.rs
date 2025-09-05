@@ -29,8 +29,7 @@ fn main() {
 
     // Initialize logging
     env_logger::Builder::new()
-        .filter(None, LevelFilter::Info)
-        .filter(Some("oar3_rust::scheduler::hierarchy"), LevelFilter::Debug)
+        .filter(None, LevelFilter::Debug)
         .init();
 
     // Load configuration

@@ -16,7 +16,7 @@ use crate::{Session, SessionDeleteStatement, SessionInsertStatement};
 use indexmap::IndexMap;
 use log::debug;
 use oar_scheduler_core::platform::Job;
-use sea_query::{Expr, ExprTrait, Iden, Query};
+use sea_query::{Expr, ExprTrait, Iden, OnConflict, OnConflictAction, Query};
 use sqlx::Error;
 
 #[derive(Iden)]
@@ -94,10 +94,13 @@ pub fn save_jobs_assignments_in_gantt(session: &Session, jobs: IndexMap<i64, Job
         let mut res_query = Query::insert()
             .into_table(GanttJobsResources::Table)
             .columns(vec![GanttJobsResources::MoldableId, GanttJobsResources::ResourceId])
+            .on_conflict(OnConflict::column(GanttJobsPredictions::MoldableId).update_column(GanttJobsResources::ResourceId).to_owned())
             .take();
         let mut pred_query = Query::insert()
             .into_table(GanttJobsPredictions::Table)
             .columns(vec![GanttJobsPredictions::MoldableId, GanttJobsPredictions::StartTime])
+            .on_conflict(OnConflict::column(GanttJobsPredictions::MoldableId).update_column(GanttJobsPredictions::StartTime).to_owned())
+            .to_owned()
             .take();
 
         for job in jobs.values() {
@@ -107,7 +110,7 @@ pub fn save_jobs_assignments_in_gantt(session: &Session, jobs: IndexMap<i64, Job
 
             pred_query.values_panic(vec![Expr::val(*moldable_id), Expr::val(begin)]);
             for res_id in &assignment.resources {
-                res_query.values_panic(vec![Expr::val(*moldable_id), Expr::val(res_id)]);
+                res_query.values_panic(vec![Expr::val(*moldable_id), Expr::val(session.resource_index_to_resource_id(res_id))]);
             }
         }
         res_query.execute(session).await?;

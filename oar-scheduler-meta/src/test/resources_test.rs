@@ -19,7 +19,7 @@ use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyReques
 use oar_scheduler_db::model::resources::{NewResource, NewResourceColumn, ResourceLabelValue};
 use oar_scheduler_db::Session;
 
-fn create_resources_hierarchy(session: &Session, config: &mut Configuration) {
+pub fn create_resources_hierarchy(session: &Session, config: &mut Configuration) {
     NewResourceColumn {
         name: "core".to_string(),
         r#type: "Integer".to_string(),

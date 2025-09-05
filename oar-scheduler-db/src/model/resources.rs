@@ -13,6 +13,7 @@
 
 use crate::{Session, SessionInsertStatement, SessionSelectStatement};
 use indexmap::IndexMap;
+use log::debug;
 use sea_query::{Alias, Expr, Iden, Query};
 use sqlx::{Error, Row};
 use std::collections::HashMap;
@@ -158,10 +159,12 @@ impl NewResourceColumn {
             match session.backend {
                 crate::Backend::Postgres => {
                     let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
+                    debug!("New Resource Column SQL: {}", sql);
                     sqlx::query(&sql).execute(&session.pool).await?;
                 }
                 crate::Backend::Sqlite => {
                     let sql = format!("ALTER TABLE resources ADD COLUMN {} {};", self.name, self.r#type);
+                    debug!("New Resource Column SQL: {}", sql);
                     sqlx::query(&sql).execute(&session.pool).await?;
                 }
             }

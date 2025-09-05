@@ -39,9 +39,6 @@ fn main() {
     // Initialize database connection
     let session = Session::new(&config);
 
-    // Seed database for testing
-    session.create_schema();
-
     // Create the platform instance
     let mut platform = Platform::from_database(session, config);
 

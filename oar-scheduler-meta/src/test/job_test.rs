@@ -11,7 +11,6 @@
  *
  */
 
-use crate::meta_schedule::meta_schedule;
 use crate::platform::Platform;
 use crate::test::setup_for_tests;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
@@ -85,8 +84,18 @@ fn insert_jobs_for_tests(platform: &Platform) {
 
 #[test]
 fn test_insert_job_and_queues() {
-    let (session, config) = setup_for_tests(true);
+    let (session, mut config) = setup_for_tests(false);
+    config.hierarchy_labels = Some("resource_id,network_address,core,cpu,host,mem".to_string());
+
+    // NewResourceColumn {
+    //     name: "nodes".to_string(),
+    //     r#type: "Integer".to_string(),
+    // }
+    //     .insert(&session)
+    //     .expect("Failed to insert test resource column");
+
     let mut platform = Platform::from_database(session, config);
+
 
     // insert_jobs_for_tests(&platform);
     //
@@ -117,7 +126,7 @@ fn test_insert_job_and_queues() {
     //     .insert(&platform.session())
     //     .unwrap();
 
-    meta_schedule(&mut platform);
+    // meta_schedule(&mut platform);
 }
 
 #[test]

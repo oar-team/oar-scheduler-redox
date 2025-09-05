@@ -100,7 +100,7 @@ fn build_redox_slot_sets(platform: Bound<PlatformHandle>) -> PyResult<Py<SlotSet
     let platform_handle_ref = platform.borrow();
     let platform = platform_handle_ref.inner.borrow();
 
-    let slot_sets = kamelot::init_slot_sets(&*platform, false);
+    let (slot_sets, _besteffort_jobs) = kamelot::init_slot_sets(&*platform, false);
 
     Py::new(
         py,
@@ -158,7 +158,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
         let moldable = job.moldables.get(0).expect("No moldable found for job");
 
         // Check if reservation is too old
-        let mut start_time = job.advance_reservation_start_time.unwrap();
+        let mut start_time = job.advance_reservation_begin.unwrap();
         let end_time = start_time + moldable.walltime - 1;
         if now > start_time + moldable.walltime {
             set_job_resa_not_scheduled(&job_handling, &platform, job.id, "Reservation expired and couldn't be started.");

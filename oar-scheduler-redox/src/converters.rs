@@ -263,11 +263,12 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
         time_sharing,
         placeholder,
         dependencies,
-        advance_reservation_start_time,
+        advance_reservation_begin: advance_reservation_start_time,
         submission_time: py_job.getattr_opt("submission_time").unwrap().map(|v| v.extract::<i64>()).unwrap_or(Ok(0)).unwrap(),
         qos: py_job.getattr_opt("qos").unwrap().map(|v| v.extract::<f64>()).unwrap_or(Ok(0.0)).unwrap(),
         nice: py_job.getattr_opt("nice").unwrap().map(|v| v.extract::<f64>()).unwrap_or(Ok(1.0)).unwrap(),
         karma: 0.0,
+        message: String::new(),
     }
 }
 /// Builds a Moldable Rust struct from a Python moldable object.

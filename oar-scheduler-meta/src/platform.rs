@@ -49,14 +49,14 @@ impl Platform {
         &self.session
     }
 
-    pub fn get_gantt_waiting_jobs(&self, queue_name: String) -> Vec<Job> {
-        Job::get_gantt_jobs(
-            &self.session,
-            Some(vec![queue_name]),
-            Some(JobReservation::None),
-            Some(vec![JobState::Waiting]),
-        )
-            .unwrap()
+    // Waiting jobs in the Gantt that should be launched before now + min(security_time, kill_duration_before_reservation)
+    pub fn get_gantt_jobs_to_launch_with_security_time(&self) -> Vec<Job> {
+        let mut interval = self.platform_config.config.scheduler_besteffort_kill_duration_before_reservation;
+        if interval < self.platform_config.config.scheduler_job_security_time {
+            interval = self.platform_config.config.scheduler_job_security_time;
+        }
+        let max_start_time = self.now + interval;
+        Job::get_gantt_jobs(&self.session, None, None, Some(vec![JobState::Waiting]), Some(max_start_time)).unwrap()
     }
     // AR jobs that are scheduled still on waiting state in the Gantt
     pub fn get_gantt_waiting_scheduled_ar_jobs(&self, queue_name: String) -> Vec<Job> {
@@ -65,6 +65,7 @@ impl Platform {
             Some(vec![queue_name]),
             Some(JobReservation::Scheduled),
             Some(vec![JobState::Waiting]),
+            None,
         )
             .unwrap()
     }
@@ -109,7 +110,7 @@ impl PlatformTrait for Platform {
     }
 
     fn get_scheduled_jobs(&self) -> Vec<Job> {
-        Job::get_gantt_jobs(&self.session, None, None, None).unwrap()
+        Job::get_gantt_jobs(&self.session, None, None, None, None).unwrap()
     }
     fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
         Job::get_jobs(&self.session, None, Some(JobReservation::None), Some(vec![JobState::Waiting])).unwrap()

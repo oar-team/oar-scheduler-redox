@@ -21,9 +21,10 @@ use oar_scheduler_db::model::jobs::JobDatabaseRequests;
 use oar_scheduler_db::model::queues::Queue;
 use std::collections::HashMap;
 
-pub fn queues_schedule(platform: &mut Platform) {
+/// Returns the list of already-scheduled besteffort jobs inserted in the SlotSet.
+pub fn queues_schedule(platform: &mut Platform) -> Vec<Job> {
     // Init slotset
-    let mut slot_sets = kamelot::init_slot_sets(platform, false);
+    let (mut slot_sets, besteffort_scheduled_jobs) = kamelot::init_slot_sets(platform, false);
 
     // Schedule each queue
     let grouped_queues: Vec<Vec<Queue>> = Queue::get_all_grouped_by_priority(&platform.session()).expect("Failed to get queues from database");
@@ -50,6 +51,7 @@ pub fn queues_schedule(platform: &mut Platform) {
             check_reservation_jobs(platform, &mut slot_sets, &queue)
         }
     }
+    besteffort_scheduled_jobs
 }
 
 fn check_reservation_jobs(platform: &mut Platform, slot_sets: &mut HashMap<Box<str>, SlotSet>, queue: &String) {
@@ -69,7 +71,7 @@ fn check_reservation_jobs(platform: &mut Platform, slot_sets: &mut HashMap<Box<s
         let moldable = job.moldables.get(0).expect("No moldable found for job");
 
         // Check if reservation is too old
-        let mut start_time = job.advance_reservation_start_time.unwrap();
+        let mut start_time = job.advance_reservation_begin.unwrap();
         let end_time = start_time + moldable.walltime - 1;
         if now > start_time + moldable.walltime {
             set_job_resa_not_scheduled(&platform, &job, "Reservation expired and couldn't be started.");

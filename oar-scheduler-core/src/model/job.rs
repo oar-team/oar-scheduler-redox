@@ -39,7 +39,7 @@ pub struct Job {
     /// List of job dependencies, tuples of (job_id, state, exit_code)
     pub dependencies: Vec<(i64, Box<str>, Option<i32>)>,
     /// Attribute used to store the start time of advance reservation jobs before they get an assignment.
-    pub advance_reservation_start_time: Option<i64>,
+    pub advance_reservation_begin: Option<i64>,
     /// Job submission epoch seconds (used for multifactor age)
     pub submission_time: i64,
     /// Job QoS score in [0.0, 1.0] (used for multifactor qos)
@@ -47,6 +47,7 @@ pub struct Job {
     /// Job nice value (>=1.0) (used for multifactor nice)
     pub nice: f64,
     pub karma: f64,
+    pub message: String,
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +208,7 @@ pub struct JobBuilder {
     dependencies: Vec<(i64, Box<str>, Option<i32>)>,
     advance_reservation_start_time: Option<i64>,
     submission_time: i64,
+    message: String,
 }
 
 impl JobBuilder {
@@ -225,6 +227,7 @@ impl JobBuilder {
             dependencies: Vec::new(),
             advance_reservation_start_time: None,
             submission_time: 0,
+            message: String::new(),
         }
     }
     pub fn moldable_auto(mut self, id: i64, walltime: i64, requests: HierarchyRequests) -> Self {
@@ -318,6 +321,10 @@ impl JobBuilder {
         self.submission_time = submission_time;
         self
     }
+    pub fn message(mut self, message: String) -> Self {
+        self.message = message;
+        self
+    }
     // Computes automatically the no_quotas from the types and TimeSharing and Placeholder if None.
     pub fn build(self) -> Job {
         Job {
@@ -334,11 +341,12 @@ impl JobBuilder {
             assignment: self.assignment,
             quotas_hit_count: 0,
             dependencies: self.dependencies,
-            advance_reservation_start_time: self.advance_reservation_start_time,
+            advance_reservation_begin: self.advance_reservation_start_time,
             submission_time: self.submission_time,
             qos: 0.0,
             nice: 1.0,
             karma: 0.0,
+            message: self.message,
         }
     }
 }

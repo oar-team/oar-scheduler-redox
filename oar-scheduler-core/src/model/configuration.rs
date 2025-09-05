@@ -19,6 +19,7 @@ pub const DEFAULT_CONFIG_FILE: &str = "/etc/oar/oar.conf";
 pub struct Configuration {
     pub scheduler_job_security_time: i64,
     pub cache_enabled: bool,
+    pub scheduler_besteffort_kill_duration_before_reservation: i64,
     // --- Resources configuration ---
     pub scheduler_resource_order: Option<String>,
     pub scheduler_available_suspended_resource_type: Option<String>,
@@ -69,6 +70,7 @@ impl Default for Configuration {
         Configuration {
             scheduler_job_security_time: 60, // 1 minute
             cache_enabled: true,
+            scheduler_besteffort_kill_duration_before_reservation: 60, // 1 minute
             // --- Resources configuration ---
             scheduler_resource_order: None,
             scheduler_available_suspended_resource_type: None,

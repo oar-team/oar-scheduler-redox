@@ -60,7 +60,7 @@ Each crate has its own README with full documentation:
 - [x] Job container support
 - [x] Placeholders support
 - [x] Temporal quotas support
-- [x] Implement job sorting on the Rust side.
+- [x] Job sorting on the Rust side.
 - [ ] Envelopes support
 
 ### Plugins support ([`oar-scheduler-hooks`](/oar-scheduler-hooks))
@@ -90,9 +90,10 @@ Each crate has its own README with full documentation:
 ### Standalone meta-scheduler ([`oar-scheduler-meta`](/oar-scheduler-meta))
 
 - [x] Meta-scheduler base structure with core features.
-- [ ] Minimal meta-scheduler (no gantt visualization, no node management, only TOODs marked as `(MVP REQUIRED)` )
+- [ ] Minimal meta-scheduler (no gantt visualization, no node management, only TOODs marked as `(MVP REQUIRED)`. Almost done, testing required).
 - [ ] Full meta-scheduler
-
+- [ ] Remove the usage of gantt tables `gantt_jobs_resources` and `gantt_jobs_predictions` as they add an intermediary step with heavy
+  database requests. In a full Rust implementation, this is a useless overhead.
 
 # License
 

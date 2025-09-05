@@ -229,6 +229,7 @@ pub trait JobDatabaseRequests {
         queues: Option<Vec<String>>,
         reservation: Option<JobReservation>,
         states: Option<Vec<JobState>>,
+        max_start_time: Option<i64>,
     ) -> Result<Vec<Job>, Error>;
     fn set_state(&self, session: &Session, new_state: &str) -> Result<(), Error>;
     fn set_message(&self, session: &Session, message: &str) -> Result<(), Error>;
@@ -323,6 +324,7 @@ impl JobDatabaseRequests for Job {
         queues: Option<Vec<String>>,
         reservation: Option<JobReservation>,
         states: Option<Vec<JobState>>,
+        max_start_time: Option<i64>,
     ) -> Result<Vec<Job>, Error> {
         session.runtime.block_on(async {
             let rows = Query::select()
@@ -351,6 +353,9 @@ impl JobDatabaseRequests for Job {
                 })
                 .apply_if(states, |req, states| {
                     req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str()).collect::<Vec<&str>>()));
+                })
+                .apply_if(max_start_time, |req, max_start_time| {
+                    req.and_where(Expr::col(GanttJobsPredictions::StartTime).lte(max_start_time));
                 })
                 .order_by(GanttJobsPredictions::StartTime, sea_query::Order::Asc)
                 .order_by(Jobs::Id, sea_query::Order::Asc)

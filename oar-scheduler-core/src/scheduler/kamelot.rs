@@ -23,7 +23,7 @@ use std::rc::Rc;
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: &Vec<String>) -> usize {
     // Insert the already-scheduled besteffort jobs into the slot sets only if scheduling this queue.
     let allow_besteffort = queues.len() == 1 && queues[0] == "besteffort";
-    let mut slot_sets = init_slot_sets(platform, allow_besteffort);
+    let (mut slot_sets, _besteffort_jobs) = init_slot_sets(platform, allow_besteffort);
 
     internal_schedule_cycle(platform, &mut slot_sets, queues)
 }
@@ -68,8 +68,9 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
     0
 }
 
-/// Initialize slot sets map with the default slot set initialized from the platform configuration.
-pub fn init_slot_sets<P>(platform: &P, allow_besteffort: bool) -> HashMap<Box<str>, SlotSet>
+/// Initialize slot sets map with the `default` SlotSet initialized with resource availability and already scheduled jobs.
+/// Returns the slot sets map and a Vec of already scheduled besteffort jobs inserted in the slotset.
+pub fn init_slot_sets<P>(platform: &P, allow_besteffort: bool) -> (HashMap<Box<str>, SlotSet>, Vec<Job>)
 where
     P: PlatformTrait,
 {
@@ -84,9 +85,9 @@ where
     // Initialize slot sets map
     let mut slot_sets = HashMap::from([("default".into(), initial_slot_set)]);
     // Place already scheduled jobs, advanced reservations and jobs from higher priority queues
-    add_already_scheduled_jobs_to_slot_set(&mut slot_sets, platform, allow_besteffort, true);
+    let besteffort_jobs = add_already_scheduled_jobs_to_slot_set(&mut slot_sets, platform, allow_besteffort, true);
 
-    slot_sets
+    (slot_sets, besteffort_jobs)
 }
 
 /// Create pseudo jobs at the end of the slot_set
@@ -112,12 +113,13 @@ fn slot_set_integrate_resource_availability(max_time: i64, available_upto: &Vec<
 /// Inserts the scheduled_jobs of the platform into the slot_sets.
 /// If `allow_besteffort` is true, the besteffort jobs are inserted.
 /// If `allow_other` is true, the non-besteffort jobs are inserted.
-pub fn add_already_scheduled_jobs_to_slot_set<T>(slot_sets: &mut HashMap<Box<str>, SlotSet>, platform: &T, allow_besteffort: bool, allow_other: bool)
+/// Returns a Vec with all the besteffort jobs that were added to the slot sets, ordered by start time.
+pub fn add_already_scheduled_jobs_to_slot_set<T>(slot_sets: &mut HashMap<Box<str>, SlotSet>, platform: &T, allow_besteffort: bool, allow_other: bool) -> Vec<Job>
 where
     T: PlatformTrait,
 {
-    let scheduled_jobs = platform.get_scheduled_jobs();
-    let mut scheduled_jobs = scheduled_jobs.iter().collect::<Vec<&Job>>();
+    let mut scheduled_jobs = platform.get_scheduled_jobs();
+    // let mut scheduled_jobs = scheduled_jobs.iter().collect::<Vec<&Job>>();
     scheduled_jobs.sort_by_key(|j| j.begin().unwrap());
     if allow_besteffort && !allow_other {
         // Retain only besteffort jobs
@@ -126,10 +128,10 @@ where
         // Retain only non-besteffort jobs
         scheduled_jobs.retain(|j| j.queue.as_ref() != "besteffort");
     } else if !allow_besteffort && !allow_other {
-        return;
+        return vec![];
     }
     let mut slot_set_jobs: HashMap<Box<str>, Vec<&Job>> = HashMap::new();
-    scheduled_jobs.into_iter().for_each(|job| {
+    scheduled_jobs.iter().for_each(|job| {
         let slot_set_name = job.slot_set_name();
         slot_set_jobs
             .entry(slot_set_name)
@@ -144,4 +146,11 @@ where
             .expect(format!("Slot set {} does not exist", slot_set_name).as_str());
         slot_set.split_slots_for_jobs_and_update_resources(&jobs, true, true, None);
     }
+    if !allow_besteffort {
+        return vec![];
+    }
+    if allow_other {
+        scheduled_jobs.retain(|j| j.queue.as_ref() == "besteffort");
+    }
+    scheduled_jobs
 }

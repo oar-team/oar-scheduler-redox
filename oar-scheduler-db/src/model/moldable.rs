@@ -13,7 +13,7 @@
 
 use crate::model::gantt::{GanttJobsPredictions, GanttJobsResources};
 use crate::model::jobs::Jobs;
-use crate::{Session, SessionSelectStatement};
+use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use oar_scheduler_core::model::job::ProcSet;
 use oar_scheduler_core::model::job::{JobAssignment, Moldable};
 use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
@@ -73,6 +73,56 @@ pub enum AssignedResources {
     ResourceId,
     #[iden = "assigned_resource_index"]
     Index,
+}
+
+pub trait MoldableDatabaseRequests {
+    /// Saves the moldables assigned resources in the table `assigned_resources`.
+    fn save_resources_as_assigned_resources(&self, session: &Session, resources: &ProcSet) -> Result<(), Error>;
+    fn set_gantt_job_start_time(&self, session: &Session, start_time: i64) -> Result<(), Error>;
+    fn set_walltime(&self, session: &Session, walltime: i64) -> Result<(), Error>;
+}
+
+impl MoldableDatabaseRequests for Moldable {
+    fn save_resources_as_assigned_resources(&self, session: &Session, resources: &ProcSet) -> Result<(), Error> {
+        if resources.is_empty() {
+            return Ok(());
+        }
+        let mut query = Query::insert();
+        query
+            .into_table(AssignedResources::Table)
+            .columns(vec![AssignedResources::MoldableId, AssignedResources::ResourceId]);
+        for res in resources.iter() {
+            query.values_panic(vec![Expr::val(self.id), Expr::val(session.resource_index_to_resource_id(res).unwrap())]);
+        }
+        session.runtime.block_on(async {
+            query.execute(session).await?;
+            Ok(())
+        })
+    }
+
+    fn set_gantt_job_start_time(&self, session: &Session, start_time: i64) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            Query::update()
+                .table(GanttJobsPredictions::Table)
+                .value(GanttJobsPredictions::StartTime, start_time)
+                .and_where(Expr::col(GanttJobsPredictions::MoldableId).eq(self.id))
+                .execute(session)
+                .await?;
+            Ok(())
+        })
+    }
+
+    fn set_walltime(&self, session: &Session, walltime: i64) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            Query::update()
+                .table(MoldableJobDescriptions::Table)
+                .value(MoldableJobDescriptions::Walltime, walltime)
+                .and_where(Expr::col(MoldableJobDescriptions::Id).eq(self.id))
+                .execute(session)
+                .await?;
+            Ok(())
+        })
+    }
 }
 
 pub struct AllJobMoldables {

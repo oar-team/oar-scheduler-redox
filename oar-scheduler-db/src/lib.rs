@@ -79,6 +79,7 @@ pub struct Session {
     runtime: Runtime,
     /// Maps the database resource ID to the enumerated ID used in the ProcSet.
     resource_id_to_resource_index: HashMap<i32, u32>,
+    resource_index_to_resource_id: HashMap<u32, i32>,
 }
 
 impl Session {
@@ -101,7 +102,8 @@ impl Session {
             (pool, backend)
         });
         let resource_id_to_resource_index = HashMap::new();
-        Session { pool, backend, runtime, resource_id_to_resource_index }
+        let resource_index_to_resource_id = HashMap::new();
+        Session { pool, backend, runtime, resource_id_to_resource_index, resource_index_to_resource_id }
     }
     pub fn get_now(&self) -> i64 {
         match self.backend {
@@ -139,6 +141,7 @@ impl Session {
     }
     pub fn get_resource_set(&mut self, config: &Configuration) -> ResourceSet {
         let mut resource_id_to_resource_index = HashMap::new();
+        let mut resource_index_to_resource_id = HashMap::new();
         let labels = config
             .hierarchy_labels
             .clone()
@@ -168,6 +171,7 @@ impl Session {
 
         for (enumerated_id, resource) in resources.iter().enumerate() {
             resource_id_to_resource_index.insert(resource.id, enumerated_id as u32);
+            resource_index_to_resource_id.insert(enumerated_id as u32, resource.id);
             info!("Resource {}: id={} type={}, state={} map={:?}", enumerated_id, resource.id, resource.r#type, resource.state, resource.labels);
             if resource.r#state.to_lowercase() != "dead" {
                 nb_resources_not_dead += 1;
@@ -210,6 +214,7 @@ impl Session {
         }
 
         self.resource_id_to_resource_index = resource_id_to_resource_index;
+        self.resource_index_to_resource_id = resource_index_to_resource_id;
         ResourceSet {
             nb_resources_not_dead,
             nb_resources_default_not_dead,
@@ -224,6 +229,9 @@ impl Session {
     }
     pub fn resource_id_to_resource_index(&self, resource_id: i32) -> Option<u32> {
         self.resource_id_to_resource_index.get(&resource_id).cloned()
+    }
+    pub fn resource_index_to_resource_id(&self, resource_index: u32) -> Option<i32> {
+        self.resource_index_to_resource_id.get(&resource_index).cloned()
     }
 }
 

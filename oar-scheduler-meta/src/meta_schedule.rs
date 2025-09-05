@@ -14,8 +14,9 @@ use crate::platform::Platform;
 use crate::queues_schedule::queues_schedule;
 use log::{debug, warn};
 use oar_scheduler_core::platform::{Job, PlatformTrait};
-use oar_scheduler_db::model::gantt;
-use oar_scheduler_db::model::jobs::JobDatabaseRequests;
+use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobState};
+use oar_scheduler_db::model::moldable::MoldableDatabaseRequests;
+use oar_scheduler_db::model::{events, gantt};
 use std::collections::HashSet;
 
 pub fn meta_schedule(platform: &mut Platform) -> i64 {
@@ -79,103 +80,69 @@ fn check_besteffort_jobs_to_kill(platform: &mut Platform, besteffort_scheduled_j
     true
 }
 
-
-/*def handle_jobs_to_launch(
-    session, config, jobs_to_launch_lst, current_time_sec, current_time_sql
-):
-    logger.debug("Begin processing jobs to launch (start time <= " + current_time_sql)
-
-    return_code = 0
-
-    for job in jobs_to_launch_lst:
-        return_code = 1
-        logger.debug(
-            "Set job " + str(job.id) + " state to toLaunch at " + current_time_sql
-        )
-
-        #
-        # Advance Reservation
-        #
-        walltime = job.walltime
-        if (job.reservation == "Scheduled") and (job.start_time < current_time_sec):
-            max_time = walltime - (current_time_sec - job.start_time)
-
-            set_moldable_job_max_time(session, job.moldable_id, max_time)
-            set_gantt_job_start_time(session, job.moldable_id, current_time_sec)
-            logger.warning(
-                "Reduce walltime of job "
-                + str(job.id)
-                + "to "
-                + str(max_time)
-                + "(was  "
-                + str(walltime)
-                + " )"
-            )
-
-            add_new_event(
-                session,
-                "REDUCE_RESERVATION_WALLTIME",
-                job.id,
-                "Change walltime from " + str(walltime) + " to " + str(max_time),
-            )
-
-            w_max_time = duration_to_sql(max_time)
-            new_message = re.sub(r"W=\d+:\d+:\d+", "W=" + w_max_time, job.message)
-
-            if new_message != job.message:
-                set_job_message(session, job.id, new_message)
-
-        prepare_job_to_be_launched(session, config, job, current_time_sec)
-
-    logger.debug("End processing of jobs to launch")
-
-    return return_code*/
-
 fn handle_jobs_to_launch(platform: &mut Platform, jobs_to_launch: &Vec<&Job>) -> i32 {
     let now = platform.get_now();
     debug!("Begin processing jobs to launch (start time <= {})", now);
     let mut return_code = 0;
     for job in jobs_to_launch {
         return_code = 1;
-        debug!("Set job {} state to toLaunch at {}", job.id, now);
+
+        if job.assignment.is_none() {
+            panic!("Can’t mark job {} as toLaunch as it has no assignment", job.id);
+        }
+        let assignment = job.assignment.as_ref().unwrap();
+        let moldable = job.moldables.get(assignment.moldable_index).unwrap();
+        let mut start_time = assignment.begin;
 
         // AR jobs tightening
         if let Some(begin) = job.advance_reservation_begin {
             if begin < now {
+                start_time = now;
                 // The job should start now, so we update its assignment to start now
                 let mut new_job = job.clone();
-                if let Some(assignment) = &new_job.assignment {
-                    let walltime = assignment.end - assignment.begin + 1;
-                    let new_walltime = assignment.end - now + 1;
-                    warn!("Reducing the walltime of the job {} from {} to {}", job.id, walltime, new_walltime);
+                let walltime = assignment.end - assignment.begin + 1;
+                let new_walltime = assignment.end - now + 1;
+                warn!("Reducing the walltime of the job {} from {} to {}", job.id, walltime, new_walltime);
 
+                moldable
+                    .set_walltime(&platform.session(), new_walltime)
+                    .expect("Unable to update AR moldable walltime");
+                moldable
+                    .set_gantt_job_start_time(&platform.session(), now)
+                    .expect("Unable to update AR moldable start time in gantt");
+                events::add_new_event(
+                    &platform.session(),
+                    "REDUCE_RESERVATION_WALLTIME",
+                    job.id,
+                    format!("Change walltime from {} to {}", walltime, new_walltime).as_str(),
+                );
 
-                    // TODO: finish the implementation of the AR jobs part
-                    // set_moldable_job_max_time(session, job.moldable_id, max_time)
-                    // set_gantt_job_start_time(session, job.moldable_id, current_time_sec)
-                    // add_new_event(platform, "REDUCE_RESERVATION_WALLTIME", job.id, format!("Change walltime from {} to {}", walltime, max_time));
-
-                    // updating job’s message
-                    let old_walltime_str = format!("{:02}:{:02}:{:02}", walltime / 3600, (walltime % 3600) / 60, walltime % 60);
-                    let new_walltime_str = format!("{:02}:{:02}:{:02}", new_walltime / 3600, (new_walltime % 3600) / 60, new_walltime % 60);
-                    let message = job.message.replace(&format!("W={}", old_walltime_str), &format!("W={}", new_walltime_str));
-                    if message != job.message {
-                        job.set_message(&platform.session(), message.as_str()).expect("Unable to set job message");
-                    }
+                // updating job’s message
+                let old_walltime_str = format!("{:02}:{:02}:{:02}", walltime / 3600, (walltime % 3600) / 60, walltime % 60);
+                let new_walltime_str = format!("{:02}:{:02}:{:02}", new_walltime / 3600, (new_walltime % 3600) / 60, new_walltime % 60);
+                let message = job
+                    .message
+                    .replace(&format!("W={}", old_walltime_str), &format!("W={}", new_walltime_str));
+                if message != job.message {
+                    job.set_message(&platform.session(), message.as_str()).expect("Unable to set job message");
                 }
             }
         }
 
-        // set_job_start_time_assigned_moldable_id(
-        //     session, job.id, current_time_sec, job.moldable_id
-        // )
-        //
-        // add_resource_job_pairs(session, job.moldable_id)
-        //
-        // set_job_state(session, config, job.id, "toLaunch")
-        //
-        // notify_to_run_job(config, job.id)
-
+        debug!("Set job {} state to toLaunch at {}", job.id, now);
+        job.assign_moldable_and_set_start_time(&platform.session(), moldable.id, start_time)
+            .unwrap();
+        moldable
+            .save_resources_as_assigned_resources(&platform.session(), &assignment.resources)
+            .expect("Unable to save assigned resources");
+        job.set_state(&platform.session(), JobState::ToLaunch).expect("Unable to set job state");
+        notify_to_run_job(platform, job.id)
     }
     return_code
+}
+
+fn notify_to_run_job(_platform: &Platform, job_id: i64) {
+    // TODO: Tell bipbip commander to run a job. It can also notifies oar2 almighty if METASCHEDULER_OAR3_WITH_OAR2 configuration variable is set to yes.:
+    //  https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/kao/meta_sched.py#L81-L118
+    debug!("Notify to run job {}", job_id);
 }

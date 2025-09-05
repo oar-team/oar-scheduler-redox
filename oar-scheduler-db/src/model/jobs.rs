@@ -17,7 +17,7 @@ use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResour
 use crate::model::SqlEnum;
 use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use indexmap::IndexMap;
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use oar_scheduler_core::model::job::JobBuilder;
 use oar_scheduler_core::platform::Job;
 use sea_query::{Alias, Expr, Query};
@@ -231,9 +231,10 @@ pub trait JobDatabaseRequests {
         states: Option<Vec<JobState>>,
         max_start_time: Option<i64>,
     ) -> Result<Vec<Job>, Error>;
-    fn set_state(&self, session: &Session, new_state: &str) -> Result<(), Error>;
+    fn set_state(&self, session: &Session, new_state: JobState) -> Result<(), Error>;
     fn set_message(&self, session: &Session, message: &str) -> Result<(), Error>;
     fn set_resa_state(&self, session: &Session, new_resa_state: &str) -> Result<(), Error>;
+    fn assign_moldable_and_set_start_time(&self, session: &Session, moldable_id: i64, start_time: i64) -> Result<(), Error>;
 }
 
 impl JobDatabaseRequests for Job {
@@ -394,7 +395,7 @@ impl JobDatabaseRequests for Job {
         })
     }
 
-    fn set_state(&self, session: &Session, new_state: &str) -> Result<(), Error> {
+    fn set_state(&self, session: &Session, new_state: JobState) -> Result<(), Error> {
         session.runtime.block_on(async {
             let tx = session.begin().await;
             let mut states = vec![
@@ -409,24 +410,24 @@ impl JobDatabaseRequests for Job {
                 "Suspended",
                 "Resuming",
             ];
-            states.remove(states.iter().position(|s| *s == new_state).expect("Invalid state"));
+            states.remove(states.iter().position(|s| *s == new_state.as_str()).expect("Invalid state"));
             let res = Query::update()
                 .table(Jobs::Table)
                 .and_where(Expr::col(Jobs::Id).eq(self.id))
                 .and_where(Expr::col(Jobs::State).is_in(states))
-                .value(Jobs::State, new_state)
+                .value(Jobs::State, new_state.as_str())
                 .execute(session)
                 .await?;
             tx.commit().await.unwrap();
             if res == 0 {
                 warn!(
                     "Job is already terminated or in error or wanted state, job_id: {}, wanted state: {}",
-                    self.id, new_state
+                    self.id, new_state.as_str()
                 );
                 return Ok(());
             }
 
-            debug!("Job {} state changed to {}", self.id, new_state);
+            debug!("Job {} state changed to {}", self.id, new_state.as_str());
 
             // TODO: update the JobStateLog table and notify user as done here:
             //   https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/lib/job_handling.py#L1714-L1800
@@ -463,6 +464,27 @@ impl JobDatabaseRequests for Job {
                     "Job not found when setting reservation state, job_id: {}, reservation state: {}",
                     self.id, new_resa_state
                 );
+            }
+            Ok(())
+        })
+    }
+
+    fn assign_moldable_and_set_start_time(&self, session: &Session, moldable_id: i64, start_time: i64) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            let res = Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .value(Jobs::AssignedMoldableId, moldable_id)
+                .value(Jobs::StartTime, start_time)
+                .execute(session)
+                .await?;
+            if res == 0 {
+                warn!(
+                    "Job not found when assigning moldable and setting start time, job_id: {}, moldable_id: {}, start_time: {}",
+                    self.id, moldable_id, start_time
+                );
+            } else {
+                debug!("Job {} assigned to moldable {} with start time {}", self.id, moldable_id, start_time);
             }
             Ok(())
         })

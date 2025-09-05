@@ -17,7 +17,7 @@ use oar_scheduler_core::model::job::JobAssignment;
 use oar_scheduler_core::platform::{Job, PlatformTrait, ProcSetCoresOp};
 use oar_scheduler_core::scheduler::slotset::SlotSet;
 use oar_scheduler_core::scheduler::{kamelot, quotas};
-use oar_scheduler_db::model::jobs::JobDatabaseRequests;
+use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobState};
 use oar_scheduler_db::model::queues::Queue;
 use std::collections::HashMap;
 
@@ -129,7 +129,7 @@ fn check_reservation_jobs(platform: &mut Platform, slot_sets: &mut HashMap<Box<s
     }
 }
 
-fn set_job_resa_state(platform: &Platform, job: &Job, state: &str, message: Option<&str>, scheduled: bool) {
+fn set_job_resa_state(platform: &Platform, job: &Job, state: JobState, message: Option<&str>, scheduled: bool) {
     job.set_state(&platform.session(), state).expect("Unable to set job state");
     if let Some(message) = message {
         job.set_message(&platform.session(), message).expect("Unable to set job message");
@@ -141,11 +141,12 @@ fn set_job_resa_state(platform: &Platform, job: &Job, state: &str, message: Opti
 }
 fn set_job_resa_scheduled(platform: &Platform, job: &Job, error: Option<&str>) {
     if let Some(error) = error {
-        set_job_resa_state(platform, job, "toError", Some(error), true);
+        set_job_resa_state(platform, job, JobState::ToError, Some(error), true);
     } else {
-        set_job_resa_state(platform, job, "toAckReservation", None, true);
+        set_job_resa_state(platform, job, JobState::ToAckReservation, None, true);
     }
 }
 fn set_job_resa_not_scheduled(platform: &Platform, job: &Job, error: &str) {
-    set_job_resa_state(platform, job, "Error", Some(error), false);
+    // TODO: Why in Python, we set the State Error? Should we add a new state Error?
+    set_job_resa_state(platform, job, JobState::ToError, Some(error), false);
 }

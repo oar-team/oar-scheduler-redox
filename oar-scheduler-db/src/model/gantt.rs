@@ -78,31 +78,27 @@ pub fn save_jobs_assignments_in_gantt(session: &Session, jobs: IndexMap<i64, Job
         panic!("Trying to save jobs assignments in gantt tables but some jobs have no assignment");
     }
     session.runtime.block_on(async {
-        // Build values
-        let (resources, predictions) = jobs.iter().fold(
-            (Vec::with_capacity(jobs.len()), Vec::with_capacity(jobs.len())),
-            |(mut res_vec, mut pred_vec), (_, job)| {
-                let assignment = job.assignment.as_ref().unwrap();
-                let moldable_id = &job.moldables[assignment.moldable_index].id;
-                let begin = assignment.begin;
-                res_vec.extend(assignment.resources.iter().map(|res_id| Expr::val(*moldable_id).eq(res_id)));
-                pred_vec.extend(assignment.resources.iter().map(|res_id| Expr::val(*moldable_id).eq(begin)));
-                (res_vec, pred_vec)
-            },
-        );
-        // Insert
-        Query::insert()
+        let mut res_query = Query::insert()
             .into_table(GanttJobsResources::Table)
             .columns(vec![GanttJobsResources::MoldableId, GanttJobsResources::ResourceId])
-            .values_panic(resources)
-            .execute(session)
-            .await?;
-        Query::insert()
+            .take();
+        let mut pred_query = Query::insert()
             .into_table(GanttJobsPredictions::Table)
             .columns(vec![GanttJobsPredictions::MoldableId, GanttJobsPredictions::StartTime])
-            .values_panic(predictions)
-            .execute(session)
-            .await?;
+            .take();
+
+        for job in jobs.values() {
+            let assignment = job.assignment.as_ref().unwrap();
+            let moldable_id = &job.moldables[assignment.moldable_index].id;
+            let begin = assignment.begin;
+
+            pred_query.values_panic(vec![Expr::val(*moldable_id), Expr::val(begin)]);
+            for res_id in &assignment.resources {
+                res_query.values_panic(vec![Expr::val(*moldable_id), Expr::val(res_id)]);
+            }
+        }
+        res_query.execute(session).await?;
+        pred_query.execute(session).await?;
         Ok(())
     })
 }

@@ -18,7 +18,7 @@ use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobState};
 use oar_scheduler_db::model::moldable::MoldableDatabaseRequests;
 use oar_scheduler_db::model::{events, gantt, SqlEnum};
 use std::collections::HashSet;
-use std::process::exit;
+use std::process::{exit, Command};
 
 pub fn meta_schedule(platform: &mut Platform) -> i64 {
     let mut exit_code = 0;
@@ -168,4 +168,11 @@ fn notify_to_run_job(_platform: &Platform, job_id: i64) {
     // TODO: Tell bipbip commander to run a job. It can also notifies oar2 almighty if METASCHEDULER_OAR3_WITH_OAR2 configuration variable is set to yes.:
     //  https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/kao/meta_sched.py#L81-L118
     debug!("Notify to run job {}", job_id);
+
+    // Testing with a temporary script
+    Command::new("oar-notify-to-run-job")
+        .arg(job_id.to_string())
+        .output()
+        .expect("failed to run oar-notify-to-run-job");
+
 }

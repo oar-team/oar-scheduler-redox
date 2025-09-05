@@ -15,7 +15,7 @@ use crate::platform::Platform;
 use crate::test::setup_for_tests;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
 use oar_scheduler_core::platform::Job;
-use oar_scheduler_db::model::{JobDatabaseRequests, NewJob};
+use oar_scheduler_db::model::{JobDatabaseRequests, JobReservation, NewJob};
 use std::collections::HashMap;
 
 fn insert_jobs_for_tests(platform: &Platform) {
@@ -80,7 +80,7 @@ fn test_insert_and_retrieve_job() {
     insert_jobs_for_tests(&platform);
 
     let default_jobs = Job::get_jobs(&platform.session(), Some(vec!["default".to_string()]), None, None).unwrap();
-    let besteffort_jobs = Job::get_jobs(&platform.session(), Some(vec!["besteffort".to_string()]), Some("None".to_string()), None).unwrap();
+    let besteffort_jobs = Job::get_jobs(&platform.session(), Some(vec!["besteffort".to_string()]), Some(JobReservation::None), None).unwrap();
 
     assert_eq!(default_jobs.len(), 3);
     assert_eq!(besteffort_jobs.len(), 2);

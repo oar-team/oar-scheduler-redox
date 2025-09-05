@@ -28,7 +28,7 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
     // TODO: (MVP REQUIRED) Implement `get_gantt_jobs_to_launch` with config values SCHEDULER_BESTEFFORT_KILL_DURATION_BEFORE_RESERVATION
 
-    // TODO: Implement the besteffort kill & jobs launch logic
+    // TODO: (MVP REQUIRED) Implement the besteffort kill & jobs launch logic
 
     // TODO: Update gantt visualization tables
 
@@ -51,4 +51,6 @@ fn gantt_init_with_running_jobs(platform: &mut Platform) {
     gantt_flush_tables(&platform.session());
     let current_jobs = platform.get_fully_scheduled_jobs();
     platform.save_assignments(current_jobs);
+    // In the Python code, scheduled_jobs are fetched and a SlotSet is build, but this code is kept into the
+    // `kamelot::init_slot_sets` function to avoid code duplication.
 }

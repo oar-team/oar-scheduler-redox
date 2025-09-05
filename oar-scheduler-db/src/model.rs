@@ -27,3 +27,10 @@ pub use gantt::*;
 // Convenient re-exports
 pub use jobs::*;
 pub use resources::*;
+
+pub trait SqlEnum {
+    fn as_str(&self) -> &str;
+    fn from_str(s: &str) -> Option<Self>
+    where
+        Self: Sized;
+}

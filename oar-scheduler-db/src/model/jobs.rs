@@ -13,7 +13,7 @@
 use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
 use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
-use crate::model::GanttJobsPredictions;
+use crate::model::{GanttJobsPredictions, SqlEnum};
 use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use indexmap::IndexMap;
 use log::{debug, info, warn};
@@ -97,6 +97,83 @@ pub enum Jobs {
     SchedulerInfo,
 }
 
+pub enum JobState {
+    ToLaunch,
+    ToError,
+    ToAckReservation,
+    Launching,
+    Running,
+    Finishing,
+    Waiting,
+    Hold,
+    Suspended,
+    Resuming,
+}
+impl SqlEnum for JobState {
+    fn as_str(&self) -> &str {
+        match self {
+            JobState::ToLaunch => "toLaunch",
+            JobState::ToError => "toError",
+            JobState::ToAckReservation => "toAckReservation",
+            JobState::Launching => "Launching",
+            JobState::Running => "Running",
+            JobState::Finishing => "Finishing",
+            JobState::Waiting => "Waiting",
+            JobState::Hold => "Hold",
+            JobState::Suspended => "Suspended",
+            JobState::Resuming => "Resuming",
+        }
+    }
+
+    fn from_str(s: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        match s {
+            "toLaunch" => Some(JobState::ToLaunch),
+            "toError" => Some(JobState::ToError),
+            "toAckReservation" => Some(JobState::ToAckReservation),
+            "Launching" => Some(JobState::Launching),
+            "Running" => Some(JobState::Running),
+            "Finishing" => Some(JobState::Finishing),
+            "Waiting" => Some(JobState::Waiting),
+            "Hold" => Some(JobState::Hold),
+            "Suspended" => Some(JobState::Suspended),
+            "Resuming" => Some(JobState::Resuming),
+            _ => None,
+        }
+    }
+}
+
+pub enum JobReservation {
+    ToSchedule,
+    Scheduled,
+    None,
+    Error,
+}
+impl SqlEnum for JobReservation {
+    fn as_str(&self) -> &str {
+        match self {
+            JobReservation::ToSchedule => "toSchedule",
+            JobReservation::Scheduled => "Scheduled",
+            JobReservation::None => "None",
+            JobReservation::Error => "Error",
+        }
+    }
+    fn from_str(s: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        match s {
+            "toSchedule" => Some(JobReservation::ToSchedule),
+            "Scheduled" => Some(JobReservation::Scheduled),
+            "None" => Some(JobReservation::None),
+            "Error" => Some(JobReservation::Error),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Iden)]
 pub enum JobStateLogs {
     #[iden = "job_state_logs"]
@@ -143,14 +220,14 @@ pub trait JobDatabaseRequests {
     fn get_jobs(
         session: &Session,
         queues: Option<Vec<String>>,
-        reservation: Option<String>,
-        states: Option<Vec<String>>,
+        reservation: Option<JobReservation>,
+        states: Option<Vec<JobState>>,
     ) -> Result<IndexMap<i64, Job>, Error>;
-    fn get_gantt_scheduled_jobs(
+    fn get_gantt_jobs(
         session: &Session,
         queues: Option<Vec<String>>,
-        reservation: Option<String>,
-        states: Option<Vec<String>>,
+        reservation: Option<JobReservation>,
+        states: Option<Vec<JobState>>,
     ) -> Result<Vec<Job>, Error>;
     fn set_state(&self, session: &Session, new_state: &str) -> Result<(), Error>;
     fn set_message(&self, session: &Session, message: &str) -> Result<(), Error>;
@@ -169,8 +246,8 @@ impl JobDatabaseRequests for Job {
     fn get_jobs(
         session: &Session,
         queues: Option<Vec<String>>,
-        reservation: Option<String>,
-        states: Option<Vec<String>>,
+        reservation: Option<JobReservation>,
+        states: Option<Vec<JobState>>,
     ) -> Result<IndexMap<i64, Job>, Error> {
         let jobs = session.runtime.block_on(async {
             let rows = Query::select()
@@ -192,10 +269,10 @@ impl JobDatabaseRequests for Job {
                     req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
                 })
                 .apply_if(reservation, |req, reservation| {
-                    req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
+                    req.and_where(Expr::col(Jobs::Reservation).eq(reservation.as_str()));
                 })
                 .apply_if(states, |req, states| {
-                    req.and_where(Expr::col(Jobs::State).is_in(states));
+                    req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str()).collect::<Vec<&str>>()));
                 })
                 .order_by(Jobs::StartTime, sea_query::Order::Asc)
                 .order_by(Jobs::Id, sea_query::Order::Asc)
@@ -225,7 +302,7 @@ impl JobDatabaseRequests for Job {
                     .assign_opt(jobs_moldables.get_job_assignment(session, &row, false).await)
                     .moldables(moldables);
                 // Reservation jobs
-                if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
+                if JobReservation::ToSchedule.as_str() == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
                     job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.unquoted()));
                 };
                 jobs.insert(id, job_builder.build());
@@ -240,11 +317,11 @@ impl JobDatabaseRequests for Job {
     /// If `reservation` is `Some`, only jobs in this reservation value are returned.
     /// If `state` is `Some`, only jobs in one of the state are returned.
     /// Jobs are always ordered by start time and then by job id ascending, making the waiting jobs to be ordered by submission time, and scheduled/AR jobs by start time.
-    fn get_gantt_scheduled_jobs(
+    fn get_gantt_jobs(
         session: &Session,
         queues: Option<Vec<String>>,
-        reservation: Option<String>,
-        states: Option<Vec<String>>,
+        reservation: Option<JobReservation>,
+        states: Option<Vec<JobState>>,
     ) -> Result<Vec<Job>, Error> {
         session.runtime.block_on(async {
             let rows = Query::select()
@@ -266,13 +343,13 @@ impl JobDatabaseRequests for Job {
                     Expr::col(Jobs::AssignedMoldableId).equals(GanttJobsPredictions::MoldableId),
                 )
                 .apply_if(reservation, |req, reservation| {
-                    req.and_where(Expr::col(Jobs::Reservation).eq(reservation));
+                    req.and_where(Expr::col(Jobs::Reservation).eq(reservation.as_str()));
                 })
                 .apply_if(queues, |req, queues| {
                     req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
                 })
                 .apply_if(states, |req, states| {
-                    req.and_where(Expr::col(Jobs::State).is_in(states));
+                    req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str()).collect::<Vec<&str>>()));
                 })
                 .order_by(GanttJobsPredictions::StartTime, sea_query::Order::Asc)
                 .order_by(Jobs::Id, sea_query::Order::Asc)
@@ -302,7 +379,7 @@ impl JobDatabaseRequests for Job {
                     .assign_opt(jobs_moldables.get_job_assignment(session, &row, true).await)
                     .moldables(moldables);
                 // Reservation jobs
-                if "toSchedule" == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
+                if JobReservation::ToSchedule.as_str() == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
                     job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.unquoted()));
                 };
                 jobs.push(job_builder.build());
@@ -336,7 +413,10 @@ impl JobDatabaseRequests for Job {
                 .await?;
             tx.commit().await.unwrap();
             if res == 0 {
-                warn!("Job is already terminated or in error or wanted state, job_id: {}, wanted state: {}", self.id, new_state);
+                warn!(
+                    "Job is already terminated or in error or wanted state, job_id: {}, wanted state: {}",
+                    self.id, new_state
+                );
                 return Ok(());
             }
 
@@ -373,7 +453,10 @@ impl JobDatabaseRequests for Job {
                 .execute(session)
                 .await?;
             if res == 0 {
-                warn!("Job not found when setting reservation state, job_id: {}, reservation state: {}", self.id, new_resa_state);
+                warn!(
+                    "Job not found when setting reservation state, job_id: {}, reservation state: {}",
+                    self.id, new_resa_state
+                );
             }
             Ok(())
         })

@@ -11,6 +11,7 @@
  *
  */
 
+use crate::meta_schedule::meta_schedule;
 use crate::platform::Platform;
 use crate::test::setup_for_tests;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
@@ -83,8 +84,45 @@ fn insert_jobs_for_tests(platform: &Platform) {
 }
 
 #[test]
+fn test_insert_job_and_queues() {
+    let (session, config) = setup_for_tests(true);
+    let mut platform = Platform::from_database(session, config);
+
+    // insert_jobs_for_tests(&platform);
+    //
+    // Queue {
+    //     queue_name: "admin".to_string(),
+    //     priority: 10,
+    //     scheduler_policy: "kamelot".to_string(),
+    //     state: "Active".to_string(),
+    // }
+    //     .insert(&platform.session())
+    //     .unwrap();
+    //
+    // Queue {
+    //     queue_name: "default".to_string(),
+    //     priority: 2,
+    //     scheduler_policy: "kamelot".to_string(),
+    //     state: "Active".to_string(),
+    // }
+    //     .insert(&platform.session())
+    //     .unwrap();
+    //
+    // Queue {
+    //     queue_name: "besteffort".to_string(),
+    //     priority: 0,
+    //     scheduler_policy: "kamelot".to_string(),
+    //     state: "Active".to_string(),
+    // }
+    //     .insert(&platform.session())
+    //     .unwrap();
+
+    meta_schedule(&mut platform);
+}
+
+#[test]
 fn test_insert_and_retrieve_job() {
-    let (session, config) = setup_for_tests();
+    let (session, config) = setup_for_tests(true);
     let platform = Platform::from_database(session, config);
     insert_jobs_for_tests(&platform);
 

@@ -37,7 +37,7 @@ fn main() {
     let config = Configuration::load();
 
     // Initialize database connection
-    let session = Session::new("sqlite::memory:");
+    let session = Session::new(&config);
 
     // Seed database for testing
     session.create_schema();

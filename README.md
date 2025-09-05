@@ -72,8 +72,8 @@ Each crate has its own README with full documentation:
 
 - [x] Building a database framework around sqlx and sea-query supporting both PostgreSQL and SQLite for tests (schema must be dynamic).
 - [x] Support CRUD operations needed for Platform initialization (resources and jobs fetching).
-- [ ] Support CRUD operations needed for job updates (job scheduling, job messages and status, etc.).
-- [ ] Support CRUD operations needed for Gantt job visualization.
+- [x] Support CRUD operations needed for job and moldables updates.
+- [ ] Implement new CRUD operations as needed by the meta-scheduler.
 
 ### Benchmarking ([`oar-scheduler-bench`](/oar-scheduler-bench))
 
@@ -90,7 +90,8 @@ Each crate has its own README with full documentation:
 ### Standalone meta-scheduler ([`oar-scheduler-meta`](/oar-scheduler-meta))
 
 - [x] Meta-scheduler base structure with core features.
-- [ ] Minimal meta-scheduler (no gantt visualization, no node management, only TOODs marked as `(MVP REQUIRED)`. Almost done, testing required).
+- [x] Minimal meta-scheduler (no gantt visualization, no node management, only TOODs marked as `(MVP REQUIRED)`).
+- [ ] Adding more tests to test the whole meta-scheduler.
 - [ ] Full meta-scheduler
 - [ ] Remove the usage of gantt tables `gantt_jobs_resources` and `gantt_jobs_predictions` as they add an intermediary step with heavy
   database requests. In a full Rust implementation, this is a useless overhead.

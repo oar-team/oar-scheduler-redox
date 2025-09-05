@@ -50,7 +50,7 @@ fn create_resources_hierarchy(session: &Session, config: &mut Configuration) {
 
 #[test]
 fn create_resources_test() {
-    let (session, mut config) = setup_for_tests();
+    let (session, mut config) = setup_for_tests(true);
 
     create_resources_hierarchy(&session, &mut config);
 

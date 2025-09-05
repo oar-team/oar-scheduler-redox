@@ -183,7 +183,6 @@ fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waitin
         // work = nb_resources * walltime normalized to [0,1] by (cluster_size * max_time)
         if pyaml.work_weight > 0.0 && cluster_size > 0.0 && max_time > 0.0 {
             let mut work_norm: f64 = 0.0;
-            // TODO: calculate the job work
             let factor = if pyaml.work_mode != 0.0 {
                 // big jobs prioritized
                 1.0 - 1.0 / work_norm.max(1e-12).min(1.0)
@@ -197,7 +196,6 @@ fn multifactor_sort<P: PlatformTrait>(platform: &P, queues: &Vec<String>, waitin
         // size
         if pyaml.size_weight > 0.0 && cluster_size > 0.0 {
             let mut size_frac: f64 = 0.0;
-            // TODO: calculate the job size fraction
             let factor = if pyaml.size_mode != 0.0 {
                 // big jobs prioritized
                 size_frac

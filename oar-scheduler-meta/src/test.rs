@@ -25,26 +25,31 @@ mod quotas_test;
 #[cfg(test)]
 mod resources_test;
 
-fn setup_for_tests() -> (Session, Configuration) {
+fn setup_for_tests(use_sqlite_memory: bool) -> (Session, Configuration) {
     // Load .env file if present
     dotenv().ok();
 
     // Initialize logging
     env_logger::Builder::new()
         .is_test(true)
-        .filter(None, LevelFilter::Info)
-        .filter(Some("oar3_rust::scheduler::hierarchy"), LevelFilter::Debug)
+        .filter(None, LevelFilter::Trace)
         .try_init()
         .ok();
 
     // Load configuration
-    let config = Configuration::load();
+    let mut config = Configuration::load();
 
     // Initialize database connection
-    let session = Session::new("sqlite::memory:");
+    if use_sqlite_memory {
+        config.db_type = "sqlite".to_string();
+        config.db_hostname = ":memory:".to_string();
+    }
+    let session = Session::new(&config);
 
     // Create schema
-    session.create_schema();
+    if use_sqlite_memory {
+        session.create_schema();
+    }
 
     (session, config)
 }

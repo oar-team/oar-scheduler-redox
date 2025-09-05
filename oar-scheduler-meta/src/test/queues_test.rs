@@ -17,7 +17,7 @@ use oar_scheduler_db::model::queues::Queue;
 
 #[test]
 fn test_insert_and_get_queues() {
-    let (session, config) = setup_for_tests();
+    let (session, config) = setup_for_tests(true);
     let mut platform = Platform::from_database(session, config);
 
     Queue {

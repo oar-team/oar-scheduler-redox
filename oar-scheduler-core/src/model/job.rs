@@ -48,6 +48,7 @@ pub struct Job {
     pub nice: f64,
     pub karma: f64,
     pub message: String,
+    pub state: String,
 }
 
 #[derive(Debug, Clone)]
@@ -209,6 +210,7 @@ pub struct JobBuilder {
     advance_reservation_start_time: Option<i64>,
     submission_time: i64,
     message: String,
+    state: String,
 }
 
 impl JobBuilder {
@@ -228,6 +230,7 @@ impl JobBuilder {
             advance_reservation_start_time: None,
             submission_time: 0,
             message: String::new(),
+            state: "Waiting".into(),
         }
     }
     pub fn moldable_auto(mut self, id: i64, walltime: i64, requests: HierarchyRequests) -> Self {
@@ -325,6 +328,10 @@ impl JobBuilder {
         self.message = message;
         self
     }
+    pub fn state(mut self, state: String) -> Self {
+        self.state = state;
+        self
+    }
     // Computes automatically the no_quotas from the types and TimeSharing and Placeholder if None.
     pub fn build(self) -> Job {
         Job {
@@ -347,6 +354,7 @@ impl JobBuilder {
             nice: 1.0,
             karma: 0.0,
             message: self.message,
+            state: self.state,
         }
     }
 }

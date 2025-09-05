@@ -46,13 +46,22 @@ pub fn gantt_flush_tables(session: &Session) {
         let to_keep_moldables_ids_req = Query::select()
             .column(MoldableJobDescriptions::Id)
             .from(MoldableJobDescriptions::Table)
-            .inner_join(Jobs::Table, Expr::col(MoldableJobDescriptions::JobId).equals(Jobs::Id))
             .inner_join(
                 Jobs::Table,
-                Expr::col(GanttJobsPredictions::MoldableId).equals(MoldableJobDescriptions::Id),
+                Expr::col((MoldableJobDescriptions::Table, MoldableJobDescriptions::JobId)).equals(Jobs::Id),
             )
-            .inner_join(Jobs::Table, Expr::col(GanttJobsResources::MoldableId).equals(MoldableJobDescriptions::Id))
-            .and_where(Expr::col(Jobs::State).is_in(vec!["Waiting", "toAckReservation"]))
+            .inner_join(
+                GanttJobsPredictions::Table,
+                Expr::col((GanttJobsPredictions::Table, GanttJobsPredictions::MoldableId)).equals(MoldableJobDescriptions::Id),
+            )
+            .inner_join(
+                GanttJobsResources::Table,
+                Expr::col((GanttJobsResources::Table, GanttJobsResources::MoldableId)).equals(MoldableJobDescriptions::Id),
+            )
+            .and_where(Expr::col(Jobs::State).is_in(vec![
+                Expr::value("Waiting").as_enum("job_state"),
+                Expr::value("toAckReservation").as_enum("job_state"),
+            ]))
             .and_where(Expr::col(Jobs::Reservation).eq("Scheduled"))
             .take();
 
@@ -76,6 +85,10 @@ pub fn save_jobs_assignments_in_gantt(session: &Session, jobs: IndexMap<i64, Job
     debug!("Saving {} assignments in gantt tables", jobs.len());
     if jobs.values().any(|job| job.assignment.is_none()) {
         panic!("Trying to save jobs assignments in gantt tables but some jobs have no assignment");
+    }
+    if jobs.is_empty() {
+        debug!("No jobs to save in gantt tables");
+        return Ok(());
     }
     session.runtime.block_on(async {
         let mut res_query = Query::insert()

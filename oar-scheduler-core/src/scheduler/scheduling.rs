@@ -62,15 +62,15 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &
 
         // Schedule job
         let job = waiting_jobs.get_mut(&job_id).unwrap();
-        let slot_set = get_job_slot_set(slot_sets, job).expect("SlotSet not found");
+        if let Some(slot_set) = get_job_slot_set(slot_sets, job) {
+            if !get_hooks_manager().hook_assign(slot_set, job, min_begin) {
+                schedule_job(slot_set, job, min_begin);
+            }
 
-        if !get_hooks_manager().hook_assign(slot_set, job, min_begin) {
-            schedule_job(slot_set, job, min_begin);
-        }
-
-        // Manage container jobs
-        if job.types.contains_key(&Box::from("container")) {
-            update_container_job_slot_set(slot_sets, job);
+            // Manage container jobs
+            if job.types.contains_key(&Box::from("container")) {
+                update_container_job_slot_set(slot_sets, job);
+            }
         }
     }
 }

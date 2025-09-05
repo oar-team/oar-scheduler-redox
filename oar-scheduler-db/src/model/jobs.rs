@@ -20,7 +20,7 @@ use indexmap::IndexMap;
 use log::{debug, info, trace, warn};
 use oar_scheduler_core::model::job::JobBuilder;
 use oar_scheduler_core::platform::Job;
-use sea_query::{Alias, Expr, Query};
+use sea_query::{Alias, Expr, Func, Query};
 use sea_query::{ExprTrait, Iden};
 use sqlx::{Error, Row};
 use std::io::{stdout, Write};
@@ -102,6 +102,7 @@ pub enum JobState {
     ToLaunch,
     ToError,
     ToAckReservation,
+    Error,
     Launching,
     Running,
     Finishing,
@@ -116,6 +117,7 @@ impl SqlEnum for JobState {
             JobState::ToLaunch => "toLaunch",
             JobState::ToError => "toError",
             JobState::ToAckReservation => "toAckReservation",
+            JobState::Error => "Error",
             JobState::Launching => "Launching",
             JobState::Running => "Running",
             JobState::Finishing => "Finishing",
@@ -134,6 +136,7 @@ impl SqlEnum for JobState {
             "toLaunch" => Some(JobState::ToLaunch),
             "toError" => Some(JobState::ToError),
             "toAckReservation" => Some(JobState::ToAckReservation),
+            "Error" => Some(JobState::Error),
             "Launching" => Some(JobState::Launching),
             "Running" => Some(JobState::Running),
             "Finishing" => Some(JobState::Finishing),
@@ -263,7 +266,8 @@ impl JobDatabaseRequests for Job {
                     Jobs::SubmissionTime,
                     Jobs::StartTime,
                     Jobs::StopTime,
-                    Jobs::State,
+                    // Jobs::State,
+                    Jobs::Message,
                     Jobs::Reservation,
                     Jobs::AssignedMoldableId,
                 ])
@@ -275,19 +279,19 @@ impl JobDatabaseRequests for Job {
                     req.and_where(Expr::col(Jobs::Reservation).eq(reservation.as_str()));
                 })
                 .apply_if(states, |req, states| {
-                    req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str()).collect::<Vec<&str>>()));
+                    req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str().as_enum("job_state"))));
                 })
                 .order_by(Jobs::StartTime, sea_query::Order::Asc)
                 .order_by(Jobs::Id, sea_query::Order::Asc)
                 .to_owned()
                 .fetch_all(session)
-                .await?;
+                .await.unwrap();
 
             let job_ids = rows.iter().map(|r| r.get::<i64, &str>(Jobs::Id.unquoted())).collect::<Vec<i64>>();
 
-            let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await?;
-            let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await?;
-            let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
+            let jobs_types = AllJobTypes::load_type_for_jobs(session, job_ids.clone()).await.unwrap();
+            let jobs_dependencies = AllJobDependencies::load_dependencies_for_jobs(session, job_ids.clone()).await.unwrap();
+            let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await.unwrap();
 
             let mut jobs = IndexMap::new();
             for row in rows {
@@ -303,6 +307,8 @@ impl JobDatabaseRequests for Job {
                     .dependencies(jobs_dependencies.get_job_dependencies(id))
                     .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.unquoted()))
                     .assign_opt(jobs_moldables.get_job_assignment(session, &row, false).await)
+                    .state(row.try_get(Jobs::State.unquoted()).unwrap_or("Waiting").into())
+                    .message(row.try_get(Jobs::Message.unquoted()).unwrap_or("".to_string()))
                     .moldables(moldables);
                 // Reservation jobs
                 if JobReservation::ToSchedule.as_str() == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
@@ -330,17 +336,18 @@ impl JobDatabaseRequests for Job {
         session.runtime.block_on(async {
             let rows = Query::select()
                 .columns(vec![
-                    Jobs::Id.unquoted(),
-                    Jobs::Name.unquoted(),
-                    Jobs::User.unquoted(),
-                    Jobs::Project.unquoted(),
-                    Jobs::QueueName.unquoted(),
-                    Jobs::SubmissionTime.unquoted(),
-                    GanttJobsPredictions::StartTime.unquoted(),
-                    Jobs::State.unquoted(),
-                    Jobs::Reservation.unquoted(),
-                    Jobs::AssignedMoldableId.unquoted(),
+                    (Jobs::Table, Jobs::Id),
+                    (Jobs::Table, Jobs::Name),
+                    (Jobs::Table, Jobs::User),
+                    (Jobs::Table, Jobs::Project),
+                    (Jobs::Table, Jobs::QueueName),
+                    (Jobs::Table, Jobs::SubmissionTime),
+                    (Jobs::Table, Jobs::State),
+                    (Jobs::Table, Jobs::Message),
+                    (Jobs::Table, Jobs::Reservation),
+                    (Jobs::Table, Jobs::AssignedMoldableId),
                 ])
+                .columns(vec![(GanttJobsPredictions::Table, GanttJobsPredictions::StartTime)])
                 .from(Jobs::Table)
                 .inner_join(
                     GanttJobsPredictions::Table,
@@ -353,12 +360,12 @@ impl JobDatabaseRequests for Job {
                     req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
                 })
                 .apply_if(states, |req, states| {
-                    req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str()).collect::<Vec<&str>>()));
+                    req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str().as_enum("job_state"))));
                 })
                 .apply_if(max_start_time, |req, max_start_time| {
-                    req.and_where(Expr::col(GanttJobsPredictions::StartTime).lte(max_start_time));
+                    req.and_where(Expr::col((GanttJobsPredictions::Table, GanttJobsPredictions::StartTime)).lte(max_start_time));
                 })
-                .order_by(GanttJobsPredictions::StartTime, sea_query::Order::Asc)
+                .order_by((GanttJobsPredictions::Table, GanttJobsPredictions::StartTime), sea_query::Order::Asc)
                 .order_by(Jobs::Id, sea_query::Order::Asc)
                 .to_owned()
                 .fetch_all(session)
@@ -384,6 +391,8 @@ impl JobDatabaseRequests for Job {
                     .dependencies(jobs_dependencies.get_job_dependencies(id))
                     .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.unquoted()))
                     .assign_opt(jobs_moldables.get_job_assignment(session, &row, true).await)
+                    .state(row.try_get(Jobs::State.unquoted()).unwrap_or("Waiting").into())
+                    .message(row.try_get(Jobs::Message.unquoted()).unwrap_or("".to_string()))
                     .moldables(moldables);
                 // Reservation jobs
                 if JobReservation::ToSchedule.as_str() == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
@@ -411,11 +420,12 @@ impl JobDatabaseRequests for Job {
                 "Resuming",
             ];
             states.remove(states.iter().position(|s| *s == new_state.as_str()).expect("Invalid state"));
+            let states = states.into_iter().map(|s| s.as_enum("job_state"));
             let res = Query::update()
                 .table(Jobs::Table)
                 .and_where(Expr::col(Jobs::Id).eq(self.id))
                 .and_where(Expr::col(Jobs::State).is_in(states))
-                .value(Jobs::State, new_state.as_str())
+                .value(Jobs::State, new_state.as_str().as_enum("job_state"))
                 .execute(session)
                 .await?;
             tx.commit().await.unwrap();

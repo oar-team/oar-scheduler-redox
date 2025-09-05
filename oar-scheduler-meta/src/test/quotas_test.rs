@@ -34,7 +34,7 @@ fn quotas_setup() -> Platform {
         std::env::set_var("OARCONFFILE", oar_config_file.path());
     }
 
-    let (session, mut config) = setup_for_tests();
+    let (session, mut config) = setup_for_tests(true);
     info!("quotas config path: {}", quotas_config_file.path().to_str().unwrap());
     config.quotas_conf_file = Some(quotas_config_file.path().to_str().unwrap().to_string());
 

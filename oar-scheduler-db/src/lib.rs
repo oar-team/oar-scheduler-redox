@@ -83,7 +83,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(database_url: &str) -> Session {
+    pub fn new(config: &Configuration) -> Session {
         let max_connections = 1; // Only one connection is needed since we are using a single-threaded runtime.
         let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
@@ -92,7 +92,7 @@ impl Session {
 
             let pool = PoolOptions::<Any>::new()
                 .max_connections(max_connections)
-                .connect(database_url)
+                .connect(Self::get_database_url(config).as_str())
                 .await
                 .expect("Failed to create connection pool");
 
@@ -104,6 +104,23 @@ impl Session {
         let resource_id_to_resource_index = HashMap::new();
         let resource_index_to_resource_id = HashMap::new();
         Session { pool, backend, runtime, resource_id_to_resource_index, resource_index_to_resource_id }
+    }
+    pub fn get_database_url(config: &Configuration) -> String {
+        match config.db_type.to_lowercase().as_str() {
+            "pg" => format!(
+                "postgres://{}:{}@{}:{}/{}",
+                config.db_base_login,
+                config.db_base_passwd,
+                config.db_hostname,
+                config.db_port,
+                config.db_base_name
+            ),
+            "sqlite" => match config.db_hostname.as_str() {
+                ":memory:" => "sqlite::memory:".to_string(),
+                filename => format!("sqlite://{}", filename),
+            },
+            _ => panic!("Unsupported database type {}", config.db_type),
+        }
     }
     pub fn get_now(&self) -> i64 {
         match self.backend {
@@ -132,7 +149,7 @@ impl Session {
     }
     pub fn create_schema(&self) {
         let sql = match self.backend {
-            Backend::Postgres => todo!(),
+            Backend::Postgres => include_str!("sql/up-postgres.sql"),
             Backend::Sqlite => include_str!("sql/up-sqlite.sql"),
         };
         self.runtime.block_on(async {

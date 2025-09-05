@@ -17,9 +17,19 @@ pub const DEFAULT_CONFIG_FILE: &str = "/etc/oar/oar.conf";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Configuration {
+    // --- Global configuration ---
     pub scheduler_job_security_time: i64,
     pub cache_enabled: bool,
     pub scheduler_besteffort_kill_duration_before_reservation: i64,
+    // --- Database configuration ---
+    pub db_type: String,
+    pub db_hostname: String,
+    pub db_port: String,
+    pub db_base_name: String,
+    pub db_base_login: String,
+    pub db_base_passwd: String,
+    pub db_base_login_ro: String,
+    pub db_base_passwd_ro: String,
     // --- Resources configuration ---
     pub scheduler_resource_order: Option<String>,
     pub scheduler_available_suspended_resource_type: Option<String>,
@@ -68,9 +78,19 @@ impl Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         Configuration {
+            // --- Global configuration ---
             scheduler_job_security_time: 60, // 1 minute
             cache_enabled: true,
             scheduler_besteffort_kill_duration_before_reservation: 60, // 1 minute
+            // --- Database configuration ---
+            db_type: "Pg".to_string(),
+            db_hostname: "localhost".to_string(),
+            db_port: "3306".to_string(),
+            db_base_name: "oar".to_string(),
+            db_base_login: "oar".to_string(),
+            db_base_passwd: "oar".to_string(),
+            db_base_login_ro: "oar_ro".to_string(),
+            db_base_passwd_ro: "oar_ro".to_string(),
             // --- Resources configuration ---
             scheduler_resource_order: None,
             scheduler_available_suspended_resource_type: None,

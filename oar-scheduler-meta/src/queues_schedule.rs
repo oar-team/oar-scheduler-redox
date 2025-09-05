@@ -12,7 +12,7 @@
  */
 use crate::platform::Platform;
 use indexmap::IndexMap;
-use log::warn;
+use log::{info, warn};
 use oar_scheduler_core::model::job::JobAssignment;
 use oar_scheduler_core::platform::{Job, PlatformTrait, ProcSetCoresOp};
 use oar_scheduler_core::scheduler::slotset::SlotSet;
@@ -25,6 +25,7 @@ use std::collections::HashMap;
 pub fn queues_schedule(platform: &mut Platform) -> Vec<Job> {
     // Init slotset
     let (mut slot_sets, besteffort_scheduled_jobs) = kamelot::init_slot_sets(platform, false);
+    info!("Slotset map: {:?}", slot_sets.keys().collect::<Vec<&Box<str>>>());
 
     // Schedule each queue
     let grouped_queues: Vec<Vec<Queue>> = Queue::get_all_grouped_by_priority(&platform.session()).expect("Failed to get queues from database");
@@ -34,6 +35,10 @@ pub fn queues_schedule(platform: &mut Platform) -> Vec<Job> {
             .filter(|q| q.state.to_lowercase() == "active")
             .map(|q| q.queue_name.clone())
             .collect::<Vec<String>>();
+
+        info!("Scheduling queue(s): {:?}", active_queues);
+        info!("Slotset map: {:?}", slot_sets.keys().collect::<Vec<&Box<str>>>());
+
 
         // Insert scheduled besteffort jobs if queues = ['besteffort'].
         if active_queues.len() == 1 && active_queues[0] == "besteffort" {
@@ -147,6 +152,5 @@ fn set_job_resa_scheduled(platform: &Platform, job: &Job, error: Option<&str>) {
     }
 }
 fn set_job_resa_not_scheduled(platform: &Platform, job: &Job, error: &str) {
-    // TODO: Why in Python, we set the State Error? Should we add a new state Error?
-    set_job_resa_state(platform, job, JobState::ToError, Some(error), false);
+    set_job_resa_state(platform, job, JobState::Error, Some(error), false);
 }

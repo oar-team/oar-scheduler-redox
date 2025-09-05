@@ -16,8 +16,9 @@ use log::{debug, warn};
 use oar_scheduler_core::platform::{Job, PlatformTrait};
 use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobState};
 use oar_scheduler_db::model::moldable::MoldableDatabaseRequests;
-use oar_scheduler_db::model::{events, gantt};
+use oar_scheduler_db::model::{events, gantt, SqlEnum};
 use std::collections::HashSet;
+use std::process::exit;
 
 pub fn meta_schedule(platform: &mut Platform) -> i64 {
     let mut exit_code = 0;
@@ -41,7 +42,11 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
     // Killing besteffort jobs on which new jobs have been scheduled.
     let no_killed_job = check_besteffort_jobs_to_kill(platform, &besteffort_scheduled_jobs, &jobs_to_launch);
-    if no_killed_job {} else {
+    if no_killed_job {
+        if handle_jobs_to_launch(platform, &jobs_to_launch) == 1 {
+            exit_code = 0; // Exit code was already at 0 anyway... Following the Python code.
+        }
+    } else {
         exit_code = 2;
     }
 
@@ -55,9 +60,27 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
     // TODO: Process toAckReservation jobs
 
-    // TODO: (MVP REQUIRED) Process toLaunch jobs
+    let jobs_by_state = platform.get_current_non_waiting_jobs_by_state();
 
-    // Done
+    if let Some(jobs) = jobs_by_state.get(&JobState::Resuming.as_str().to_string()) {
+        // TODO: Implement the resuming logic:
+        //  https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/kao/meta_sched.py#L572-L651
+    }
+    if let Some(jobs) = jobs_by_state.get(&JobState::ToError.as_str().to_string()) {
+        // TODO: Implement the toError logic:
+        // https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/kao/meta_sched.py#L686-L705
+    }
+    if let Some(jobs) = jobs_by_state.get(&JobState::ToAckReservation.as_str().to_string()) {
+        // TODO: Implement the toAckReservation logic:
+        //   https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/kao/meta_sched.py#L709-L741
+    }
+    if let Some(jobs) = jobs_by_state.get(&JobState::ToLaunch.as_str().to_string()) {
+        for job in jobs {
+            notify_to_run_job(platform, job.id);
+        }
+    }
+
+    debug!("End of Meta Scheduler");
     exit_code
 }
 

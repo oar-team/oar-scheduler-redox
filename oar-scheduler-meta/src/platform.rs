@@ -19,6 +19,7 @@ use oar_scheduler_db::model::gantt;
 use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobReservation, JobState};
 use oar_scheduler_db::Session;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::rc::Rc;
 
 pub struct Platform {
@@ -95,6 +96,30 @@ impl Platform {
             ]),
         )
             .unwrap()
+    }
+    pub fn get_current_non_waiting_jobs_by_state(&self) -> HashMap<String, Vec<Job>> {
+        let jobs = Job::get_jobs(
+            &self.session,
+            None,
+            None,
+            Some(vec![
+                JobState::ToLaunch,
+                JobState::ToError,
+                JobState::ToAckReservation,
+                JobState::Launching,
+                JobState::Running,
+                JobState::Finishing,
+                JobState::Waiting,
+                JobState::Hold,
+                JobState::Suspended,
+                JobState::Resuming,
+            ]),
+        )
+            .unwrap();
+        jobs.values().fold(HashMap::new(), |mut map, job| {
+            map.entry(job.state.to_string()).or_insert_with(Vec::new).push(job.clone());
+            map
+        })
     }
 }
 

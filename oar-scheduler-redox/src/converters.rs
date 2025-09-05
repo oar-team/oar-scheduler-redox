@@ -269,6 +269,7 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
         nice: py_job.getattr_opt("nice").unwrap().map(|v| v.extract::<f64>()).unwrap_or(Ok(1.0)).unwrap(),
         karma: 0.0,
         message: String::new(),
+        state: "".into(), // State is not used in the core
     }
 }
 /// Builds a Moldable Rust struct from a Python moldable object.

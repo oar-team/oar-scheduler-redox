@@ -1,16 +1,3 @@
-/*
- * Copyright (c) 2025 Clément GRENNERAT
- *
- * This program is free software: you can redistribute it and/or modify it under the terms of the
- * GNU General Public License as published by the Free Software Foundation, version 3.
- * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
- * even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- * You should have received a copy of the GNU General Public License along with this program.
- * If not, see https://www.gnu.org/licenses/.
- *
- */
-
 use crate::platform::Platform;
 use crate::test::setup_for_tests;
 use oar_scheduler_core::model::configuration::Configuration;
@@ -20,6 +7,12 @@ use oar_scheduler_db::model::resources::{NewResource, NewResourceColumn, Resourc
 use oar_scheduler_db::Session;
 
 pub fn create_resources_hierarchy(session: &Session, config: &mut Configuration) {
+    NewResourceColumn {
+        name: "switch".to_string(),
+        r#type: "Integer".to_string(),
+    }
+        .insert(session)
+        .expect("Failed to insert test resource column");
     NewResourceColumn {
         name: "core".to_string(),
         r#type: "Integer".to_string(),
@@ -59,6 +52,7 @@ fn create_resources_test() {
         r#type: "default".to_string(),
         state: "alive".to_string(),
         labels: indexmap::indexmap! {
+            "switch".to_string() => ResourceLabelValue::Varchar("switch1".to_string()),
             "core".to_string() => ResourceLabelValue::Integer(1),
             "cpu".to_string() => ResourceLabelValue::Integer(1),
             "host".to_string() => ResourceLabelValue::Varchar("node1".to_string()),
@@ -73,6 +67,7 @@ fn create_resources_test() {
         r#type: "default".to_string(),
         state: "alive".to_string(),
         labels: indexmap::indexmap! {
+            "switch".to_string() => ResourceLabelValue::Varchar("switch1".to_string()),
             "core".to_string() => ResourceLabelValue::Integer(2),
             "cpu".to_string() => ResourceLabelValue::Integer(1),
             "host".to_string() => ResourceLabelValue::Varchar("node1".to_string()),
@@ -87,6 +82,7 @@ fn create_resources_test() {
         r#type: "default".to_string(),
         state: "alive".to_string(),
         labels: indexmap::indexmap! {
+            "switch".to_string() => ResourceLabelValue::Varchar("switch1".to_string()),
             "core".to_string() => ResourceLabelValue::Integer(3),
             "cpu".to_string() => ResourceLabelValue::Integer(2),
             "host".to_string() => ResourceLabelValue::Varchar("node2".to_string()),

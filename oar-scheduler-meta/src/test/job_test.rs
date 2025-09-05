@@ -1,22 +1,12 @@
-/*
- * Copyright (c) 2025 Clément GRENNERAT
- *
- * This program is free software: you can redistribute it and/or modify it under the terms of the
- * GNU General Public License as published by the Free Software Foundation, version 3.
- * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
- * even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- * You should have received a copy of the GNU General Public License along with this program.
- * If not, see https://www.gnu.org/licenses/.
- *
- */
-
 use crate::meta_schedule::meta_schedule;
 use crate::platform::Platform;
 use crate::test::setup_for_tests;
+use log::info;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
-use oar_scheduler_core::platform::Job;
+use oar_scheduler_core::platform::{Job, PlatformTrait};
 use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobReservation, NewJob};
+use oar_scheduler_db::model::queues::Queue;
+use oar_scheduler_db::model::resources::{NewResource, NewResourceColumn, ResourceLabelValue};
 use std::collections::HashMap;
 
 fn insert_jobs_for_tests(platform: &Platform) {
@@ -83,43 +73,121 @@ fn insert_jobs_for_tests(platform: &Platform) {
     assert!(j1 > 0 && j2 > 0 && j3 > 0 && j4 > 0 && j5 > 0);
 }
 
+/// Test to try a complete integration with postgres.
 #[test]
+#[ignore]
 fn test_insert_job_and_queues() {
     let (session, mut config) = setup_for_tests(false);
     config.hierarchy_labels = Some("resource_id,network_address,switch,nodes,core,cpu,host,mem".to_string());
 
+    NewResourceColumn {
+        name: "core".to_string(),
+        r#type: "Integer".to_string(),
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource column");
+    NewResourceColumn {
+        name: "switch".to_string(),
+        r#type: "Integer".to_string(),
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource column");
+    NewResourceColumn {
+        name: "cpu".to_string(),
+        r#type: "Integer".to_string(),
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource column");
+    NewResourceColumn {
+        name: "host".to_string(),
+        r#type: "Varchar(255)".to_string(),
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource column");
+    NewResourceColumn {
+        name: "mem".to_string(),
+        r#type: "Integer".to_string(),
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource column");
+
+
+    NewResource {
+        network_address: "100.64.0.1".to_string(),
+        r#type: "default".to_string(),
+        state: "alive".to_string(),
+        labels: indexmap::indexmap! {
+            "switch".to_string() => ResourceLabelValue::Integer(0),
+            "core".to_string() => ResourceLabelValue::Integer(1),
+            "cpu".to_string() => ResourceLabelValue::Integer(1),
+            "host".to_string() => ResourceLabelValue::Varchar("node1".to_string()),
+            "mem".to_string() => ResourceLabelValue::Integer(1),
+        },
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource");
+
+    NewResource {
+        network_address: "100.64.0.1".to_string(),
+        r#type: "default".to_string(),
+        state: "alive".to_string(),
+        labels: indexmap::indexmap! {
+            "switch".to_string() => ResourceLabelValue::Integer(0),
+            "core".to_string() => ResourceLabelValue::Integer(2),
+            "cpu".to_string() => ResourceLabelValue::Integer(1),
+            "host".to_string() => ResourceLabelValue::Varchar("node1".to_string()),
+            "mem".to_string() => ResourceLabelValue::Integer(1),
+        },
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource");
+
+    NewResource {
+        network_address: "100.64.0.2".to_string(),
+        r#type: "default".to_string(),
+        state: "alive".to_string(),
+        labels: indexmap::indexmap! {
+            "switch".to_string() => ResourceLabelValue::Integer(0),
+            "core".to_string() => ResourceLabelValue::Integer(3),
+            "cpu".to_string() => ResourceLabelValue::Integer(2),
+            "host".to_string() => ResourceLabelValue::Varchar("node2".to_string()),
+            "mem".to_string() => ResourceLabelValue::Integer(2),
+        },
+    }
+        .insert(&session)
+        .expect("Failed to insert test resource");
+
     let mut platform = Platform::from_database(session, config);
 
+    Queue {
+        queue_name: "admin".to_string(),
+        priority: 10,
+        scheduler_policy: "kamelot".to_string(),
+        state: "Active".to_string(),
+    }
+        .insert(&platform.session())
+        .unwrap();
 
-    // insert_jobs_for_tests(&platform);
-    //
-    // Queue {
-    //     queue_name: "admin".to_string(),
-    //     priority: 10,
-    //     scheduler_policy: "kamelot".to_string(),
-    //     state: "Active".to_string(),
-    // }
-    //     .insert(&platform.session())
-    //     .unwrap();
-    //
-    // Queue {
-    //     queue_name: "default".to_string(),
-    //     priority: 2,
-    //     scheduler_policy: "kamelot".to_string(),
-    //     state: "Active".to_string(),
-    // }
-    //     .insert(&platform.session())
-    //     .unwrap();
-    //
-    // Queue {
-    //     queue_name: "besteffort".to_string(),
-    //     priority: 0,
-    //     scheduler_policy: "kamelot".to_string(),
-    //     state: "Active".to_string(),
-    // }
-    //     .insert(&platform.session())
-    //     .unwrap();
+    Queue {
+        queue_name: "default".to_string(),
+        priority: 2,
+        scheduler_policy: "kamelot".to_string(),
+        state: "Active".to_string(),
+    }
+        .insert(&platform.session())
+        .unwrap();
 
+    Queue {
+        queue_name: "besteffort".to_string(),
+        priority: 0,
+        scheduler_policy: "kamelot".to_string(),
+        state: "Active".to_string(),
+    }
+        .insert(&platform.session())
+        .unwrap();
+
+    info!("---- First scheduling round ----");
+    info!("scheduling hierarchy labels: {:?}", &platform.get_platform_config().config.hierarchy_labels);
     meta_schedule(&mut platform);
 }
 

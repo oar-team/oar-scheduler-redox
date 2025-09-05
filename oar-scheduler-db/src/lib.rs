@@ -1,16 +1,3 @@
-/*
- * Copyright (c) 2025 Clément GRENNERAT
- *
- * This program is free software: you can redistribute it and/or modify it under the terms of the
- * GNU General Public License as published by the Free Software Foundation, version 3.
- * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
- * even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- * You should have received a copy of the GNU General Public License along with this program.
- * If not, see https://www.gnu.org/licenses/.
- *
- */
-
 use crate::model::resources::{Resource, ResourceLabelValue};
 use log::{debug, info};
 use oar_scheduler_core::model::configuration::Configuration;
@@ -164,6 +151,7 @@ impl Session {
             .clone()
             .map(|s| s.split(',').map(|s| s.trim().to_string().into_boxed_str()).collect())
             .unwrap_or(vec![Box::from("resource_id"), Box::from("network_address")]);
+        info!("Resource labels configured for hierarchy: {:?}", labels);
 
         let order_by = config.scheduler_resource_order.clone().unwrap_or("type, network_address".to_string());
         let resources = Resource::get_all_sorted(&self, order_by.as_str(), &labels).unwrap();
@@ -214,6 +202,7 @@ impl Session {
         }
 
         let mut hierarchy = Hierarchy::new();
+        info!("Hierarchy resources: {:?}", hierarchy_resources);
         for (label, map) in hierarchy_resources.into_iter() {
             let mut partitions = Vec::new();
             let mut is_unit = true;
@@ -223,6 +212,7 @@ impl Session {
                 }
                 partitions.push(ProcSet::from_iter(ids.iter()));
             }
+            info!("Resource label {}: is_unit={} partitions={:?}", label, is_unit, partitions);
             hierarchy = if is_unit {
                 hierarchy.add_unit_partition(label)
             } else {

@@ -67,14 +67,14 @@ pub fn gantt_flush_tables(session: &Session) {
 
         Query::delete()
             .from_table(GanttJobsResources::Table)
-            .cond_where(Expr::col(GanttJobsResources::MoldableId).in_subquery(to_keep_moldables_ids_req.clone()))
+            .cond_where(Expr::col(GanttJobsResources::MoldableId).not_in_subquery(to_keep_moldables_ids_req.clone()))
             .execute(session)
             .await
             .expect("Failed to flush gantt_jobs_resources table");
 
         Query::delete()
             .from_table(GanttJobsPredictions::Table)
-            .cond_where(Expr::col(GanttJobsPredictions::MoldableId).in_subquery(to_keep_moldables_ids_req.clone()))
+            .cond_where(Expr::col(GanttJobsPredictions::MoldableId).not_in_subquery(to_keep_moldables_ids_req.clone()))
             .execute(session)
             .await
             .expect("Failed to flush gantt_jobs_resources table");

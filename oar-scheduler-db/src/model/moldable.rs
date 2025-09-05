@@ -11,7 +11,8 @@
  *
  */
 
-use crate::model::{GanttJobsPredictions, GanttJobsResources, Jobs};
+use crate::model::gantt::{GanttJobsPredictions, GanttJobsResources};
+use crate::model::jobs::Jobs;
 use crate::{Session, SessionSelectStatement};
 use oar_scheduler_core::model::job::ProcSet;
 use oar_scheduler_core::model::job::{JobAssignment, Moldable};

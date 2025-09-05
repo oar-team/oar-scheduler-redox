@@ -11,7 +11,7 @@
  *
  */
 
-use crate::model::{resources, NewResource, Resource, ResourceLabelValue};
+use crate::model::resources::{Resource, ResourceLabelValue};
 use log::{debug, info};
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::{ProcSet, ResourceSet};

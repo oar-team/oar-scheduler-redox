@@ -10,10 +10,11 @@
  * If not, see https://www.gnu.org/licenses/.
  *
  */
+use crate::model::gantt::GanttJobsPredictions;
 use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
 use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
-use crate::model::{GanttJobsPredictions, SqlEnum};
+use crate::model::SqlEnum;
 use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use indexmap::IndexMap;
 use log::{debug, info, warn};

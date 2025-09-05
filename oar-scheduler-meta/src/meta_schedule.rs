@@ -13,7 +13,7 @@
 use crate::platform::Platform;
 use crate::queues_schedule::queues_schedule;
 use oar_scheduler_core::platform::PlatformTrait;
-use oar_scheduler_db::model::gantt_flush_tables;
+use oar_scheduler_db::model::gantt;
 
 pub fn meta_schedule(platform: &mut Platform) -> i64 {
     let mut exit_code = 0;
@@ -48,7 +48,7 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 
 /// Initialize gantt tables with scheduled reservation jobs, Running jobs, toLaunch jobs and Launching jobs.
 fn gantt_init_with_running_jobs(platform: &mut Platform) {
-    gantt_flush_tables(&platform.session());
+    gantt::gantt_flush_tables(&platform.session());
     let current_jobs = platform.get_fully_scheduled_jobs();
     platform.save_assignments(current_jobs);
     // In the Python code, scheduled_jobs are fetched and a SlotSet is build, but this code is kept into the

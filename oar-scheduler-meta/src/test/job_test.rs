@@ -15,7 +15,7 @@ use crate::platform::Platform;
 use crate::test::setup_for_tests;
 use oar_scheduler_core::model::job::{PlaceholderType, TimeSharingType};
 use oar_scheduler_core::platform::Job;
-use oar_scheduler_db::model::{JobDatabaseRequests, JobReservation, NewJob};
+use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobReservation, NewJob};
 use std::collections::HashMap;
 
 fn insert_jobs_for_tests(platform: &Platform) {
@@ -31,7 +31,16 @@ fn insert_jobs_for_tests(platform: &Platform) {
     let j2 = NewJob {
         user: Some("user2".to_string()),
         queue_name: "besteffort".to_string(),
-        res: vec![(120, vec![("nodes=1/cpu=2".to_string(), "".to_string()), ("nodes=1/cpu=3".to_string(), "lowpower=true".to_string())]), (30, vec![("nodes=1/cpu=8".to_string(), "".to_string())])],
+        res: vec![
+            (
+                120,
+                vec![
+                    ("nodes=1/cpu=2".to_string(), "".to_string()),
+                    ("nodes=1/cpu=3".to_string(), "lowpower=true".to_string()),
+                ],
+            ),
+            (30, vec![("nodes=1/cpu=8".to_string(), "".to_string())]),
+        ],
         types: vec!["besteffort".to_string(), "container".to_string()],
     }
         .insert(platform.session())
@@ -80,7 +89,13 @@ fn test_insert_and_retrieve_job() {
     insert_jobs_for_tests(&platform);
 
     let default_jobs = Job::get_jobs(&platform.session(), Some(vec!["default".to_string()]), None, None).unwrap();
-    let besteffort_jobs = Job::get_jobs(&platform.session(), Some(vec!["besteffort".to_string()]), Some(JobReservation::None), None).unwrap();
+    let besteffort_jobs = Job::get_jobs(
+        &platform.session(),
+        Some(vec!["besteffort".to_string()]),
+        Some(JobReservation::None),
+        None,
+    )
+        .unwrap();
 
     assert_eq!(default_jobs.len(), 3);
     assert_eq!(besteffort_jobs.len(), 2);
@@ -165,5 +180,4 @@ fn test_insert_and_retrieve_job() {
     assert_eq!(req_4_1.level_nbs, Box::from([(Box::from("switch"), 1), (Box::from("nodes"), 4)]));
     assert_eq!(req_4_2.level_nbs, Box::from([(Box::from("licence"), 20)]));
     assert_eq!(req_5.level_nbs, Box::from([(Box::from("nodes"), 3)]));
-
 }

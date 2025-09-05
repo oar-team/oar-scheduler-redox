@@ -11,7 +11,7 @@
  *
  */
 
-use crate::model::Jobs;
+use crate::model::jobs::Jobs;
 use crate::{Session, SessionSelectStatement};
 use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::{Error, Row};

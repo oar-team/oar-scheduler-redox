@@ -16,7 +16,7 @@ use crate::test::setup_for_tests;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::{PlatformTrait, ProcSet};
 use oar_scheduler_core::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
-use oar_scheduler_db::model::{NewResource, NewResourceColumn, ResourceLabelValue};
+use oar_scheduler_db::model::resources::{NewResource, NewResourceColumn, ResourceLabelValue};
 use oar_scheduler_db::Session;
 
 fn create_resources_hierarchy(session: &Session, config: &mut Configuration) {

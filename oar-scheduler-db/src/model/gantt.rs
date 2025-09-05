@@ -10,11 +10,14 @@
  * If not, see https://www.gnu.org/licenses/.
  *
  */
-
+use crate::model::jobs::Jobs;
 use crate::model::moldable::MoldableJobDescriptions;
-use crate::model::Jobs;
-use crate::{Session, SessionDeleteStatement};
+use crate::{Session, SessionDeleteStatement, SessionInsertStatement};
+use indexmap::IndexMap;
+use log::debug;
+use oar_scheduler_core::platform::Job;
 use sea_query::{Expr, ExprTrait, Iden, Query};
+use sqlx::Error;
 
 #[derive(Iden)]
 pub enum GanttJobsResources {
@@ -56,7 +59,6 @@ pub fn gantt_flush_tables(session: &Session) {
         Query::delete()
             .from_table(GanttJobsResources::Table)
             .cond_where(Expr::col(GanttJobsResources::MoldableId).in_subquery(to_keep_moldables_ids_req.clone()))
-            .to_owned()
             .execute(session)
             .await
             .expect("Failed to flush gantt_jobs_resources table");
@@ -64,9 +66,43 @@ pub fn gantt_flush_tables(session: &Session) {
         Query::delete()
             .from_table(GanttJobsPredictions::Table)
             .cond_where(Expr::col(GanttJobsPredictions::MoldableId).in_subquery(to_keep_moldables_ids_req.clone()))
-            .to_owned()
             .execute(session)
             .await
             .expect("Failed to flush gantt_jobs_resources table");
     });
+}
+
+pub fn save_jobs_assignments_in_gantt(session: &Session, jobs: IndexMap<i64, Job>) -> Result<(), Error> {
+    debug!("Saving {} assignments in gantt tables", jobs.len());
+    if jobs.values().any(|job| job.assignment.is_none()) {
+        panic!("Trying to save jobs assignments in gantt tables but some jobs have no assignment");
+    }
+    session.runtime.block_on(async {
+        // Build values
+        let (resources, predictions) = jobs.iter().fold(
+            (Vec::with_capacity(jobs.len()), Vec::with_capacity(jobs.len())),
+            |(mut res_vec, mut pred_vec), (_, job)| {
+                let assignment = job.assignment.as_ref().unwrap();
+                let moldable_id = &job.moldables[assignment.moldable_index].id;
+                let begin = assignment.begin;
+                res_vec.extend(assignment.resources.iter().map(|res_id| Expr::val(*moldable_id).eq(res_id)));
+                pred_vec.extend(assignment.resources.iter().map(|res_id| Expr::val(*moldable_id).eq(begin)));
+                (res_vec, pred_vec)
+            },
+        );
+        // Insert
+        Query::insert()
+            .into_table(GanttJobsResources::Table)
+            .columns(vec![GanttJobsResources::MoldableId, GanttJobsResources::ResourceId])
+            .values_panic(resources)
+            .execute(session)
+            .await?;
+        Query::insert()
+            .into_table(GanttJobsPredictions::Table)
+            .columns(vec![GanttJobsPredictions::MoldableId, GanttJobsPredictions::StartTime])
+            .values_panic(predictions)
+            .execute(session)
+            .await?;
+        Ok(())
+    })
 }

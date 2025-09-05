@@ -17,8 +17,8 @@ use oar_scheduler_core::model::job::JobAssignment;
 use oar_scheduler_core::platform::{Job, PlatformTrait, ProcSetCoresOp};
 use oar_scheduler_core::scheduler::slotset::SlotSet;
 use oar_scheduler_core::scheduler::{kamelot, quotas};
+use oar_scheduler_db::model::jobs::JobDatabaseRequests;
 use oar_scheduler_db::model::queues::Queue;
-use oar_scheduler_db::model::JobDatabaseRequests;
 use std::collections::HashMap;
 
 pub fn queues_schedule(platform: &mut Platform) {

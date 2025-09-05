@@ -15,7 +15,8 @@ use indexmap::IndexMap;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::model::job::Job;
 use oar_scheduler_core::platform::{PlatformConfig, PlatformTrait};
-use oar_scheduler_db::model::{JobDatabaseRequests, JobReservation, JobState};
+use oar_scheduler_db::model::gantt;
+use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobReservation, JobState};
 use oar_scheduler_db::Session;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -48,21 +49,51 @@ impl Platform {
         &self.session
     }
 
-
     pub fn get_gantt_waiting_jobs(&self, queue_name: String) -> Vec<Job> {
-        Job::get_gantt_jobs(&self.session, Some(vec![queue_name]), Some(JobReservation::None), Some(vec![JobState::Waiting])).unwrap()
+        Job::get_gantt_jobs(
+            &self.session,
+            Some(vec![queue_name]),
+            Some(JobReservation::None),
+            Some(vec![JobState::Waiting]),
+        )
+            .unwrap()
     }
     // AR jobs that are scheduled still on waiting state in the Gantt
     pub fn get_gantt_waiting_scheduled_ar_jobs(&self, queue_name: String) -> Vec<Job> {
-        Job::get_gantt_jobs(&self.session, Some(vec![queue_name]), Some(JobReservation::Scheduled), Some(vec![JobState::Waiting])).unwrap()
+        Job::get_gantt_jobs(
+            &self.session,
+            Some(vec![queue_name]),
+            Some(JobReservation::Scheduled),
+            Some(vec![JobState::Waiting]),
+        )
+            .unwrap()
     }
     // AR jobs that are not yet scheduled
     pub fn get_waiting_to_schedule_ar_jobs(&self, queue_name: String) -> IndexMap<i64, Job> {
-        Job::get_jobs(&self.session, Some(vec![queue_name]), Some(JobReservation::ToSchedule), Some(vec![JobState::Waiting])).unwrap()
+        Job::get_jobs(
+            &self.session,
+            Some(vec![queue_name]),
+            Some(JobReservation::ToSchedule),
+            Some(vec![JobState::Waiting]),
+        )
+            .unwrap()
     }
     // Scheduled and at least toLaunch state jobs
     pub fn get_fully_scheduled_jobs(&self) -> IndexMap<i64, Job> {
-        Job::get_jobs(&self.session, None, None, Some(vec![JobState::Running, JobState::ToLaunch, JobState::Launching, JobState::Finishing, JobState::Suspended, JobState::Resuming])).unwrap()
+        Job::get_jobs(
+            &self.session,
+            None,
+            None,
+            Some(vec![
+                JobState::Running,
+                JobState::ToLaunch,
+                JobState::Launching,
+                JobState::Finishing,
+                JobState::Suspended,
+                JobState::Resuming,
+            ]),
+        )
+            .unwrap()
     }
 }
 
@@ -84,7 +115,7 @@ impl PlatformTrait for Platform {
         Job::get_jobs(&self.session, None, Some(JobReservation::None), Some(vec![JobState::Waiting])).unwrap()
     }
     fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>) {
-        todo!()
+        gantt::save_jobs_assignments_in_gantt(&mut self.session, assigned_jobs).unwrap()
     }
 
     fn get_sum_accounting_window(&self, queues: &[String], window_start: i64, window_stop: i64) -> (f64, f64) {

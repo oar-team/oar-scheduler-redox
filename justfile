@@ -1,4 +1,3 @@
-# set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 pgdata := ".data"
 pghost := "127.0.0.1"
@@ -30,7 +29,6 @@ init_pg:
     host    all             all             ::1/128                 md5
     EOF
 
-        #pg_ctl -D "{{pgdata}}" -l logfile start
         pg_ctl -D "{{pgdata}}" -l logfile -o "-p {{pgport}} -k {{pgsocketdir}}" start
         sleep 2
 
@@ -40,15 +38,27 @@ init_pg:
     CREATE DATABASE {{pgdatabase}} OWNER {{pguser}};
     EOF
 
-        #if [ -f schema.sql ]; then
-        #  echo "Exec schema.sql in {{pgdatabase}}"
-        #  psql -U {{pguser}} -d {{pgdatabase}} -f schema.sql
-        #fi
+        if [ -f "$OAR_PKG/setup/database/pg_structure.sql" ]; then
+            echo "Create tables and put some data in {{pgdatabase}}"
+            psql -h {{pgsocketdir}} -p {{pgport}} -U {{pguser}} -d {{pgdatabase}} -f "$OAR_PKG/setup/database/pg_structure.sql"
+            psql -h {{pgsocketdir}} -p {{pgport}} -U {{pguser}} -d {{pgdatabase}} -f "$OAR_PKG/setup/database/default_data.sql"
+        fi
 
         pg_ctl -D "{{pgdata}}" stop
     else
         echo "PG DB already initialised ({{pgdata}} exists)."
     fi
+
+create_db:
+    # Create oar db and add oar user
+    psql -h {{pgsocketdir}} -p {{pgport}} postgres -c "CREATE DATABASE {{pgdatabase}} OWNER {{pguser}};"
+
+
+drop_db:
+    psql -h {{pgsocketdir}} -p {{pgport}}  postgres -c "DROP DATABASE {{pgdatabase}};"
+
+drop_tables_db:
+    psql -h {{pgsocketdir}} -p {{pgport}} -U {{pguser}} -d {{pgdatabase}} -f "$OAR_PKG/setup/database/pg_reset_structure.sql"
 
 # Start PostgreSQL server
 start_pg:
@@ -60,7 +70,7 @@ stop_pg:
 
 # Launch PostgreSQL shell
 psql:
-    psql -h "{{pghost}}" -U "{{pguser}}" -d "{{pgdatabase}}"
+    psql -h {{pgsocketdir}} -p {{pgport}} -U "{{pguser}}" -d "{{pgdatabase}}"
 
 rm_db:
     rm -rf "{{pgdata}}"

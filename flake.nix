@@ -73,6 +73,9 @@
               cargo
               pythonEnv
             ];
+            shellHook = ''
+              export OAR_PKG=${kapack-pkgs.oar}
+            '';
           };
         }
     );

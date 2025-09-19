@@ -76,6 +76,7 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
 fn gantt_init_with_running_jobs(platform: &mut Platform) {
     gantt::gantt_flush_tables(&platform.session());
     let current_jobs = platform.get_fully_scheduled_jobs();
+    debug!("(gantt_init with running jobs: save assignement with current");
     platform.save_assignments(current_jobs);
     // In the Python code, scheduled_jobs are fetched and a SlotSet is build, but this code is kept into the
     // `kamelot::init_slot_sets` function to avoid code duplication.

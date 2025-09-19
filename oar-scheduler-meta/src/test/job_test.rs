@@ -77,14 +77,11 @@ fn insert_jobs_for_tests(platform: &Platform) {
 #[test]
 // #[ignore]
 fn test_insert_job_and_queues() {
-    //let (session, mut config) = setup_for_tests(true); // Sqlite
-    let (session, mut config) = setup_for_tests(false); // PG
+    let (session, mut config) = setup_for_tests(true); // Sqlite
+    //let (session, mut config) = setup_for_tests(false); // Pg
 
-    //session.create_schema();
-    //session.empty_all();
-    //session.reset_resources();
     session.reset();
-    //config.hierarchy_labels = Some("resource_id,network_address,switch,nodes,core,cpu,host,mem".to_string());
+
     config.hierarchy_labels = Some("resource_id,network_address,switch,core,cpu,host,mem".to_string());
 
     NewResourceColumn {
@@ -165,15 +162,15 @@ fn test_insert_job_and_queues() {
         .expect("Failed to insert test resource");
 
     let mut platform = Platform::from_database(session, config);
-    /*
-    Queue {
-        queue_name: "admin".to_string(),
-        priority: 10,
-        scheduler_policy: "kamelot".to_string(),
-        state: "Active".to_string(),
-    }
-        .insert(&platform.session())
-        .unwrap();
+
+    // Queue {
+    //     queue_name: "admin".to_string(),
+    //     priority: 10,
+    //     scheduler_policy: "kamelot".to_string(),
+    //     state: "Active".to_string(),
+    // }
+    //     .insert(&platform.session())
+    //     .unwrap();
 
     Queue {
         queue_name: "default".to_string(),
@@ -184,15 +181,25 @@ fn test_insert_job_and_queues() {
         .insert(&platform.session())
         .unwrap();
 
-    Queue {
-        queue_name: "besteffort".to_string(),
-        priority: 0,
-        scheduler_policy: "kamelot".to_string(),
-        state: "Active".to_string(),
+    // Queue {
+    //     queue_name: "besteffort".to_string(),
+    //     priority: 0,
+    //     scheduler_policy: "kamelot".to_string(),
+    //     state: "Active".to_string(),
+    // }
+    //     .insert(&platform.session())
+    //     .unwrap();
+
+    let j1 = NewJob {
+        user: Some("user1".to_string()),
+        queue_name: "default".to_string(),
+        res: vec![(60, vec![("resource_id=1".to_string(), "".to_string())])],
+        types: vec![],
+        //types: vec!["placeholder=test".to_string(), "timesharing=*,user".to_string()],
     }
-        .insert(&platform.session())
-        .unwrap();
-*/
+        .insert(platform.session())
+        .expect("insert job 1");
+
     info!("---- First scheduling round ----");
     info!("scheduling hierarchy labels: {:?}", &platform.get_platform_config().config.hierarchy_labels);
     meta_schedule(&mut platform);
@@ -200,7 +207,9 @@ fn test_insert_job_and_queues() {
 
 #[test]
 fn test_insert_and_retrieve_job() {
-    let (session, config) = setup_for_tests(true);
+    let (session, config) = setup_for_tests(true); // Sqlite
+    //let (session, config) = setup_for_tests(false); // Pg
+    session.reset();
     let platform = Platform::from_database(session, config);
     insert_jobs_for_tests(&platform);
 

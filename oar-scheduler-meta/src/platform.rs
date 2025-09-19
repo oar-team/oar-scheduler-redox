@@ -124,9 +124,10 @@ impl PlatformTrait for Platform {
     fn get_scheduled_jobs(&self) -> Vec<Job> {
         Job::get_gantt_jobs(&self.session, None, None, None, None).unwrap()
     }
-    fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
-        Job::get_jobs(&self.session, None, Some(JobReservation::None), Some(vec![JobState::Waiting])).unwrap()
+    fn get_waiting_jobs(&self, queues: Vec<String>) -> IndexMap<i64, Job> {
+        Job::get_jobs(&self.session, Some(queues), Some(JobReservation::None), Some(vec![JobState::Waiting])).unwrap()
     }
+
     fn save_assignments(&mut self, assigned_jobs: IndexMap<i64, Job>) {
         gantt::save_jobs_assignments_in_gantt(&mut self.session, assigned_jobs).unwrap()
     }

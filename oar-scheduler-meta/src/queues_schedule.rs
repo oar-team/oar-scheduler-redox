@@ -1,6 +1,6 @@
 use crate::platform::Platform;
 use indexmap::IndexMap;
-use log::{info, warn};
+use log::{debug, info, warn};
 use oar_scheduler_core::model::job::JobAssignment;
 use oar_scheduler_core::platform::{Job, PlatformTrait, ProcSetCoresOp};
 use oar_scheduler_core::scheduler::slotset::SlotSet;
@@ -9,7 +9,7 @@ use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobState};
 use oar_scheduler_db::model::queues::Queue;
 use std::collections::HashMap;
 
-/// Returns the list of already-scheduled besteffort jobs inserted in the SlotSet.
+///
 pub fn queues_schedule(platform: &mut Platform) -> Vec<Job> {
     // Init slotset
     let (mut slot_sets, besteffort_scheduled_jobs) = kamelot::init_slot_sets(platform, false);
@@ -121,6 +121,7 @@ fn check_reservation_jobs(platform: &mut Platform, slot_sets: &mut HashMap<Box<s
         }
     }
     if !assigned_jobs.is_empty() {
+        debug!("Check reservations: save assignments");
         platform.save_assignments(assigned_jobs);
     }
 }

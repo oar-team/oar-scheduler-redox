@@ -4,6 +4,7 @@ use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slotset::SlotSet;
 use crate::scheduler::sorting::sort_jobs;
 use indexmap::IndexMap;
+use log::debug;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -17,7 +18,7 @@ pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: &Vec<String>) 
 
 pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &mut HashMap<Box<str>, SlotSet>, queues: &Vec<String>) -> usize {
     let _platform_config = platform.get_platform_config();
-    let mut waiting_jobs = platform.get_waiting_jobs();
+    let mut waiting_jobs = platform.get_waiting_jobs(queues.to_vec());
 
     {
         // info!(
@@ -48,6 +49,7 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
             .into_iter()
             .filter(|(_id, job)| job.assignment.is_some())
             .collect::<IndexMap<i64, Job>>();
+        debug!("Kamelot internal saving josb: {}", assigned_jobs[0].id);
         platform.save_assignments(assigned_jobs);
 
         return slot_sets.get("default").unwrap().slot_count();

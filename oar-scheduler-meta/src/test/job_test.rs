@@ -75,17 +75,24 @@ fn insert_jobs_for_tests(platform: &Platform) {
 
 /// Test to try a complete integration with postgres.
 #[test]
-#[ignore]
+// #[ignore]
 fn test_insert_job_and_queues() {
-    let (session, mut config) = setup_for_tests(false);
-    config.hierarchy_labels = Some("resource_id,network_address,switch,nodes,core,cpu,host,mem".to_string());
+    //let (session, mut config) = setup_for_tests(true); // Sqlite
+    let (session, mut config) = setup_for_tests(false); // PG
+
+    //session.create_schema();
+    //session.empty_all();
+    //session.reset_resources();
+    session.reset();
+    //config.hierarchy_labels = Some("resource_id,network_address,switch,nodes,core,cpu,host,mem".to_string());
+    config.hierarchy_labels = Some("resource_id,network_address,switch,core,cpu,host,mem".to_string());
 
     NewResourceColumn {
-        name: "core".to_string(),
-        r#type: "Integer".to_string(),
-    }
-        .insert(&session)
-        .expect("Failed to insert test resource column");
+         name: "core".to_string(),
+         r#type: "Integer".to_string(),
+     }
+         .insert(&session)
+         .expect("Failed to insert test resource column");
     NewResourceColumn {
         name: "switch".to_string(),
         r#type: "Integer".to_string(),
@@ -111,17 +118,17 @@ fn test_insert_job_and_queues() {
         .insert(&session)
         .expect("Failed to insert test resource column");
 
-
     NewResource {
         network_address: "100.64.0.1".to_string(),
         r#type: "default".to_string(),
-        state: "alive".to_string(),
+        state: "Alive".to_string(),
         labels: indexmap::indexmap! {
             "switch".to_string() => ResourceLabelValue::Integer(0),
             "core".to_string() => ResourceLabelValue::Integer(1),
             "cpu".to_string() => ResourceLabelValue::Integer(1),
             "host".to_string() => ResourceLabelValue::Varchar("node1".to_string()),
             "mem".to_string() => ResourceLabelValue::Integer(1),
+            //"next_state".to_string() =>  ResourceLabelValue::Varchar("UnChanged".to_string()),
         },
     }
         .insert(&session)
@@ -130,7 +137,7 @@ fn test_insert_job_and_queues() {
     NewResource {
         network_address: "100.64.0.1".to_string(),
         r#type: "default".to_string(),
-        state: "alive".to_string(),
+        state: "Alive".to_string(),
         labels: indexmap::indexmap! {
             "switch".to_string() => ResourceLabelValue::Integer(0),
             "core".to_string() => ResourceLabelValue::Integer(2),
@@ -145,7 +152,7 @@ fn test_insert_job_and_queues() {
     NewResource {
         network_address: "100.64.0.2".to_string(),
         r#type: "default".to_string(),
-        state: "alive".to_string(),
+        state: "Alive".to_string(),
         labels: indexmap::indexmap! {
             "switch".to_string() => ResourceLabelValue::Integer(0),
             "core".to_string() => ResourceLabelValue::Integer(3),
@@ -158,7 +165,7 @@ fn test_insert_job_and_queues() {
         .expect("Failed to insert test resource");
 
     let mut platform = Platform::from_database(session, config);
-
+    /*
     Queue {
         queue_name: "admin".to_string(),
         priority: 10,
@@ -185,7 +192,7 @@ fn test_insert_job_and_queues() {
     }
         .insert(&platform.session())
         .unwrap();
-
+*/
     info!("---- First scheduling round ----");
     info!("scheduling hierarchy labels: {:?}", &platform.get_platform_config().config.hierarchy_labels);
     meta_schedule(&mut platform);

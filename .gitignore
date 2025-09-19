@@ -1,3 +1,5 @@
 /target
 /tarpaulin-report.html
 .env
+.data
+*~

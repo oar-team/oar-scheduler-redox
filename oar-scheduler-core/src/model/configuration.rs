@@ -72,7 +72,7 @@ impl Default for Configuration {
             // --- Database configuration ---
             db_type: "Pg".to_string(),
             db_hostname: "localhost".to_string(),
-            db_port: "3306".to_string(),
+            db_port: "4321".to_string(),
             db_base_name: "oar".to_string(),
             db_base_login: "oar".to_string(),
             db_base_passwd: "oar".to_string(),

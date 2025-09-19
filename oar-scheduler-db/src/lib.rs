@@ -140,9 +140,38 @@ impl Session {
             Backend::Sqlite => include_str!("sql/up-sqlite.sql"),
         };
         self.runtime.block_on(async {
-            sqlx::query(sql).execute(&self.pool).await.expect("Failed to create schema");
+            sqlx::raw_sql(sql).execute(&self.pool).await.expect("Failed to create schema");
         });
     }
+    /// From test with DB: empty all tables
+    pub fn empty_all(&self) {
+        let sql = match self.backend {
+            Backend::Postgres => include_str!("sql/truncate-postgres.sql"),
+            Backend::Sqlite => include_str!("sql/delete-sqlite.sql"),
+        };
+        self.runtime.block_on(async {
+            sqlx::raw_sql(sql).execute(&self.pool).await.expect("Failed to create schema");
+        });
+    }
+    /**
+    From test with DB: reset resources by drop it (if exists) and recreate it. Needed
+    because field can be added by some tests (adding properties to caracterise ressources)
+    */
+    pub fn reset_resources(&self) {
+        let sql = match self.backend {
+            Backend::Postgres => include_str!("sql/reset-resources-postgres.sql"),
+            Backend::Sqlite => include_str!("sql/reset-resources-sqlite.sql"),
+        };
+        self.runtime.block_on(async {
+            sqlx::raw_sql(sql).execute(&self.pool).await.expect("Failed to create schema");
+        });
+    }
+
+    pub fn reset(&self) {
+        self.empty_all();
+        self.reset_resources();
+    }
+
     pub fn get_resource_set(&mut self, config: &Configuration) -> ResourceSet {
         let mut resource_id_to_resource_index = HashMap::new();
         let mut resource_index_to_resource_id = HashMap::new();

@@ -34,10 +34,10 @@ impl PlatformTrait for Platform {
     fn get_platform_config(&self) -> &Rc<PlatformConfig> {
         &self.platform_config
     }
-    fn get_scheduled_jobs(&self) -> Vec<Job> {
+    fn get_scheduled_jobs(&self, ) -> Vec<Job> {
         self.scheduled_jobs.clone()
     }
-    fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
+    fn get_waiting_jobs(&self, queues: Vec<String>) -> IndexMap<i64, Job> {
         self.waiting_jobs
             .clone()
             .expect("Waiting jobs not loaded. Call `Platform::load_waiting_jobs` before starting the scheduling.")

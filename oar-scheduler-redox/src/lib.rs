@@ -133,7 +133,7 @@ fn check_reservation_jobs(platform: Bound<PlatformHandle>, slot_sets: Bound<Slot
     // Load jobs to schedule for the queue
     platform.load_waiting_jobs(&py_queue, Some(&"toSchedule".to_string()));
 
-    let jobs: IndexMap<i64, Job> = platform.get_waiting_jobs();
+    let jobs: IndexMap<i64, Job> = platform.get_waiting_jobs(vec!["".to_string()]);
     if jobs.is_empty() {
         return;
     }

@@ -104,13 +104,13 @@ impl QuotasValue {
                         Some(all_value as f64)
                     } else if s.ends_with("*ALL") {
                         Some(
-                            (s[..s.len() - 4].parse::<f64>().expect(
+                            s[..s.len() - 4].parse::<f64>().expect(
                                 format!(
                                     "Invalid quotas value number: excepted f64 multiplicator, got {}",
                                     s[..s.len() - 4].to_string()
                                 )
                                 .as_str(),
-                            ) * all_value as f64),
+                            ) * all_value as f64,
                         )
                     } else {
                         let n = s

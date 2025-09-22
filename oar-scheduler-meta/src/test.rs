@@ -12,6 +12,7 @@ mod quotas_test;
 #[cfg(test)]
 mod resources_test;
 
+#[cfg(test)]
 fn setup_for_tests(use_sqlite_memory: bool) -> (Session, Configuration) {
     // Load .env file if present
     dotenv().ok();

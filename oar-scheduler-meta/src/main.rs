@@ -1,6 +1,7 @@
 mod platform;
 mod queues_schedule;
 mod meta_schedule;
+#[cfg(test)]
 mod test;
 
 use dotenvy::dotenv;

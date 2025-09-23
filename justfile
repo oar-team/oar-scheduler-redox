@@ -7,6 +7,11 @@ pguser := "oar"
 pgpassword := "oar"
 pgdatabase := "oar"
 
+
+alias br := build-scheduler-redox
+alias bm := build-scheduler-meta
+
+
 default:
     @just --list
 
@@ -74,3 +79,9 @@ psql:
 
 rm_db:
     rm -rf "{{pgdata}}"
+
+build-scheduler-redox:
+    cd oar-scheduler-redox && maturin build
+
+build-scheduler-meta:
+    cargo build

@@ -180,12 +180,13 @@ impl Resource {
         order_by_clause: &str,
         labels: &Vec<Box<str>>,
     ) -> Result<Vec<Resource>, Error> {
+        let customs = parse_order_clause(order_by_clause);
         let rows = session.runtime.block_on(async {
             Query::select()
                 .columns(vec![Resources::Type, Resources::State, Resources::AvailableUpto])
                 .columns(labels.iter().map(|s| Alias::new(s.as_ref())).collect::<Vec<Alias>>())
                 .from(Resources::Table)
-                .order_by_expr(sea_query::SimpleExpr::Custom(order_by_clause.to_string()), sea_query::Order::Asc)
+                .order_by_customs(customs)
                 .fetch_all(session)
                 .await
         })?;
@@ -214,4 +215,28 @@ impl Resource {
         }
         Ok(results)
     }
+}
+
+/// Parse "Col1 ASC, Col2 DESC" -> Vec<(String, SqOrder)>
+fn parse_order_clause(input: &str) -> Vec<(String, sea_query::Order)> {
+    input
+        .split(',')
+        .filter_map(|segment| {
+            let seg = segment.trim();
+            if seg.is_empty() { return None; }
+            // split at last space so "LOWER(name) DESC" reste OK
+            if let Some(pos) = seg.rfind(' ') {
+                let expr = seg[..pos].trim().to_string();
+                let ord_str = seg[pos..].trim().to_uppercase();
+                let ord = match ord_str.as_str() {
+                    "DESC" => sea_query::Order::Desc,
+                    _ => sea_query::Order::Asc, // par défaut ASC si inconnu
+                };
+                Some((expr, ord))
+            } else {
+                // pas d'order précisé -> ASC par défaut
+                Some((seg.to_string(), sea_query::Order::Asc))
+            }
+        })
+        .collect()
 }

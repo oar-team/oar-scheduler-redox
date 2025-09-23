@@ -120,8 +120,6 @@ impl AllJobMoldables {
         if jobs.is_empty() {
             return Ok(Self { moldables: HashMap::new() });
         }
-        // Sleep 1s
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let moldables = Query::select()
             .columns(vec![
                 MoldableJobDescriptions::Id.to_string(),

@@ -1,4 +1,5 @@
 use crate::model::job::{Job, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
+use crate::perf;
 use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
 use auto_bench_fct::auto_bench_fct_hy;
@@ -246,6 +247,7 @@ impl SlotSet {
     /// If trying to split with `time-1` and `time` already in two different slots, it will panic (i.e., splitting with time = the beginning of a slot).
     /// Returns the two slots, starting with the new one.
     pub(crate) fn split_at(&mut self, slot_id: i32, time: i64, before: bool) -> (i32, i32) {
+        perf::incr(|s| &mut s.slots_split, 1);
         // Sanity checks
         let slot = self
             .slots
@@ -360,6 +362,8 @@ impl SlotSet {
         sub_resources: bool,
         start_slot_id: Option<i32>,
     ) -> Option<(i32, i32)> {
+        let _timer = std::time::Instant::now();
+        perf::incr(|s| &mut s.update_calls, 1);
         let assignment = job
             .assignment
             .as_ref()
@@ -371,12 +375,12 @@ impl SlotSet {
                 return None;
             }
         };
-        self.iter()
+        let slot_ids = self.iter()
             .between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
-            .collect::<Vec<i32>>()
-            .iter()
-            .for_each(|slot_id| {
+            .collect::<Vec<i32>>();
+        perf::incr(|s| &mut s.updated_slots, slot_ids.len() as u64);
+        slot_ids.iter().for_each(|slot_id| {
                 let slot = self.slots.get_mut(&slot_id).unwrap();
                 let proc_set = &assignment.resources;
                 if sub_resources {
@@ -413,6 +417,7 @@ impl SlotSet {
                     _ => {}
                 }
             });
+        perf::add_ns(|s| &mut s.update_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());
         Some((begin_slot_id, end_slot_id))
     }
 
@@ -453,9 +458,12 @@ impl SlotSet {
         ts_job_name: Option<&Box<str>>,
         ph: &PlaceholderType,
     ) -> ProcSet {
-        self.iter()
+        let _timer = std::time::Instant::now();
+        let mut visited_slots = 0u64;
+        let out = self.iter()
             .between(begin_slot_id, end_slot_id)
             .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| {
+                visited_slots += 1;
                 let mut slot_proc_set = slot.proc_set().clone();
                 // Check time-sharing
                 if let Some((user_name, job_name)) = ts_user_name.zip(ts_job_name) {
@@ -468,7 +476,10 @@ impl SlotSet {
                     }
                 }
                 acc & slot_proc_set
-            })
+            });
+        perf::incr(|s| &mut s.slots_intersected, visited_slots);
+        perf::add_ns(|s| &mut s.intersect_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());
+        out
     }
     pub fn begin(&self) -> i64 {
         self.begin

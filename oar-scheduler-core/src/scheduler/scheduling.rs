@@ -1,4 +1,5 @@
 use crate::hooks::get_hooks_manager;
+use crate::perf;
 use crate::model::job::{Job, JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::Slot;
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 /// Schedule loop with support for jobs container - can be recursive
 pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &mut IndexMap<i64, Job>) {
     let job_ids = waiting_jobs.keys().into_iter().cloned().collect::<Box<[i64]>>();
+    perf::incr(|s| &mut s.jobs_seen, job_ids.len() as u64);
     for job_id in job_ids {
         // Check job dependencies
         let dependencies = waiting_jobs.get(&job_id).unwrap().dependencies.clone();
@@ -71,6 +73,7 @@ pub fn schedule_jobs(slot_sets: &mut HashMap<Box<str>, SlotSet>, waiting_jobs: &
 ///   - Split the slot_set to reflect the new allocation
 #[auto_bench_fct_hy]
 pub fn schedule_job(slotset: &mut SlotSet, job: &mut Job, min_begin: Option<i64>) {
+    let _timer = std::time::Instant::now();
     let mut chosen_slot_id_left = None;
     let mut chosen_begin = None;
     let mut chosen_end = None;
@@ -95,7 +98,9 @@ pub fn schedule_job(slotset: &mut SlotSet, job: &mut Job, min_begin: Option<i64>
         }
     });
 
+    perf::add_ns(|s| &mut s.schedule_job_ns, _timer.elapsed().as_nanos().try_into().unwrap());
     if let Some(chosen_moldable_index) = chosen_moldable_index {
+        perf::incr(|s| &mut s.jobs_scheduled, 1);
         job.assignment = Some(JobAssignment::new(
             chosen_begin.unwrap(),
             chosen_end.unwrap(),
@@ -113,11 +118,16 @@ pub fn schedule_job(slotset: &mut SlotSet, job: &mut Job, min_begin: Option<i64>
 /// Returns left slot id, right slot id, proc_set and quotas hit count.
 #[auto_bench_fct_hy]
 pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Moldable, min_begin: Option<i64>) -> Option<(i32, i32, ProcSet, u32)> {
+    let _timer = std::time::Instant::now();
+    perf::incr(|s| &mut s.moldables_seen, 1);
     let mut iter = slotset.iter();
     // Start at cache if available
     if job.can_use_cache() {
         if let Some(cache_first_slot) = slotset.get_cache_first_slot(moldable) {
+            perf::incr(|s| &mut s.cache_hits, 1);
             iter = iter.start_at(cache_first_slot);
+        } else {
+            perf::incr(|s| &mut s.cache_misses, 1);
         }
     }
     // Start at the minimum begin time if specified
@@ -147,6 +157,7 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
     let mut count = 0;
     let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
         count += 1;
+        perf::incr(|s| &mut s.slot_windows_scanned, 1);
         let left_slot_id = left_slot.id();
         let right_slot_id = right_slot.id();
         let left_slot_begin = left_slot.begin();
@@ -186,14 +197,16 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
                         return None;
                     }
                 }
+                perf::incr(|s| &mut s.quotas_checks, 1);
                 let slots = slotset.iter().between(left_slot_id, right_slot_id);
                 let end = left_slot_begin + moldable.walltime - 1;
-                if let Some((msg, rule, limit)) = quotas::check_slots_quotas(slots, job, left_slot_begin, end, proc_set.core_count()) {
+                if let Some((msg, rule, limit)) = perf::time(|s| &mut s.quotas_ns, || quotas::check_slots_quotas(slots, job, left_slot_begin, end, proc_set.core_count())) {
                     info!(
                         "Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}",
                         job.id, msg, rule, limit
                     );
                     quotas_hit_count += 1;
+                    perf::incr(|s| &mut s.quotas_rejects, 1);
                     return None; // Skip this slot if quotas check fails
                 }
             }
@@ -201,6 +214,7 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
             })
     });
 
+    perf::add_ns(|s| &mut s.find_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());
     if job.can_set_cache() && slotset.get_platform_config().config.cache_enabled {
         if let Some(cache_first_slot_id) = cache_first_slot {
             slotset.insert_cache_entry(moldable.cache_key.clone(), cache_first_slot_id);

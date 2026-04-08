@@ -7,6 +7,182 @@ use oar_scheduler_core::scheduler::hierarchy::Hierarchy;
 use oar_scheduler_core::scheduler::quotas::QuotasValue;
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::benchmarker::ResourceTopology;
+
+pub fn generate_mock_platform_config_for_topology(
+    topology: ResourceTopology,
+    cache_enabled: bool,
+    nnodes: u32,
+    quotas_enable: bool,
+) -> PlatformConfig {
+    match topology {
+        ResourceTopology::Homogeneous => {
+            // keep old homogeneous shape, but now parameterized by nnodes
+            let cpu_per_node = 4;
+            let cores_per_cpu = 64;
+            let switch_size_nodes = 24;
+            let res_count = nnodes * cpu_per_node * cores_per_cpu;
+
+            generate_mock_platform_config(
+                cache_enabled,
+                res_count,
+                switch_size_nodes,
+                cpu_per_node,
+                cores_per_cpu,
+                quotas_enable,
+            )
+        }
+        ResourceTopology::Heterogeneous => {
+            generate_mock_platform_config_heterogeneous(cache_enabled, nnodes, quotas_enable)
+        }
+    }
+}
+
+pub fn generate_mock_platform_config_heterogeneous(
+    cache_enabled: bool,
+    nnodes: u32,
+    quotas_enable: bool,
+) -> PlatformConfig {
+    let mut config = Configuration::default();
+    config.quotas = quotas_enable;
+    config.cache_enabled = cache_enabled;
+    config.scheduler_job_security_time = 0;
+
+    let resource_set = generate_mock_resource_set_heterogeneous(nnodes);
+
+    PlatformConfig {
+        quotas_config: generate_mock_quotas_config(
+            quotas_enable,
+            resource_set.nb_resources_not_dead,
+        ),
+        resource_set,
+        config,
+    }
+}
+
+/// Flux-like heterogeneous layout but keeping OAR names:
+/// - nodes
+///   - cpus
+///     - cores
+///
+/// Node classes:
+/// 20%: 2 cpus × 32 cores = 64 cores/node
+/// 50%: 4 cpus × 64 cores = 256 cores/node
+/// 30%: 8 cpus × 64 cores = 512 cores/node
+pub fn generate_mock_resource_set_heterogeneous(nnodes: u32) -> ResourceSet {
+    let small_nodes = nnodes * 20 / 100;
+    let medium_nodes = nnodes * 50 / 100;
+    let large_nodes = nnodes - small_nodes - medium_nodes;
+
+    let mut switches: Vec<ProcSet> = Vec::new();
+    let mut nodes: Vec<ProcSet> = Vec::new();
+    let mut cpus: Vec<ProcSet> = Vec::new();
+
+    let mut next_core_id: u32 = 1;
+
+    // group nodes into synthetic switches of ~32 nodes each
+    let switch_group_size = 32u32;
+    let mut current_switch_start: Option<u32> = None;
+    let mut nodes_in_current_switch = 0u32;
+
+    let mut push_node = |cpu_count: u32,
+                         cores_per_cpu: u32,
+                         nodes: &mut Vec<ProcSet>,
+                         cpus: &mut Vec<ProcSet>,
+                         switches: &mut Vec<ProcSet>,
+                         next_core_id: &mut u32,
+                         current_switch_start: &mut Option<u32>,
+                         nodes_in_current_switch: &mut u32| {
+        let node_start = *next_core_id;
+
+        if current_switch_start.is_none() {
+            *current_switch_start = Some(node_start);
+        }
+
+        for _ in 0..cpu_count {
+            let cpu_start = *next_core_id;
+            let cpu_end = cpu_start + cores_per_cpu - 1;
+            cpus.push(ProcSet::from_iter([cpu_start..=cpu_end]));
+            *next_core_id = cpu_end + 1;
+        }
+
+        let node_end = *next_core_id - 1;
+        nodes.push(ProcSet::from_iter([node_start..=node_end]));
+
+        *nodes_in_current_switch += 1;
+        if *nodes_in_current_switch >= switch_group_size {
+            let sw_start = current_switch_start.take().unwrap();
+            let sw_end = node_end;
+            switches.push(ProcSet::from_iter([sw_start..=sw_end]));
+            *nodes_in_current_switch = 0;
+        }
+    };
+
+    for _ in 0..small_nodes {
+        push_node(
+            2, 32,
+            &mut nodes, &mut cpus, &mut switches,
+            &mut next_core_id,
+            &mut current_switch_start,
+            &mut nodes_in_current_switch,
+        );
+    }
+
+    for _ in 0..medium_nodes {
+        push_node(
+            4, 64,
+            &mut nodes, &mut cpus, &mut switches,
+            &mut next_core_id,
+            &mut current_switch_start,
+            &mut nodes_in_current_switch,
+        );
+    }
+
+    for _ in 0..large_nodes {
+        push_node(
+            8, 64,
+            &mut nodes, &mut cpus, &mut switches,
+            &mut next_core_id,
+            &mut current_switch_start,
+            &mut nodes_in_current_switch,
+        );
+    }
+
+    // close trailing switch if needed
+    if let Some(sw_start) = current_switch_start.take() {
+        let sw_end = next_core_id - 1;
+        switches.push(ProcSet::from_iter([sw_start..=sw_end]));
+    }
+
+    let res_count = next_core_id - 1;
+
+    let hierarchy = Hierarchy::new()
+        .add_partition("switches".into(), switches.into_boxed_slice())
+        .add_partition("nodes".into(), nodes.into_boxed_slice())
+        .add_partition("cpus".into(), cpus.into_boxed_slice())
+        .add_unit_partition("cores".into());
+
+    ResourceSet {
+        nb_resources_not_dead: res_count,
+        nb_resources_default_not_dead: res_count,
+        suspendable_resources: ProcSet::new(),
+        default_resources: ProcSet::from_iter([1..=res_count]),
+        available_upto: vec![],
+        hierarchy,
+    }
+}
+
+pub fn estimate_total_cores(topology: ResourceTopology, nnodes: u32) -> u32 {
+    match topology {
+        ResourceTopology::Homogeneous => nnodes * 4 * 64,
+        ResourceTopology::Heterogeneous => {
+            let small = nnodes * 20 / 100;
+            let medium = nnodes * 50 / 100;
+            let large = nnodes - small - medium;
+            small * 64 + medium * 256 + large * 512
+        }
+    }
+}
 
 /// In mocking, the time unit is the minute.
 pub struct PlatformBenchMock {
@@ -28,7 +204,7 @@ impl PlatformTrait for PlatformBenchMock {
     fn get_scheduled_jobs(&self) -> Vec<Job> {
         self.scheduled_jobs.clone()
     }
-    fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
+    fn get_waiting_jobs(&self, _queues: Vec<String>) -> IndexMap<i64, Job> {
         self.waiting_jobs.clone()
     }
 

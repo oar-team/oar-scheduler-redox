@@ -1422,11 +1422,14 @@ dependencies = [
  "futures",
  "indexmap",
  "log",
+ "num-traits",
  "oar-scheduler-core",
  "plotters",
  "pyo3",
  "rand 0.9.2",
  "range-set-blaze",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

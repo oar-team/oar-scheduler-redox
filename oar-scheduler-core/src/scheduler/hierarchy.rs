@@ -1,4 +1,5 @@
 use crate::model::job::{ProcSet, ProcSetCoresOp};
+use crate::perf;
 #[cfg(feature = "pyo3")]
 use crate::model::python::proc_set_to_python;
 use auto_bench_fct::auto_bench_fct_hy;
@@ -128,10 +129,13 @@ impl Hierarchy {
     }
     #[auto_bench_fct_hy]
     pub fn request(&self, available_proc_set: &ProcSet, request: &HierarchyRequests) -> Option<ProcSet> {
+        let _timer = std::time::Instant::now();
+        perf::incr(|s| &mut s.hierarchy_calls, 1);
         let result = request.0.iter().try_fold(ProcSet::new(), |acc, req| {
             self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs)
                 .map(|partition| partition | acc)
         });
+        perf::add_ns(|s| &mut s.hierarchy_request_ns, _timer.elapsed().as_nanos().try_into().unwrap());
         result
     }
     #[auto_bench_fct_hy]
@@ -146,6 +150,7 @@ impl Hierarchy {
         }
 
         if let Some(partitions) = self.partitions.get(name) {
+            perf::incr(|s| &mut s.hierarchy_partitions_scanned, partitions.len() as u64);
             let (proc_sets, count) = partitions
                 .iter()
                 .filter_map(|proc_set| {

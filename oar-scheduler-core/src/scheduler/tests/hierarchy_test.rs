@@ -151,3 +151,22 @@ fn test_hierarchy_from_platform() {
     assert_eq!(proc_set_2, ProcSet::from_iter([1..=64]));
     assert_eq!(proc_set, ProcSet::from_iter([1..=64]));
 }
+
+#[test]
+fn test_find_resource_hierarchies_scattered_unit_partition_respects_availability() {
+    let h = Hierarchy::new()
+        .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
+        .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()))
+        .add_unit_partition("core".into());
+
+    // In the first switch, only the second half of the first node is available: 5..=8
+    // In the second switch, only the first half of the first node is available: 17..=20
+    let available = procset(5..=8) | procset(17..=20);
+
+    let result = h.find_resource_hierarchies_scattered(
+        &available,
+        &[("switch".into(), 2), ("node".into(), 1), ("core".into(), 4)],
+    );
+
+    assert_eq!(result, Some(procset(5..=8) | procset(17..=20)));
+}

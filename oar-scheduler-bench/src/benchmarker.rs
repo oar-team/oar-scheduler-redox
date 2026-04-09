@@ -704,8 +704,7 @@ impl BenchmarkConfig {
             let jobs = i * self.step;
             let result = self.benchmark_single_size(jobs, self.seed + (i + 1)).await;
             info!(
-                "{} of {} jobs scheduled in {} ns ({}% cache hits, {} slots, {}/{}h width ({}% usage), {}% quotas hit)",
-                result.scheduled_jobs_count.mean,
+                "{} jobs scheduled in {} ms ({}% cache hits, {} slots, {}/{}h width ({}% usage), {}% quotas hit)",
                 result.jobs_count,
                 result.scheduling_time.mean,
                 result.cache_hits.mean,

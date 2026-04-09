@@ -45,7 +45,7 @@ def load_phase_json(path: Path):
         jobs_count = stat_mean(row.get("jobs_count", 0))
         scheduled_jobs_count = stat_mean(row.get("scheduled_jobs_count", 0))
         slot_count = stat_mean(row.get("slot_count", 0))
-        scheduling_time = stat_mean(row.get("scheduling_time", 0))
+        scheduling_time_ms = stat_mean(row.get("scheduling_time", 0))
         total_time_per_job_avg = safe_div(stat_mean(perf.get("total_schedule_cycle_ns", 0)), jobs_count)
         cache_hits_external = stat_mean(row.get("cache_hits", 0))
         quotas_hit = stat_mean(row.get("quotas_hit", 0))
@@ -93,7 +93,7 @@ def load_phase_json(path: Path):
             "jobs_count": jobs_count,
             "scheduled_jobs_count": scheduled_jobs_count,
             "slot_count": slot_count,
-            "scheduling_time": scheduling_time,
+            "scheduling_time_ms": scheduling_time_ms,
             "total_time_per_job_avg": total_time_per_job_avg,
             "cache_hits_external": cache_hits_external,
             "quotas_hit": quotas_hit,
@@ -292,7 +292,7 @@ def dump_summary(rows, outdir):
         "cache_enabled",
         "nnodes",
         "jobs_count",
-        "scheduling_time",
+        "scheduling_time_ms",
         "total_time_per_job_avg",
         "total_schedule_cycle_ns",
         "find_slots_ns",

@@ -174,3 +174,19 @@ fn test_find_resource_hierarchies_scattered_unit_partition_respects_availability
 
     assert_eq!(result, Some(procset(5..=8) | procset(17..=20)));
 }
+
+#[test]
+#[should_panic]
+fn test_hierarchy_build_fails_on_orphan_partition() {
+    let _h = Hierarchy::new()
+        .add_partition("switch".into(), procsets([1..=16].into()))
+        .add_partition("node".into(), procsets([100..=110].into()));
+}
+
+#[test]
+#[should_panic]
+fn test_hierarchy_build_fails_on_ambiguous_partition() {
+    let _h = Hierarchy::new()
+        .add_partition("switch".into(), procsets([1..=16, 8..=24].into()))
+        .add_partition("node".into(), procsets([10..=12].into()));
+}

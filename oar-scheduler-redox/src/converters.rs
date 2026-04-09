@@ -39,29 +39,24 @@ fn build_resource_set(py_res_set: &Bound<PyAny>) -> ResourceSet {
         .unwrap();
 
     let mut unit_partitions = vec![];
-    let partitions = py_res_set
-        .getattr("hierarchy")
-        .unwrap()
-        .downcast::<PyDict>()
-        .unwrap()
-        .iter()
-        .map(|(k, v)| {
-            let key: String = k.extract().unwrap();
-            let value: Box<[ProcSet]> = build_proc_sets(&v);
-            Ok((key.into_boxed_str(), value))
-        })
-        .collect::<PyResult<HashMap<_, _>>>()
-        .unwrap()
-        .into_iter()
-        .filter(|(name, res)| {
-            // If cores count is always 1, we can consider it a unit partition
-            if res.into_iter().all(|proc_set| proc_set.core_count() == 1) {
-                unit_partitions.push((*name).clone());
-                return false;
-            }
-            true
-        })
-        .collect();
+    let mut level_order = vec![];
+    let mut partitions: HashMap<Box<str>, Box<[ProcSet]>> = HashMap::new();
+
+    let hierarchy_obj = py_res_set.getattr("hierarchy").unwrap();
+    let hierarchy_dict = hierarchy_obj.downcast::<PyDict>().unwrap();
+
+    for (k, v) in hierarchy_dict.iter() {
+        let key: String = k.extract().unwrap();
+        let key: Box<str> = key.into_boxed_str();
+        let value: Box<[ProcSet]> = build_proc_sets(&v);
+
+        if value.iter().all(|proc_set| proc_set.core_count() == 1) {
+            unit_partitions.push(key);
+        } else {
+            level_order.push(key.clone());
+            partitions.insert(key, value);
+        }
+    }
 
     let default_resources = build_proc_set(&py_default_intervals);
     ResourceSet {
@@ -70,7 +65,7 @@ fn build_resource_set(py_res_set: &Bound<PyAny>) -> ResourceSet {
         suspendable_resources: ProcSet::new(),
         default_resources,
         available_upto,
-        hierarchy: Hierarchy::new_defined(partitions, unit_partitions),
+        hierarchy: Hierarchy::new_defined_ordered(partitions, level_order, unit_partitions),
     }
 }
 /// Builds a Rust ProcSet (range-set-blaze lib) from a Python ProcSet (procset lib).

@@ -10,7 +10,7 @@ use pyo3::prelude::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList, PyTuple};
 #[cfg(feature = "pyo3")]
 use pyo3::{Bound, IntoPyObject, PyAny, PyErr, Python};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyRequests(pub Box<[HierarchyRequest]>);
@@ -91,27 +91,99 @@ impl<'a> IntoPyObject<'a> for &HierarchyRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hierarchy {
-    partitions: HashMap<Box<str>, Box<[ProcSet]>>, // Level name, partitions of that level
-    unit_partitions: Vec<Box<str>>, // Name of a virtuals unitary partition (correspond to a single u32 in ProcSet), e.g. "core" or "resource_id"
+pub type LevelId = u16;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CompiledLevelRequest {
+    level_id: LevelId,
+    count: u32,
+    is_unit: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HierarchyBuildError {
+    MissingLevel(Box<str>),
+    MissingLevelId(Box<str>),
+    OrphanPartition {
+        level: Box<str>,
+        proc_set: ProcSet,
+    },
+    AmbiguousParent {
+        level: Box<str>,
+        proc_set: ProcSet,
+        parent_count: usize,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HierarchyNode {
+    pub level_id: LevelId,
+    pub proc_set: ProcSet,
+    pub children: Box<[HierarchyNode]>,
+}
+
+impl HierarchyNode {
+    fn new(level_id: LevelId, proc_set: ProcSet, children: Box<[HierarchyNode]>) -> Self {
+        Self {
+            level_id,
+            proc_set,
+            children,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hierarchy {
+    // Keep the old representation during the transition period.
+    partitions: HashMap<Box<str>, Box<[ProcSet]>>,
+    // Explicit level order.
+    level_order: Vec<Box<str>>,
+    // Level name -> compact integer id.
+    level_ids: HashMap<Box<str>, LevelId>,
+    // Fast checks for unit levels.
+    unit_level_ids: HashSet<LevelId>,
+    // New representation for fast traversal.
+    roots: Box<[HierarchyNode]>,
+    // Kept for compatibility/debugging.
+    unit_partitions: Vec<Box<str>>,
+}
+
+use log::info;
 impl Hierarchy {
     pub fn new() -> Self {
-        Self::new_defined(HashMap::new(), vec![])
-    }
-    pub fn new_defined(partitions: HashMap<Box<str>, Box<[ProcSet]>>, unit_partition: Vec<Box<str>>) -> Self {
-        Hierarchy {
-            partitions,
-            unit_partitions: unit_partition,
+        Self {
+            partitions: HashMap::new(),
+            level_order: vec![],
+            level_ids: HashMap::new(),
+            unit_level_ids: HashSet::new(),
+            roots: Vec::new().into_boxed_slice(),
+            unit_partitions: vec![],
         }
+    }
+
+    pub fn new_defined_ordered(
+        partitions: HashMap<Box<str>, Box<[ProcSet]>>,
+        level_order: Vec<Box<str>>,
+        unit_partitions: Vec<Box<str>>,
+    ) -> Self {
+        let mut hierarchy = Self {
+            partitions,
+            level_order,
+            level_ids: HashMap::new(),
+            unit_level_ids: HashSet::new(),
+            roots: Vec::new().into_boxed_slice(),
+            unit_partitions,
+        };
+        hierarchy.rebuild_metadata();
+        hierarchy
     }
     pub fn add_partition(mut self, name: Box<str>, partitions: Box<[ProcSet]>) -> Self {
         if self.has_partition(&name) {
             panic!("A partition with the name {} already exists.", name);
         }
+        self.level_order.push(name.clone());
         self.partitions.insert(name, partitions);
+        self.rebuild_metadata();
         self
     }
     pub fn add_unit_partition(mut self, name: Box<str>) -> Self {
@@ -119,6 +191,7 @@ impl Hierarchy {
             panic!("A partition with the name {} already exists.", name);
         }
         self.unit_partitions.push(name);
+        self.rebuild_metadata();
         self
     }
     pub fn has_partition(&self, name: &Box<str>) -> bool {
@@ -127,57 +200,274 @@ impl Hierarchy {
     pub fn unit_partitions(&self) -> &Vec<Box<str>> {
         &self.unit_partitions
     }
+
+    pub fn level_order(&self) -> &Vec<Box<str>> {
+        &self.level_order
+    }
+
+    pub fn roots(&self) -> &[HierarchyNode] {
+        &self.roots
+    }
+
+    fn build_tree(
+        partitions: &HashMap<Box<str>, Box<[ProcSet]>>,
+        level_order: &[Box<str>],
+        level_ids: &HashMap<Box<str>, LevelId>,
+    ) -> Result<Box<[HierarchyNode]>, HierarchyBuildError> {
+        if level_order.is_empty() {
+            return Ok(Vec::new().into_boxed_slice());
+        }
+
+        Self::build_level_from_slice(partitions, level_order, level_ids)
+    }
+
+    fn build_level_from_slice(
+        partitions: &HashMap<Box<str>, Box<[ProcSet]>>,
+        level_order: &[Box<str>],
+        level_ids: &HashMap<Box<str>, LevelId>,
+    ) -> Result<Box<[HierarchyNode]>, HierarchyBuildError> {
+        let level_name = &level_order[0];
+        let level_id = *level_ids
+            .get(level_name)
+            .ok_or_else(|| HierarchyBuildError::MissingLevelId(level_name.clone()))?;
+
+        let current_partitions = partitions
+            .get(level_name)
+            .ok_or_else(|| HierarchyBuildError::MissingLevel(level_name.clone()))?;
+
+        // Last real level: children are empty
+        if level_order.len() == 1 {
+            let nodes = current_partitions
+                .iter()
+                .cloned()
+                .map(|proc_set| HierarchyNode::new(level_id, proc_set, Vec::new().into_boxed_slice()))
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+
+            return Ok(nodes);
+        }
+
+        let next_level_name = &level_order[1];
+        let next_partitions = partitions
+            .get(next_level_name)
+            .ok_or_else(|| HierarchyBuildError::MissingLevel(next_level_name.clone()))?;
+
+        // For each parent, collect the list of children indices
+        let mut children_by_parent: Vec<Vec<usize>> = vec![Vec::new(); current_partitions.len()];
+
+        for child_idx in 0..next_partitions.len() {
+            let child = &next_partitions[child_idx];
+
+            // Ignore empty partitions.
+            if child.is_empty() {
+                continue;
+            }
+
+            let matching_parents: Vec<usize> = current_partitions
+                .iter()
+                .enumerate()
+                .filter_map(|(parent_idx, parent)| child.is_subset(parent).then_some(parent_idx))
+                .collect();
+
+            match matching_parents.len() {
+                0 => {
+                    return Err(HierarchyBuildError::OrphanPartition {
+                        level: next_level_name.clone(),
+                        proc_set: child.clone(),
+                    });
+                }
+                1 => {
+                    children_by_parent[matching_parents[0]].push(child_idx);
+                }
+                n => {
+                    return Err(HierarchyBuildError::AmbiguousParent {
+                        level: next_level_name.clone(),
+                        proc_set: child.clone(),
+                        parent_count: n,
+                    });
+                }
+            }
+        }
+
+        let mut nodes = Vec::with_capacity(current_partitions.len());
+
+        for (parent_idx, parent_proc_set) in current_partitions.iter().enumerate() {
+            let child_indices = &children_by_parent[parent_idx];
+
+            let children = if child_indices.is_empty() {
+                Vec::new().into_boxed_slice()
+            } else {
+                let subset_next_partitions: Box<[ProcSet]> = child_indices
+                    .iter()
+                    .map(|&idx| next_partitions[idx].clone())
+                    .collect();
+
+                let mut sub_partitions: HashMap<Box<str>, Box<[ProcSet]>> = HashMap::new();
+                sub_partitions.insert(next_level_name.clone(), subset_next_partitions);
+
+                // IMPORTANT: deeper levels must also be restricted by the current parent_proc_set,
+                // otherwise foreign partitions will end up in the subtree and become orphaned.
+                for deeper_level_name in level_order.iter().skip(2) {
+                    let deeper = partitions
+                        .get(deeper_level_name)
+                        .ok_or_else(|| HierarchyBuildError::MissingLevel(deeper_level_name.clone()))?;
+
+                    let filtered_deeper: Box<[ProcSet]> = deeper
+                        .iter()
+                        .filter(|proc_set| proc_set.is_subset(parent_proc_set))
+                        .cloned()
+                        .collect();
+
+                    sub_partitions.insert(deeper_level_name.clone(), filtered_deeper);
+                }
+
+                Self::build_level_from_slice(&sub_partitions, &level_order[1..], level_ids)?
+            };
+
+            nodes.push(HierarchyNode::new(level_id, parent_proc_set.clone(), children));
+        }
+
+        Ok(nodes.into_boxed_slice())
+    }
+
     #[auto_bench_fct_hy]
     pub fn request(&self, available_proc_set: &ProcSet, request: &HierarchyRequests) -> Option<ProcSet> {
         let _timer = std::time::Instant::now();
         perf::incr(|s| &mut s.hierarchy_calls, 1);
         let result = request.0.iter().try_fold(ProcSet::new(), |acc, req| {
-            self.find_resource_hierarchies_scattered(&(available_proc_set & &req.filter), &req.level_nbs)
+            let filtered_available = available_proc_set & &req.filter;
+            self.find_resource_hierarchies_scattered(&filtered_available, &req.level_nbs)
                 .map(|partition| partition | acc)
         });
         perf::add_ns(|s| &mut s.hierarchy_request_ns, _timer.elapsed().as_nanos().try_into().unwrap());
         result
     }
     #[auto_bench_fct_hy]
-    pub fn find_resource_hierarchies_scattered(&self, available_proc_set: &ProcSet, level_requests: &[(Box<str>, u32)]) -> Option<ProcSet> {
-        if available_proc_set.is_empty() {
+    pub fn find_resource_hierarchies_scattered(
+        &self,
+        available_proc_set: &ProcSet,
+        level_requests: &[(Box<str>, u32)],
+    ) -> Option<ProcSet> {
+        let compiled = self.compile_level_requests(level_requests)?;
+        self.find_in_nodes(&self.roots, available_proc_set, &compiled)
+            .map(|(proc_set, _count)| proc_set)
+    }
+
+    fn find_in_nodes(
+        &self,
+        nodes: &[HierarchyNode],
+        available_proc_set: &ProcSet,
+        level_requests: &[CompiledLevelRequest],
+    ) -> Option<(ProcSet, u32)> {
+        if available_proc_set.is_empty() || level_requests.is_empty() {
             return None;
         }
-        let (name, request) = &level_requests[0];
-        // Optimization for core that should correspond to a single proc.
-        if self.unit_partitions.contains(name) {
-            return available_proc_set.sub_proc_set_with_cores(*request);
+
+        perf::incr(|s| &mut s.hierarchy_partitions_scanned, nodes.len() as u64);
+
+        let wanted = level_requests[0];
+
+        if wanted.is_unit {
+            return available_proc_set
+                .sub_proc_set_with_cores(wanted.count)
+                .map(|ps| (ps, wanted.count));
         }
 
-        if let Some(partitions) = self.partitions.get(name) {
-            perf::incr(|s| &mut s.hierarchy_partitions_scanned, partitions.len() as u64);
-            let (proc_sets, count) = partitions
-                .iter()
-                .filter_map(|proc_set| {
-                    if level_requests.len() > 1 {
-                        // If the next level is core, do not iterate over it and do the check directly. The core level should correspond to a single proc.
-                        if self.unit_partitions.contains(&level_requests[1].0) {
-                            (proc_set & available_proc_set).sub_proc_set_with_cores(level_requests[1].1)
-                        } else {
-                            self.find_resource_hierarchies_scattered(&(proc_set & available_proc_set), &level_requests[1..])
-                        }
-                    } else if proc_set.is_subset(&available_proc_set) {
-                        Some(proc_set.clone())
-                    } else {
-                        None
-                    }
-                })
-                .take(*request as usize)
-                .fold((ProcSet::new(), 0), |(acc, count), proc_set| (acc | proc_set, count + 1));
+        let mut acc = ProcSet::new();
+        let mut count: u32 = 0;
 
-            if count < *request {
-                return None;
+        for node in nodes {
+            let node_available = &node.proc_set & available_proc_set;
+            if node_available.is_empty() {
+                continue;
             }
-            Some(proc_sets)
+
+            if node.level_id == wanted.level_id {
+                let selected: Option<ProcSet> = if level_requests.len() > 1 {
+                    let next = level_requests[1];
+
+                    if next.is_unit {
+                        node_available.sub_proc_set_with_cores(next.count)
+                    } else {
+                        self.find_in_nodes(&node.children, &node_available, &level_requests[1..])
+                            .map(|(ps, _)| ps)
+                    }
+                } else if node.proc_set.is_subset(available_proc_set) {
+                    Some(node.proc_set.clone())
+                } else {
+                    None
+                };
+
+                if let Some(proc_set) = selected {
+                    acc = acc | proc_set;
+                    count += 1;
+
+                    if count == wanted.count {
+                        return Some((acc, count));
+                    }
+                }
+            } else {
+                if let Some((proc_set, found_count)) =
+                    self.find_in_nodes(&node.children, &node_available, level_requests)
+                {
+                    acc = acc | proc_set;
+                    count += found_count;
+
+                    if count >= wanted.count {
+                        return Some((acc, count));
+                    }
+                }
+            }
+        }
+
+        if count >= wanted.count {
+            Some((acc, count))
         } else {
-            warn!("No such hierarchy level matching name {}", name);
             None
         }
+    }
+
+    fn rebuild_metadata(&mut self) {
+        self.level_ids.clear();
+        self.unit_level_ids.clear();
+
+        let mut next_id: LevelId = 0;
+
+        for level_name in &self.level_order {
+            self.level_ids.insert(level_name.clone(), next_id);
+            next_id += 1;
+        }
+
+        for unit_name in &self.unit_partitions {
+            self.level_ids.insert(unit_name.clone(), next_id);
+            self.unit_level_ids.insert(next_id);
+            next_id += 1;
+        }
+
+        self.roots = Self::build_tree(&self.partitions, &self.level_order, &self.level_ids)
+            .unwrap_or_else(|err| panic!("Failed to build hierarchy tree: {:?}", err));
+    }
+
+    fn level_id(&self, level_name: &str) -> Option<LevelId> {
+        self.level_ids.get(level_name).copied()
+    }
+
+    fn compile_level_requests(
+        &self,
+        level_requests: &[(Box<str>, u32)],
+    ) -> Option<Vec<CompiledLevelRequest>> {
+        let mut compiled = Vec::with_capacity(level_requests.len());
+
+        for (level_name, count) in level_requests {
+            let level_id = self.level_id(level_name)?;
+            compiled.push(CompiledLevelRequest {
+                level_id,
+                count: *count,
+                is_unit: self.unit_level_ids.contains(&level_id),
+            });
+        }
+
+        Some(compiled)
     }
 }
 
@@ -200,6 +490,11 @@ impl<'a> IntoPyObject<'a> for &Hierarchy {
         }
 
         dict.set_item("partitions", partitions_dict).unwrap();
+        dict.set_item(
+            "level_order",
+            self.level_order.iter().map(|name| name.to_string()).collect::<Vec<String>>(),
+        )
+            .unwrap();
         dict.set_item(
             "unit_partitions",
             self.unit_partitions.iter().map(|name| name.to_string()).collect::<Vec<String>>(),

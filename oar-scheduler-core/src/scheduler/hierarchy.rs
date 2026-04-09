@@ -120,14 +120,32 @@ pub struct HierarchyNode {
     pub level_id: LevelId,
     pub proc_set: ProcSet,
     pub children: Box<[HierarchyNode]>,
+    pub subtree_core_count: u32,
+    pub subtree_level_counts: Box<[u32]>,
 }
 
 impl HierarchyNode {
-    fn new(level_id: LevelId, proc_set: ProcSet, children: Box<[HierarchyNode]>) -> Self {
+    fn new(
+        level_id: LevelId,
+        proc_set: ProcSet,
+        children: Box<[HierarchyNode]>,
+        level_count_len: usize,
+    ) -> Self {
+        let mut subtree_level_counts = vec![0u32; level_count_len];
+        subtree_level_counts[level_id as usize] = 1;
+
+        for child in children.iter() {
+            for (idx, count) in child.subtree_level_counts.iter().enumerate() {
+                subtree_level_counts[idx] += *count;
+            }
+        }
+
         Self {
             level_id,
+            subtree_core_count: proc_set.core_count(),
             proc_set,
             children,
+            subtree_level_counts: subtree_level_counts.into_boxed_slice(),
         }
     }
 }
@@ -218,13 +236,15 @@ impl Hierarchy {
             return Ok(Vec::new().into_boxed_slice());
         }
 
-        Self::build_level_from_slice(partitions, level_order, level_ids)
+        let level_count_len = level_ids.len();
+        Self::build_level_from_slice(partitions, level_order, level_ids, level_count_len)
     }
 
     fn build_level_from_slice(
         partitions: &HashMap<Box<str>, Box<[ProcSet]>>,
         level_order: &[Box<str>],
         level_ids: &HashMap<Box<str>, LevelId>,
+        level_count_len: usize,
     ) -> Result<Box<[HierarchyNode]>, HierarchyBuildError> {
         let level_name = &level_order[0];
         let level_id = *level_ids
@@ -240,7 +260,9 @@ impl Hierarchy {
             let nodes = current_partitions
                 .iter()
                 .cloned()
-                .map(|proc_set| HierarchyNode::new(level_id, proc_set, Vec::new().into_boxed_slice()))
+                .map(|proc_set| {
+                    HierarchyNode::new(level_id, proc_set, Vec::new().into_boxed_slice(), level_count_len)
+                })
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
 
@@ -321,10 +343,15 @@ impl Hierarchy {
                     sub_partitions.insert(deeper_level_name.clone(), filtered_deeper);
                 }
 
-                Self::build_level_from_slice(&sub_partitions, &level_order[1..], level_ids)?
+                Self::build_level_from_slice(&sub_partitions, &level_order[1..], level_ids, level_count_len)?
             };
 
-            nodes.push(HierarchyNode::new(level_id, parent_proc_set.clone(), children));
+            nodes.push(HierarchyNode::new(
+                level_id,
+                parent_proc_set.clone(),
+                children,
+                level_count_len,
+            ));
         }
 
         Ok(nodes.into_boxed_slice())
@@ -349,8 +376,9 @@ impl Hierarchy {
         level_requests: &[(Box<str>, u32)],
     ) -> Option<ProcSet> {
         let compiled = self.compile_level_requests(level_requests)?;
+        let wanted = compiled[0];
         self.find_in_nodes(&self.roots, available_proc_set, &compiled)
-            .map(|(proc_set, _count)| proc_set)
+            .and_then(|(proc_set, count)| (count >= wanted.count).then_some(proc_set))
     }
 
     fn find_in_nodes(
@@ -368,15 +396,25 @@ impl Hierarchy {
         let wanted = level_requests[0];
 
         if wanted.is_unit {
+            let available_cores = available_proc_set.core_count();
+            if available_cores == 0 {
+                return None;
+            }
+
+            let take = available_cores.min(wanted.count);
             return available_proc_set
-                .sub_proc_set_with_cores(wanted.count)
-                .map(|ps| (ps, wanted.count));
+                .sub_proc_set_with_cores(take)
+                .map(|ps| (ps, take));
         }
 
         let mut acc = ProcSet::new();
         let mut count: u32 = 0;
 
         for node in nodes {
+            if node.subtree_level_counts[wanted.level_id as usize] == 0 {
+                continue;
+            }
+
             let node_available = &node.proc_set & available_proc_set;
             if node_available.is_empty() {
                 continue;
@@ -387,10 +425,18 @@ impl Hierarchy {
                     let next = level_requests[1];
 
                     if next.is_unit {
-                        node_available.sub_proc_set_with_cores(next.count)
+                        if node_available.core_count() < next.count {
+                            None
+                        } else {
+                            node_available.sub_proc_set_with_cores(next.count)
+                        }
+                    } else if node.children.is_empty()
+                        || node.subtree_level_counts[next.level_id as usize] == 0
+                    {
+                        None
                     } else {
                         self.find_in_nodes(&node.children, &node_available, &level_requests[1..])
-                            .map(|(ps, _)| ps)
+                            .and_then(|(ps, found_count)| (found_count >= next.count).then_some(ps))
                     }
                 } else if node.proc_set.is_subset(available_proc_set) {
                     Some(node.proc_set.clone())
@@ -402,16 +448,23 @@ impl Hierarchy {
                     acc = acc | proc_set;
                     count += 1;
 
-                    if count == wanted.count {
+                    if count >= wanted.count {
                         return Some((acc, count));
                     }
                 }
             } else {
+                let remaining = wanted.count.saturating_sub(count);
+                if remaining == 0 {
+                    return Some((acc, count));
+                }
+
+                let adjusted_requests = Self::with_first_count(level_requests, remaining);
+
                 if let Some((proc_set, found_count)) =
-                    self.find_in_nodes(&node.children, &node_available, level_requests)
+                    self.find_in_nodes(&node.children, &node_available, &adjusted_requests)
                 {
                     acc = acc | proc_set;
-                    count += found_count;
+                    count += found_count.min(remaining);
 
                     if count >= wanted.count {
                         return Some((acc, count));
@@ -420,7 +473,7 @@ impl Hierarchy {
             }
         }
 
-        if count >= wanted.count {
+        if count > 0 {
             Some((acc, count))
         } else {
             None
@@ -468,6 +521,17 @@ impl Hierarchy {
         }
 
         Some(compiled)
+    }
+
+    fn with_first_count(
+        level_requests: &[CompiledLevelRequest],
+        new_count: u32,
+    ) -> Vec<CompiledLevelRequest> {
+        let mut updated = level_requests.to_vec();
+        if let Some(first) = updated.first_mut() {
+            first.count = new_count;
+        }
+        updated
     }
 }
 

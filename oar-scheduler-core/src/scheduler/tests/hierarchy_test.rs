@@ -5,7 +5,11 @@ use std::ops::RangeInclusive;
 
 #[allow(dead_code)]
 fn procsets(ranges: Box<[RangeInclusive<u32>]>) -> Box<[ProcSet]> {
-    ranges.into_iter().map(|r| ProcSet::from_iter(r)).collect()
+    ranges
+        .into_iter()
+        .map(|r| ProcSet::from_iter(r))
+        .filter(|ps| !ps.is_empty())
+        .collect()
 }
 #[allow(dead_code)]
 fn procset(range: RangeInclusive<u32>) -> ProcSet {
@@ -67,7 +71,7 @@ fn test_find_resource_hierarchies_scattered5() {
         .add_partition("node".into(), procsets([1..=16, 17..=32, 33..=49, 50..=64].into()))
         .add_partition(
             "cpus".into(),
-            procsets([1..=8, 9..=16, 17..=24, 25..=32, 33..=41, 42..=29, 50..=58, 51..=64].into()),
+            procsets([1..=8, 9..=16, 17..=24, 25..=32, 33..=41, 42..=49, 50..=58, 59..=64].into()),
         )
         .add_partition(
             "cores".into(),

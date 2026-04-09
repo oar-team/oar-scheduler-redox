@@ -184,6 +184,8 @@ impl Hierarchy {
         level_order: Vec<Box<str>>,
         unit_partitions: Vec<Box<str>>,
     ) -> Self {
+        let level_order = Self::canonicalize_level_order(&partitions, &level_order);
+
         let mut hierarchy = Self {
             partitions,
             level_order,
@@ -484,6 +486,10 @@ impl Hierarchy {
         self.level_ids.clear();
         self.unit_level_ids.clear();
 
+        // normalize the order of levels every time before rebuilding the tree,
+        // including during incremental add_partition().
+        self.level_order = Self::canonicalize_level_order(&self.partitions, &self.level_order);
+
         let mut next_id: LevelId = 0;
 
         for level_name in &self.level_order {
@@ -532,6 +538,94 @@ impl Hierarchy {
             first.count = new_count;
         }
         updated
+    }
+
+    fn canonicalize_level_order(
+        partitions: &HashMap<Box<str>, Box<[ProcSet]>>,
+        level_order: &[Box<str>],
+    ) -> Vec<Box<str>> {
+        let n = level_order.len();
+
+        let pos: HashMap<&str, usize> = level_order
+            .iter()
+            .enumerate()
+            .map(|(i, name)| (name.as_ref(), i))
+            .collect();
+
+        let contains_level = |a: &str, b: &str| -> bool {
+            let parents = partitions
+                .get(a)
+                .unwrap_or_else(|| panic!("Missing level {}", a));
+            let children = partitions
+                .get(b)
+                .unwrap_or_else(|| panic!("Missing level {}", b));
+
+            children.iter().all(|child| {
+                parents.iter().any(|parent| child.is_subset(parent))
+            })
+        };
+
+        let mut indegree = vec![0usize; n];
+        let mut edges: Vec<Vec<usize>> = vec![Vec::new(); n];
+
+        for i in 0..n {
+            for j in 0..n {
+                if i == j {
+                    continue;
+                }
+
+                let a = level_order[i].as_ref();
+                let b = level_order[j].as_ref();
+
+                let a_contains_b = contains_level(a, b);
+                let b_contains_a = contains_level(b, a);
+
+                // strict ordering only
+                if a_contains_b && !b_contains_a {
+                    edges[i].push(j);
+                }
+            }
+        }
+
+        for outs in &edges {
+            for &j in outs {
+                indegree[j] += 1;
+            }
+        }
+
+        let mut available: Vec<usize> = (0..n).filter(|&i| indegree[i] == 0).collect();
+
+        // stable tie-break by original position
+        available.sort_by_key(|&i| pos[level_order[i].as_ref()]);
+
+        let mut result = Vec::with_capacity(n);
+
+        while let Some(i) = {
+            if available.is_empty() {
+                None
+            } else {
+                Some(available.remove(0))
+            }
+        } {
+            result.push(level_order[i].clone());
+
+            for &j in &edges[i] {
+                indegree[j] -= 1;
+                if indegree[j] == 0 {
+                    available.push(j);
+                }
+            }
+
+            available.sort_by_key(|&k| pos[level_order[k].as_ref()]);
+        }
+
+        // If some equivalent/incomparable levels remain due to no strict edges,
+        // topological sort still returns all of them through stable tie-break.
+        if result.len() != n {
+            panic!("Failed to canonicalize hierarchy level order");
+        }
+
+        result
     }
 }
 

@@ -353,6 +353,8 @@ pub struct PerfBenchmarkResult {
     pub hierarchy_request_ns: u64,
     pub quotas_ns: u64,
     pub update_slots_ns: u64,
+    pub segment_tree_rebuild_ns: u64,
+    pub segment_tree_query_ns: u64,
     pub jobs_seen: u64,
     pub jobs_scheduled: u64,
     pub moldables_seen: u64,
@@ -367,6 +369,9 @@ pub struct PerfBenchmarkResult {
     pub updated_slots: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
+    pub segment_tree_rebuilds: u64,
+    pub segment_tree_queries: u64,
+    pub segment_tree_query_slots: u64,
 }
 
 impl From<PerfStats> for PerfBenchmarkResult {
@@ -384,6 +389,8 @@ impl From<PerfStats> for PerfBenchmarkResult {
             hierarchy_request_ns: value.hierarchy_request_ns,
             quotas_ns: value.quotas_ns,
             update_slots_ns: value.update_slots_ns,
+            segment_tree_rebuild_ns: value.segment_tree_rebuild_ns,
+            segment_tree_query_ns: value.segment_tree_query_ns,
             jobs_seen: value.jobs_seen,
             jobs_scheduled: value.jobs_scheduled,
             moldables_seen: value.moldables_seen,
@@ -398,6 +405,9 @@ impl From<PerfStats> for PerfBenchmarkResult {
             updated_slots: value.updated_slots,
             cache_hits: value.cache_hits,
             cache_misses: value.cache_misses,
+            segment_tree_rebuilds: value.segment_tree_rebuilds,
+            segment_tree_queries: value.segment_tree_queries,
+            segment_tree_query_slots: value.segment_tree_query_slots,
         }
     }
 }
@@ -416,6 +426,8 @@ pub struct PerfBenchmarkAverageResult {
     pub intersect_slots_ns: BenchmarkMeasurementStatistics<u64>,
     pub hierarchy_request_ns: BenchmarkMeasurementStatistics<u64>,
     pub update_slots_ns: BenchmarkMeasurementStatistics<u64>,
+    pub segment_tree_rebuild_ns: BenchmarkMeasurementStatistics<u64>,
+    pub segment_tree_query_ns: BenchmarkMeasurementStatistics<u64>,
     pub slot_windows_scanned: BenchmarkMeasurementStatistics<u64>,
     pub slots_split: BenchmarkMeasurementStatistics<u64>,
     pub slots_intersected: BenchmarkMeasurementStatistics<u64>,
@@ -425,6 +437,9 @@ pub struct PerfBenchmarkAverageResult {
     pub updated_slots: BenchmarkMeasurementStatistics<u64>,
     pub cache_hits: BenchmarkMeasurementStatistics<u64>,
     pub cache_misses: BenchmarkMeasurementStatistics<u64>,
+    pub segment_tree_rebuilds: BenchmarkMeasurementStatistics<u64>,
+    pub segment_tree_queries: BenchmarkMeasurementStatistics<u64>,
+    pub segment_tree_query_slots: BenchmarkMeasurementStatistics<u64>,
 }
 
 impl From<Vec<PerfBenchmarkResult>> for PerfBenchmarkAverageResult {
@@ -442,6 +457,8 @@ impl From<Vec<PerfBenchmarkResult>> for PerfBenchmarkAverageResult {
             intersect_slots_ns: collect(|r| r.intersect_slots_ns),
             hierarchy_request_ns: collect(|r| r.hierarchy_request_ns),
             update_slots_ns: collect(|r| r.update_slots_ns),
+            segment_tree_rebuild_ns: collect(|r| r.segment_tree_rebuild_ns),
+            segment_tree_query_ns: collect(|r| r.segment_tree_query_ns),
             slot_windows_scanned: collect(|r| r.slot_windows_scanned),
             slots_split: collect(|r| r.slots_split),
             slots_intersected: collect(|r| r.slots_intersected),
@@ -451,6 +468,9 @@ impl From<Vec<PerfBenchmarkResult>> for PerfBenchmarkAverageResult {
             updated_slots: collect(|r| r.updated_slots),
             cache_hits: collect(|r| r.cache_hits),
             cache_misses: collect(|r| r.cache_misses),
+            segment_tree_rebuilds: collect(|r| r.segment_tree_rebuilds),
+            segment_tree_queries: collect(|r| r.segment_tree_queries),
+            segment_tree_query_slots: collect(|r| r.segment_tree_query_slots),
         }
     }
 }

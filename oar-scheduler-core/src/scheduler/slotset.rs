@@ -493,19 +493,11 @@ impl SlotSet {
 
         let out = if can_use_segment_tree {
             // MVP fast path
-            let visited_slots = self
-                .slot_id_to_index
-                .get(&end_slot_id)
-                .zip(self.slot_id_to_index.get(&begin_slot_id))
-                .map(|(r, l)| (r - l + 1) as u64)
-                .unwrap_or(0);
-
-            perf::incr(|s| &mut s.slots_intersected, visited_slots);
-            self.range_and_by_slot_ids(begin_slot_id, end_slot_id)
+                self.range_and_by_slot_ids(begin_slot_id, end_slot_id)
         } else {
             // Fallback to linear iter
             let mut visited_slots = 0u64;
-            self.iter()
+            let res = self.iter()
                 .between(begin_slot_id, end_slot_id)
                 .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| {
                     visited_slots += 1;
@@ -522,7 +514,9 @@ impl SlotSet {
                     }
 
                     acc & slot_proc_set
-                })
+                });
+            perf::incr(|s| &mut s.slots_intersected, visited_slots);
+            res
         };
 
         perf::add_ns(
@@ -548,7 +542,8 @@ impl SlotSet {
     }
 
     fn rebuild_segment_tree(&mut self) {
-        // 1) collect slots in time order
+        let _timer = std::time::Instant::now();
+
         self.ordered_slot_ids.clear();
         self.slot_id_to_index.clear();
 
@@ -589,6 +584,12 @@ impl SlotSet {
         }
 
         self.segment_tree_dirty = false;
+
+        perf::incr(|s| &mut s.segment_tree_rebuilds, 1);
+        perf::add_ns(
+            |s| &mut s.segment_tree_rebuild_ns,
+            _timer.elapsed().as_nanos().try_into().unwrap(),
+        );
     }
 
     fn rebuild_segment_tree_if_dirty(&mut self) {
@@ -599,6 +600,8 @@ impl SlotSet {
 
     fn range_and_by_slot_ids(&mut self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
         self.rebuild_segment_tree_if_dirty();
+
+        let _timer = std::time::Instant::now();
 
         let l0 = *self
             .slot_id_to_index
@@ -615,6 +618,8 @@ impl SlotSet {
         let mut left_acc = ProcSet::from_iter([u32::MIN..=u32::MAX]);
         let mut right_acc = ProcSet::from_iter([u32::MIN..=u32::MAX]);
 
+        let mut visited_slots = 0u64;
+
         while l <= r {
             if (l & 1) == 1 {
                 left_acc = left_acc & self.segment_tree[l].clone();
@@ -629,9 +634,20 @@ impl SlotSet {
             }
             l /= 2;
             r /= 2;
+            visited_slots += 1;
         }
 
-        left_acc & right_acc
+        let out = left_acc & right_acc;
+
+        perf::add_ns(
+            |s| &mut s.segment_tree_query_ns,
+            _timer.elapsed().as_nanos().try_into().unwrap(),
+        );
+        perf::incr(|s| &mut s.slots_intersected, visited_slots + 1);
+        perf::incr(|s| &mut s.segment_tree_queries, 1);
+        perf::incr(|s| &mut s.segment_tree_query_slots, (r0 - l0 + 1) as u64);
+
+        out
     }
 }
 

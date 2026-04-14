@@ -15,6 +15,8 @@ pub struct PerfStats {
     pub hierarchy_request_ns: u64,
     pub quotas_ns: u64,
     pub update_slots_ns: u64,
+    pub segment_tree_rebuild_ns: u64,
+    pub segment_tree_query_ns: u64,
 
     pub jobs_seen: u64,
     pub jobs_scheduled: u64,
@@ -30,6 +32,9 @@ pub struct PerfStats {
     pub updated_slots: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
+    pub segment_tree_rebuilds: u64,
+    pub segment_tree_queries: u64,
+    pub segment_tree_query_slots: u64,
 }
 
 thread_local! {

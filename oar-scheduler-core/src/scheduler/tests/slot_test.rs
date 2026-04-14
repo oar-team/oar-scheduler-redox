@@ -193,7 +193,7 @@ pub fn test_split_slots_outside() {
 
 #[test]
 pub fn test_intersect_slots_intervals() {
-    let ss = get_test_slot_set();
+    let mut ss = get_test_slot_set();
     assert_eq!(ss.intersect_slots_intervals(1, 2, None, None, &PlaceholderType::None), ProcSet::from_iter([1..=16, 28..=32]));
     assert_eq!(ss.intersect_slots_intervals(2, 2, None, None, &PlaceholderType::None), ProcSet::from_iter([1..=16, 28..=32]));
     assert_eq!(ss.intersect_slots_intervals(1, 3, None, None, &PlaceholderType::None), ProcSet::from_iter([1..=8, 30..=32]));

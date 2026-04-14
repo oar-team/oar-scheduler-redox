@@ -24,6 +24,13 @@ pub struct SlotSet {
     /// Stores a slot id for a given moldable cache key, allowing to start again at this slot if multiple moldable have the same cache key, i.e., are identical.
     cache: HashMap<Box<str>, i32>,
     platform_config: Rc<PlatformConfig>,
+
+    // --- MVP segment tree state ---
+    ordered_slot_ids: Vec<i32>,
+    slot_id_to_index: HashMap<i32, usize>,
+    segment_tree: Vec<ProcSet>,
+    segment_tree_leaf_count: usize,
+    segment_tree_dirty: bool,
 }
 
 impl Debug for SlotSet {
@@ -72,7 +79,7 @@ impl SlotSet {
             }
             last_slot = next_slot;
         }
-        SlotSet {
+        let mut slotset = SlotSet {
             begin: first_slot.begin,
             end: last_slot.end,
             first_id: first_slot.id,
@@ -81,11 +88,19 @@ impl SlotSet {
             slots,
             cache: HashMap::new(),
             platform_config,
-        }
+
+            ordered_slot_ids: Vec::new(),
+            slot_id_to_index: HashMap::new(),
+            segment_tree: Vec::new(),
+            segment_tree_leaf_count: 0,
+            segment_tree_dirty: true,
+        };
+        slotset.rebuild_segment_tree();
+        slotset
     }
     /// Create a `SlotSet` with a single slot.
     pub fn from_slot(slot: Slot) -> SlotSet {
-        SlotSet {
+        let mut slotset = SlotSet {
             platform_config: Rc::clone(&slot.platform_config),
             begin: slot.begin,
             end: slot.end,
@@ -94,7 +109,15 @@ impl SlotSet {
             next_id: slot.id + 1,
             slots: HashMap::from([(slot.id, slot)]),
             cache: HashMap::new(),
-        }
+
+            ordered_slot_ids: Vec::new(),
+            slot_id_to_index: HashMap::new(),
+            segment_tree: Vec::new(),
+            segment_tree_leaf_count: 0,
+            segment_tree_dirty: true,
+        };
+        slotset.rebuild_segment_tree();
+        slotset
     }
     /// Create a `SlotSet` with slots covering the entire range from `begin` to `end` with a `ProcSet = platform_config.resource_set.default_intervals`.
     /// The procset will be splitted into multiple slots according to the temporal quotas defined in the `platform_config`.
@@ -283,6 +306,7 @@ impl SlotSet {
         };
 
         self.slots.insert(new_slot_id, new_slot);
+        self.mark_segment_tree_dirty();
         self.increment_next_id();
         (new_slot_id, slot_id)
     }
@@ -418,6 +442,7 @@ impl SlotSet {
                 }
             });
         perf::add_ns(|s| &mut s.update_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());
+        self.mark_segment_tree_dirty();
         Some((begin_slot_id, end_slot_id))
     }
 
@@ -450,8 +475,9 @@ impl SlotSet {
     /// Take into account the time-shared procsets if `ts_user_name` and `ts_job_name` are [`Some`].
     /// Take into account the placeholder procsets if ph is [`PlaceholderType::Allow`].
     #[auto_bench_fct_hy]
+    #[auto_bench_fct_hy]
     pub fn intersect_slots_intervals(
-        &self,
+        &mut self,
         begin_slot_id: i32,
         end_slot_id: i32,
         ts_user_name: Option<&Box<str>>,
@@ -459,26 +485,51 @@ impl SlotSet {
         ph: &PlaceholderType,
     ) -> ProcSet {
         let _timer = std::time::Instant::now();
-        let mut visited_slots = 0u64;
-        let out = self.iter()
-            .between(begin_slot_id, end_slot_id)
-            .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| {
-                visited_slots += 1;
-                let mut slot_proc_set = slot.proc_set().clone();
-                // Check time-sharing
-                if let Some((user_name, job_name)) = ts_user_name.zip(ts_job_name) {
-                    slot_proc_set |= slot.get_time_sharing_proc_set(user_name, job_name);
-                }
-                // Check placeholder
-                if let PlaceholderType::Allow(name) = ph {
-                    if let Some(ph_proc_set) = slot.placeholder_proc_sets.get(name) {
-                        slot_proc_set |= ph_proc_set;
+
+        let can_use_segment_tree =
+            ts_user_name.is_none() &&
+            ts_job_name.is_none() &&
+            matches!(ph, PlaceholderType::None);
+
+        let out = if can_use_segment_tree {
+            // MVP fast path
+            let visited_slots = self
+                .slot_id_to_index
+                .get(&end_slot_id)
+                .zip(self.slot_id_to_index.get(&begin_slot_id))
+                .map(|(r, l)| (r - l + 1) as u64)
+                .unwrap_or(0);
+
+            perf::incr(|s| &mut s.slots_intersected, visited_slots);
+            self.range_and_by_slot_ids(begin_slot_id, end_slot_id)
+        } else {
+            // Fallback to linear iter
+            let mut visited_slots = 0u64;
+            self.iter()
+                .between(begin_slot_id, end_slot_id)
+                .fold(ProcSet::from_iter([u32::MIN..=u32::MAX]), |acc, slot| {
+                    visited_slots += 1;
+                    let mut slot_proc_set = slot.proc_set().clone();
+                    // Check time-sharing
+                    if let Some((user_name, job_name)) = ts_user_name.zip(ts_job_name) {
+                        slot_proc_set |= slot.get_time_sharing_proc_set(user_name, job_name);
                     }
-                }
-                acc & slot_proc_set
-            });
-        perf::incr(|s| &mut s.slots_intersected, visited_slots);
-        perf::add_ns(|s| &mut s.intersect_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());
+                    // Check placeholder
+                    if let PlaceholderType::Allow(name) = ph {
+                        if let Some(ph_proc_set) = slot.placeholder_proc_sets.get(name) {
+                            slot_proc_set |= ph_proc_set;
+                        }
+                    }
+
+                    acc & slot_proc_set
+                })
+        };
+
+        perf::add_ns(
+            |s| &mut s.intersect_slots_ns,
+            _timer.elapsed().as_nanos().try_into().unwrap(),
+        );
+
         out
     }
     pub fn begin(&self) -> i64 {
@@ -490,6 +541,97 @@ impl SlotSet {
     /// Returns the number of slots in the SlotSet.
     pub fn slot_count(&self) -> usize {
         self.slots.len()
+    }
+
+    fn mark_segment_tree_dirty(&mut self) {
+        self.segment_tree_dirty = true;
+    }
+
+    fn rebuild_segment_tree(&mut self) {
+        // 1) collect slots in time order
+        self.ordered_slot_ids.clear();
+        self.slot_id_to_index.clear();
+
+        let mut cur = Some(self.first_id);
+        while let Some(slot_id) = cur {
+            let slot = self
+                .slots
+                .get(&slot_id)
+                .expect("SlotSet::rebuild_segment_tree: broken linked list");
+            let idx = self.ordered_slot_ids.len();
+            self.ordered_slot_ids.push(slot_id);
+            self.slot_id_to_index.insert(slot_id, idx);
+            cur = slot.next;
+        }
+
+        let slot_count = self.ordered_slot_ids.len();
+        let leaf_count = slot_count.max(1).next_power_of_two();
+        self.segment_tree_leaf_count = leaf_count;
+        self.segment_tree =
+            vec![ProcSet::from_iter([u32::MIN..=u32::MAX]); 2 * leaf_count];
+
+        // 2) fill the leaves
+        for (idx, slot_id) in self.ordered_slot_ids.iter().enumerate() {
+            let slot = self
+                .slots
+                .get(slot_id)
+                .expect("SlotSet::rebuild_segment_tree: slot id missing in map");
+            self.segment_tree[leaf_count + idx] = slot.proc_set.clone();
+        }
+
+        // trailing leaves that do not exist are left as FULL
+        // this is the neutral element for AND
+
+        // 3) build internal nodes
+        for i in (1..leaf_count).rev() {
+            self.segment_tree[i] =
+                self.segment_tree[i * 2].clone() & self.segment_tree[i * 2 + 1].clone();
+        }
+
+        self.segment_tree_dirty = false;
+    }
+
+    fn rebuild_segment_tree_if_dirty(&mut self) {
+        if self.segment_tree_dirty {
+            self.rebuild_segment_tree();
+        }
+    }
+
+    fn range_and_by_slot_ids(&mut self, begin_slot_id: i32, end_slot_id: i32) -> ProcSet {
+        self.rebuild_segment_tree_if_dirty();
+
+        let l0 = *self
+            .slot_id_to_index
+            .get(&begin_slot_id)
+            .expect("SlotSet::range_and_by_slot_ids: begin_slot_id not indexed");
+        let r0 = *self
+            .slot_id_to_index
+            .get(&end_slot_id)
+            .expect("SlotSet::range_and_by_slot_ids: end_slot_id not indexed");
+
+        let mut l = l0 + self.segment_tree_leaf_count;
+        let mut r = r0 + self.segment_tree_leaf_count;
+
+        let mut left_acc = ProcSet::from_iter([u32::MIN..=u32::MAX]);
+        let mut right_acc = ProcSet::from_iter([u32::MIN..=u32::MAX]);
+
+        while l <= r {
+            if (l & 1) == 1 {
+                left_acc = left_acc & self.segment_tree[l].clone();
+                l += 1;
+            }
+            if (r & 1) == 0 {
+                right_acc = self.segment_tree[r].clone() & right_acc;
+                if r == 0 {
+                    break;
+                }
+                r -= 1;
+            }
+            l /= 2;
+            r /= 2;
+        }
+
+        left_acc & right_acc
     }
 }
 

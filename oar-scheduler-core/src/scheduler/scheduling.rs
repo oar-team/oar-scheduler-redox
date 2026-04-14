@@ -149,20 +149,21 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
         }
     }
 
+    // Materialize candidate windows first, so the immutable borrow from `iter`
+    // ends before we need mutable access to `slotset`.
+    let windows: Vec<(i32, i32, i64)> = iter
+        .with_width(moldable.walltime)
+        .map(|(left_slot, right_slot)| (left_slot.id(), right_slot.id(), left_slot.begin()))
+        .collect();
+
     // A cache entry is set to the first slot available before the quotas check, so the cache key does not include the job user, project, types or queue.
     let mut cache_first_slot = None;
-
     let mut quotas_hit_count = 0;
+    let empty: Box<str> = "".into();
 
-    let mut count = 0;
-    let res = iter.with_width(moldable.walltime).find_map(|(left_slot, right_slot)| {
-        count += 1;
+    let res = windows.into_iter().find_map(|(left_slot_id, right_slot_id, left_slot_begin)| {
         perf::incr(|s| &mut s.slot_windows_scanned, 1);
-        let left_slot_id = left_slot.id();
-        let right_slot_id = right_slot.id();
-        let left_slot_begin = left_slot.begin();
 
-        let empty: Box<str> = "".into();
         let (ts_user_name, ts_job_name) = job.time_sharing.as_ref().map_or((None, None), |_| {
             (Some(job.user.as_ref().unwrap_or(&empty)), Some(job.name.as_ref().unwrap_or(&empty)))
         });
@@ -180,12 +181,12 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
                     .request(&available_resources, &moldable.requests)
             }
         }
-            .and_then(|proc_set| {
-                if cache_first_slot.is_none() {
-                    cache_first_slot = Some(left_slot.id());
-                }
+        .and_then(|proc_set| {
+            if cache_first_slot.is_none() {
+                cache_first_slot = Some(left_slot_id);
+            }
 
-                // Checking quotas
+            // Checking quotas
             if slotset.get_platform_config().quotas_config.enabled && !job.no_quotas {
                 if let Some(calendar) = &slotset.get_platform_config().quotas_config.calendar {
                     if left_slot_begin + moldable.walltime - 1 > slotset.begin() + calendar.quotas_window_time_limit() {
@@ -197,10 +198,15 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
                         return None;
                     }
                 }
+
                 perf::incr(|s| &mut s.quotas_checks, 1);
                 let slots = slotset.iter().between(left_slot_id, right_slot_id);
                 let end = left_slot_begin + moldable.walltime - 1;
-                if let Some((msg, rule, limit)) = perf::time(|s| &mut s.quotas_ns, || quotas::check_slots_quotas(slots, job, left_slot_begin, end, proc_set.core_count())) {
+
+                if let Some((msg, rule, limit)) = perf::time(
+                    |s| &mut s.quotas_ns,
+                    || quotas::check_slots_quotas(slots, job, left_slot_begin, end, proc_set.core_count()),
+                ) {
                     info!(
                         "Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}",
                         job.id, msg, rule, limit
@@ -210,8 +216,8 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
                     return None; // Skip this slot if quotas check fails
                 }
             }
-                Some((left_slot_id, right_slot_id, proc_set, quotas_hit_count))
-            })
+            Some((left_slot_id, right_slot_id, proc_set, quotas_hit_count))
+        })
     });
 
     perf::add_ns(|s| &mut s.find_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());

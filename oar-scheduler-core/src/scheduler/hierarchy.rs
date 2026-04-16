@@ -13,6 +13,14 @@ use pyo3::{Bound, IntoPyObject, PyAny, PyErr, Python};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnchorSpec {
+    pub level_name: Box<str>,
+    pub count: u32,
+    pub filter: ProcSet,
+    pub is_unit: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HierarchyRequests(pub Box<[HierarchyRequest]>);
 impl HierarchyRequests {
     pub fn from_requests(requests: Vec<HierarchyRequest>) -> Self {
@@ -626,6 +634,74 @@ impl Hierarchy {
         }
 
         result
+    }
+
+    pub fn derive_anchor_spec(&self, requests: &HierarchyRequests) -> Option<AnchorSpec> {
+        let req = requests.0.first()?;
+        let (level_name, _last_count) = req.level_nbs.last()?.clone();
+        let level_id = self.level_id(&level_name)?;
+        let is_unit = self.unit_level_ids.contains(&level_id);
+
+        let count = req
+            .level_nbs
+            .iter()
+            .fold(1u32, |acc, (_name, c)| acc.saturating_mul(*c));
+
+        Some(AnchorSpec {
+            level_name,
+            count,
+            filter: req.filter.clone(),
+            is_unit,
+        })
+    }
+
+    pub fn count_available_units(
+        &self,
+        available_proc_set: &ProcSet,
+        filter: &ProcSet,
+        level_name: &str,
+    ) -> Option<u32> {
+        let filtered = available_proc_set.clone() & filter.clone();
+        if filtered.is_empty() {
+            return Some(0);
+        }
+
+        let level_id = self.level_id(level_name)?;
+        if self.unit_level_ids.contains(&level_id) {
+            return Some(filtered.core_count());
+        }
+
+        Some(self.count_units_in_nodes(&self.roots, &filtered, level_id))
+    }
+
+    fn count_units_in_nodes(
+        &self,
+        nodes: &[HierarchyNode],
+        filtered: &ProcSet,
+        wanted_level: LevelId,
+    ) -> u32 {
+        let mut total = 0;
+
+        for node in nodes {
+            if node.subtree_level_counts[wanted_level as usize] == 0 {
+                continue;
+            }
+
+            let intersection = node.proc_set.clone() & filtered.clone();
+            if intersection.is_empty() {
+                continue;
+            }
+
+            if node.level_id == wanted_level {
+                if node.proc_set.is_subset(filtered) {
+                    total += 1;
+                }
+            } else {
+                total += self.count_units_in_nodes(&node.children, filtered, wanted_level);
+            }
+        }
+
+        total
     }
 }
 

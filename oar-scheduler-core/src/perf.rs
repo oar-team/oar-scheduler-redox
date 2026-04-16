@@ -17,6 +17,8 @@ pub struct PerfStats {
     pub update_slots_ns: u64,
     pub segment_tree_rebuild_ns: u64,
     pub segment_tree_query_ns: u64,
+    pub anchor_cache_rebuild_ns: u64,
+    pub anchor_window_min_ns: u64,
 
     pub jobs_seen: u64,
     pub jobs_scheduled: u64,
@@ -35,6 +37,14 @@ pub struct PerfStats {
     pub segment_tree_rebuilds: u64,
     pub segment_tree_queries: u64,
     pub segment_tree_query_slots: u64,
+    pub fast_path_eligible_jobs: u64,
+    pub fast_path_candidates: u64,
+    pub fast_path_skipped_windows: u64,
+    pub fast_path_false_positives: u64,
+    pub fast_path_hits: u64,
+    pub anchor_cache_rebuilds: u64,
+    pub anchor_cache_slots_recomputed: u64,
+    pub anchor_window_min_queries: u64,
 }
 
 thread_local! {

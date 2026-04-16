@@ -355,6 +355,8 @@ pub struct PerfBenchmarkResult {
     pub update_slots_ns: u64,
     pub segment_tree_rebuild_ns: u64,
     pub segment_tree_query_ns: u64,
+    pub anchor_cache_rebuild_ns: u64,
+    pub anchor_window_min_ns: u64,
     pub jobs_seen: u64,
     pub jobs_scheduled: u64,
     pub moldables_seen: u64,
@@ -372,6 +374,14 @@ pub struct PerfBenchmarkResult {
     pub segment_tree_rebuilds: u64,
     pub segment_tree_queries: u64,
     pub segment_tree_query_slots: u64,
+    pub fast_path_eligible_jobs: u64,
+    pub fast_path_candidates: u64,
+    pub fast_path_skipped_windows: u64,
+    pub fast_path_false_positives: u64,
+    pub fast_path_hits: u64,
+    pub anchor_cache_rebuilds: u64,
+    pub anchor_cache_slots_recomputed: u64,
+    pub anchor_window_min_queries: u64,
 }
 
 impl From<PerfStats> for PerfBenchmarkResult {
@@ -391,6 +401,8 @@ impl From<PerfStats> for PerfBenchmarkResult {
             update_slots_ns: value.update_slots_ns,
             segment_tree_rebuild_ns: value.segment_tree_rebuild_ns,
             segment_tree_query_ns: value.segment_tree_query_ns,
+            anchor_cache_rebuild_ns: value.anchor_cache_rebuild_ns,
+            anchor_window_min_ns: value.anchor_window_min_ns,
             jobs_seen: value.jobs_seen,
             jobs_scheduled: value.jobs_scheduled,
             moldables_seen: value.moldables_seen,
@@ -408,6 +420,14 @@ impl From<PerfStats> for PerfBenchmarkResult {
             segment_tree_rebuilds: value.segment_tree_rebuilds,
             segment_tree_queries: value.segment_tree_queries,
             segment_tree_query_slots: value.segment_tree_query_slots,
+            fast_path_eligible_jobs: value.fast_path_eligible_jobs,
+            fast_path_candidates: value.fast_path_candidates,
+            fast_path_skipped_windows: value.fast_path_skipped_windows,
+            fast_path_false_positives: value.fast_path_false_positives,
+            fast_path_hits: value.fast_path_hits,
+            anchor_cache_rebuilds: value.anchor_cache_rebuilds,
+            anchor_cache_slots_recomputed: value.anchor_cache_slots_recomputed,
+            anchor_window_min_queries: value.anchor_window_min_queries,
         }
     }
 }
@@ -428,6 +448,8 @@ pub struct PerfBenchmarkAverageResult {
     pub update_slots_ns: BenchmarkMeasurementStatistics<u64>,
     pub segment_tree_rebuild_ns: BenchmarkMeasurementStatistics<u64>,
     pub segment_tree_query_ns: BenchmarkMeasurementStatistics<u64>,
+    pub anchor_cache_rebuild_ns: BenchmarkMeasurementStatistics<u64>,
+    pub anchor_window_min_ns: BenchmarkMeasurementStatistics<u64>,
     pub slot_windows_scanned: BenchmarkMeasurementStatistics<u64>,
     pub slots_split: BenchmarkMeasurementStatistics<u64>,
     pub slots_intersected: BenchmarkMeasurementStatistics<u64>,
@@ -440,6 +462,14 @@ pub struct PerfBenchmarkAverageResult {
     pub segment_tree_rebuilds: BenchmarkMeasurementStatistics<u64>,
     pub segment_tree_queries: BenchmarkMeasurementStatistics<u64>,
     pub segment_tree_query_slots: BenchmarkMeasurementStatistics<u64>,
+    pub fast_path_eligible_jobs: BenchmarkMeasurementStatistics<u64>,
+    pub fast_path_candidates: BenchmarkMeasurementStatistics<u64>,
+    pub fast_path_skipped_windows: BenchmarkMeasurementStatistics<u64>,
+    pub fast_path_false_positives: BenchmarkMeasurementStatistics<u64>,
+    pub fast_path_hits: BenchmarkMeasurementStatistics<u64>,
+    pub anchor_cache_rebuilds: BenchmarkMeasurementStatistics<u64>,
+    pub anchor_cache_slots_recomputed: BenchmarkMeasurementStatistics<u64>,
+    pub anchor_window_min_queries: BenchmarkMeasurementStatistics<u64>,
 }
 
 impl From<Vec<PerfBenchmarkResult>> for PerfBenchmarkAverageResult {
@@ -459,6 +489,8 @@ impl From<Vec<PerfBenchmarkResult>> for PerfBenchmarkAverageResult {
             update_slots_ns: collect(|r| r.update_slots_ns),
             segment_tree_rebuild_ns: collect(|r| r.segment_tree_rebuild_ns),
             segment_tree_query_ns: collect(|r| r.segment_tree_query_ns),
+            anchor_cache_rebuild_ns: collect(|r| r.anchor_cache_rebuild_ns),
+            anchor_window_min_ns: collect(|r| r.anchor_window_min_ns),
             slot_windows_scanned: collect(|r| r.slot_windows_scanned),
             slots_split: collect(|r| r.slots_split),
             slots_intersected: collect(|r| r.slots_intersected),
@@ -471,6 +503,14 @@ impl From<Vec<PerfBenchmarkResult>> for PerfBenchmarkAverageResult {
             segment_tree_rebuilds: collect(|r| r.segment_tree_rebuilds),
             segment_tree_queries: collect(|r| r.segment_tree_queries),
             segment_tree_query_slots: collect(|r| r.segment_tree_query_slots),
+            fast_path_eligible_jobs: collect(|r| r.fast_path_eligible_jobs),
+            fast_path_candidates: collect(|r| r.fast_path_candidates),
+            fast_path_skipped_windows: collect(|r| r.fast_path_skipped_windows),
+            fast_path_false_positives: collect(|r| r.fast_path_false_positives),
+            fast_path_hits: collect(|r| r.fast_path_hits),
+            anchor_cache_rebuilds: collect(|r| r.anchor_cache_rebuilds),
+            anchor_cache_slots_recomputed: collect(|r| r.anchor_cache_slots_recomputed),
+            anchor_window_min_queries: collect(|r| r.anchor_window_min_queries),
         }
     }
 }

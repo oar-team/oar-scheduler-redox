@@ -1,6 +1,6 @@
 use crate::hooks::get_hooks_manager;
 use crate::perf;
-use crate::model::job::{Job, JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp};
+use crate::model::job::{Job, JobAssignment, JobBuilder, Moldable, ProcSet, ProcSetCoresOp, PlaceholderType};
 use crate::scheduler::quotas;
 use crate::scheduler::slot::Slot;
 use crate::scheduler::slotset::SlotSet;
@@ -120,33 +120,118 @@ pub fn schedule_job(slotset: &mut SlotSet, job: &mut Job, min_begin: Option<i64>
 pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Moldable, min_begin: Option<i64>) -> Option<(i32, i32, ProcSet, u32)> {
     let _timer = std::time::Instant::now();
     perf::incr(|s| &mut s.moldables_seen, 1);
-    let mut iter = slotset.iter();
+    let mut iter_start_slot_id: Option<i32> = None;
     // Start at cache if available
     if job.can_use_cache() {
         if let Some(cache_first_slot) = slotset.get_cache_first_slot(moldable) {
             perf::incr(|s| &mut s.cache_hits, 1);
-            iter = iter.start_at(cache_first_slot);
+            iter_start_slot_id = Some(cache_first_slot);
         } else {
             perf::incr(|s| &mut s.cache_misses, 1);
         }
     }
     // Start at the minimum begin time if specified
-    let cache_begin = iter.peek().map(|s| s.begin()).unwrap_or(slotset.begin());
+    let cache_begin = iter_start_slot_id.and_then(|slot_id| slotset.get_slot(slot_id).map(|s| s.begin())).unwrap_or(slotset.begin());
     if let Some(min_begin) = min_begin {
         if min_begin > cache_begin {
-            if let Some(start_slot) = slotset.slot_at(min_begin, iter.peek().map(|s| s.id())) {
+            if let Some(start_slot) = slotset.slot_at(min_begin, iter_start_slot_id) {
                 // If min_begin is not the beginning of a slot, we need to split the current slot at min_begin
                 // (can occur if the job is not in the same slot set as its dependencies).
                 if start_slot.begin() < min_begin {
                     let (_left_slot_id, right_slot_id) = slotset.find_and_split_at(min_begin, true);
-                    iter = slotset.iter().start_at(right_slot_id);
+                    iter_start_slot_id = Some(right_slot_id);
                 } else {
-                    iter = iter.start_at(start_slot.id());
+                    iter_start_slot_id = Some(start_slot.id());
                 }
             } else if min_begin > slotset.end() {
                 return None; // No slots available after the minimum begin time
             }
         }
+    }
+
+    let fast_path_allowed =
+        job.time_sharing.is_none() &&
+        matches!(job.placeholder, PlaceholderType::None);
+
+    let anchor = if fast_path_allowed {
+        let hierarchy = &slotset.get_platform_config().resource_set.hierarchy;
+        hierarchy.derive_anchor_spec(&moldable.requests)
+    } else {
+        None
+    };
+
+    if anchor.is_some() {
+        perf::incr(|s| &mut s.fast_path_eligible_jobs, 1);
+    }
+
+    let mut cache_first_slot = None;
+    let mut quotas_hit_count = 0;
+
+    // Fast-path loop: seek -> test -> seek -> test
+    if let Some(anchor) = anchor {
+        let mut search_start_time = iter_start_slot_id
+            .and_then(|slot_id| slotset.get_slot(slot_id).map(|s| s.begin()))
+            .unwrap_or(slotset.begin());
+
+        loop {
+            let Some(left_slot_id) = slotset.find_first_slot_for_anchor(
+                search_start_time,
+                moldable.walltime,
+                &anchor,
+            ) else {
+                break;
+            };
+
+            let Some((right_slot_id, left_slot_begin)) =
+                window_from_left_slot(slotset, left_slot_id, moldable.walltime)
+            else {
+                break;
+            };
+
+            if let Some((l, r, proc_set)) = try_schedule_window(
+                slotset,
+                job,
+                moldable,
+                min_begin,
+                left_slot_id,
+                right_slot_id,
+                left_slot_begin,
+                &mut cache_first_slot,
+                &mut quotas_hit_count,
+            ) {
+                perf::add_ns(
+                    |s| &mut s.find_slots_ns,
+                    _timer.elapsed().as_nanos().try_into().unwrap(),
+                );
+
+                if job.can_set_cache() && slotset.get_platform_config().config.cache_enabled {
+                    if let Some(cache_first_slot_id) = cache_first_slot {
+                        slotset.insert_cache_entry(moldable.cache_key.clone(), cache_first_slot_id);
+                    }
+                }
+
+                return Some((l, r, proc_set, quotas_hit_count));
+            }
+
+            perf::incr(|s| &mut s.fast_path_false_positives, 1);
+
+            let next_search_time = slotset
+                .get_slot(left_slot_id)
+                .map(|s| s.end())
+                .unwrap_or(left_slot_begin + 1);
+
+            if next_search_time <= search_start_time || next_search_time > slotset.end() {
+                break;
+            }
+
+            search_start_time = next_search_time;
+        }
+    }
+
+    // Fallback: original linear scan
+    let mut iter = slotset.iter();
+    if let Some(slot_id) = iter_start_slot_id {
+        iter = iter.start_at(slot_id);
     }
 
     // Materialize candidate windows first, so the immutable borrow from `iter`
@@ -156,71 +241,26 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
         .map(|(left_slot, right_slot)| (left_slot.id(), right_slot.id(), left_slot.begin()))
         .collect();
 
-    // A cache entry is set to the first slot available before the quotas check, so the cache key does not include the job user, project, types or queue.
-    let mut cache_first_slot = None;
-    let mut quotas_hit_count = 0;
-    let empty: Box<str> = "".into();
-
     let res = windows.into_iter().find_map(|(left_slot_id, right_slot_id, left_slot_begin)| {
-        perf::incr(|s| &mut s.slot_windows_scanned, 1);
-
-        let (ts_user_name, ts_job_name) = job.time_sharing.as_ref().map_or((None, None), |_| {
-            (Some(job.user.as_ref().unwrap_or(&empty)), Some(job.name.as_ref().unwrap_or(&empty)))
-        });
-        let available_resources = slotset.intersect_slots_intervals(left_slot_id, right_slot_id, ts_user_name, ts_job_name, &job.placeholder);
-
-        // Finding resources according to hook or hierarchy request
-        {
-            if let Some(res) = get_hooks_manager().hook_find(slotset, job, moldable, min_begin, available_resources.clone()) {
-                res
-            } else {
-                slotset
-                    .get_platform_config()
-                    .resource_set
-                    .hierarchy
-                    .request(&available_resources, &moldable.requests)
-            }
-        }
-        .and_then(|proc_set| {
-            if cache_first_slot.is_none() {
-                cache_first_slot = Some(left_slot_id);
-            }
-
-            // Checking quotas
-            if slotset.get_platform_config().quotas_config.enabled && !job.no_quotas {
-                if let Some(calendar) = &slotset.get_platform_config().quotas_config.calendar {
-                    if left_slot_begin + moldable.walltime - 1 > slotset.begin() + calendar.quotas_window_time_limit() {
-                        warn!(
-                            "Job {} cannot be scheduled: no slots available within the quotas time limit ({} seconds).",
-                            job.id,
-                            calendar.quotas_window_time_limit()
-                        );
-                        return None;
-                    }
-                }
-
-                perf::incr(|s| &mut s.quotas_checks, 1);
-                let slots = slotset.iter().between(left_slot_id, right_slot_id);
-                let end = left_slot_begin + moldable.walltime - 1;
-
-                if let Some((msg, rule, limit)) = perf::time(
-                    |s| &mut s.quotas_ns,
-                    || quotas::check_slots_quotas(slots, job, left_slot_begin, end, proc_set.core_count()),
-                ) {
-                    info!(
-                        "Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}",
-                        job.id, msg, rule, limit
-                    );
-                    quotas_hit_count += 1;
-                    perf::incr(|s| &mut s.quotas_rejects, 1);
-                    return None; // Skip this slot if quotas check fails
-                }
-            }
-            Some((left_slot_id, right_slot_id, proc_set, quotas_hit_count))
-        })
+        try_schedule_window(
+            slotset,
+            job,
+            moldable,
+            min_begin,
+            left_slot_id,
+            right_slot_id,
+            left_slot_begin,
+            &mut cache_first_slot,
+            &mut quotas_hit_count,
+        )
+        .map(|(l, r, proc_set)| (l, r, proc_set, quotas_hit_count))
     });
 
-    perf::add_ns(|s| &mut s.find_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());
+    perf::add_ns(
+        |s| &mut s.find_slots_ns,
+        _timer.elapsed().as_nanos().try_into().unwrap(),
+    );
+
     if job.can_set_cache() && slotset.get_platform_config().config.cache_enabled {
         if let Some(cache_first_slot_id) = cache_first_slot {
             slotset.insert_cache_entry(moldable.cache_key.clone(), cache_first_slot_id);
@@ -228,6 +268,94 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
     }
 
     res
+}
+
+fn can_use_fast_path(job: &Job) -> bool {
+    job.time_sharing.is_none() && matches!(job.placeholder, PlaceholderType::None)
+}
+
+fn window_from_left_slot(
+    slotset: &SlotSet,
+    left_slot_id: i32,
+    duration: i64,
+) -> Option<(i32, i64)> {
+    slotset
+        .iter()
+        .start_at(left_slot_id)
+        .with_width(duration)
+        .next()
+        .map(|(left_slot, right_slot)| (right_slot.id(), left_slot.begin()))
+}
+
+fn try_schedule_window(
+    slotset: &mut SlotSet,
+    job: &Job,
+    moldable: &Moldable,
+    min_begin: Option<i64>,
+    left_slot_id: i32,
+    right_slot_id: i32,
+    left_slot_begin: i64,
+    cache_first_slot: &mut Option<i32>,
+    quotas_hit_count: &mut u32,
+) -> Option<(i32, i32, ProcSet)> {
+    perf::incr(|s| &mut s.slot_windows_scanned, 1);
+
+    let empty: Box<str> = "".into();
+
+    let (ts_user_name, ts_job_name) = job.time_sharing.as_ref().map_or((None, None), |_| {
+        (Some(job.user.as_ref().unwrap_or(&empty)), Some(job.name.as_ref().unwrap_or(&empty)))
+    });
+    let available_resources = slotset.intersect_slots_intervals(left_slot_id, right_slot_id, ts_user_name, ts_job_name, &job.placeholder);
+
+    // Finding resources according to hook or hierarchy request
+    {
+        if let Some(res) = get_hooks_manager().hook_find(slotset, job, moldable, min_begin, available_resources.clone()) {
+            res
+        } else {
+            slotset
+                .get_platform_config()
+                .resource_set
+                .hierarchy
+                .request(&available_resources, &moldable.requests)
+        }
+    }
+    .and_then(|proc_set| {
+        if cache_first_slot.is_none() {
+            *cache_first_slot = Some(left_slot_id);
+        }
+
+        // Checking quotas
+        if slotset.get_platform_config().quotas_config.enabled && !job.no_quotas {
+            if let Some(calendar) = &slotset.get_platform_config().quotas_config.calendar {
+                if left_slot_begin + moldable.walltime - 1 > slotset.begin() + calendar.quotas_window_time_limit() {
+                    warn!(
+                        "Job {} cannot be scheduled: no slots available within the quotas time limit ({} seconds).",
+                        job.id,
+                        calendar.quotas_window_time_limit()
+                    );
+                    return None;
+                }
+            }
+
+            perf::incr(|s| &mut s.quotas_checks, 1);
+            let slots = slotset.iter().between(left_slot_id, right_slot_id);
+            let end = left_slot_begin + moldable.walltime - 1;
+
+            if let Some((msg, rule, limit)) = perf::time(
+                |s| &mut s.quotas_ns,
+                || quotas::check_slots_quotas(slots, job, left_slot_begin, end, proc_set.core_count()),
+            ) {
+                info!(
+                    "Quotas limitation reached for job {}: {}, rule: {:?}, limit: {}",
+                    job.id, msg, rule, limit
+                );
+                *quotas_hit_count += 1;
+                perf::incr(|s| &mut s.quotas_rejects, 1);
+                return None; // Skip this slot if quotas check fails
+            }
+        }
+        Some((left_slot_id, right_slot_id, proc_set))
+    })
 }
 
 /// Returns the slot set for a job using get_job_slot_set_name.

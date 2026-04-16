@@ -1,12 +1,21 @@
 use crate::model::job::{Job, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
+use crate::scheduler::hierarchy::{AnchorSpec, Hierarchy};
 use crate::perf;
 use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
 use auto_bench_fct::auto_bench_fct_hy;
 use prettytable::{format, row, Table};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
+
+#[derive(Debug, Clone)]
+struct AnchorCountCacheEntry {
+    filter: ProcSet,
+    level_name: Box<str>,
+    by_slot_id: HashMap<i32, u32>,
+    counts: Vec<u32>,
+}
 
 /// A SlotSet is a collection of Slots ordered by time.
 /// It is a doubly linked list of Slots with O(1) access by id through a HashMap.
@@ -31,6 +40,10 @@ pub struct SlotSet {
     segment_tree: Vec<ProcSet>,
     segment_tree_leaf_count: usize,
     segment_tree_dirty: bool,
+
+    // Fast-path cache: one entry per anchor (filter + level).
+    anchor_count_cache: HashMap<Box<str>, AnchorCountCacheEntry>,
+    anchor_count_dirty_slots: HashSet<i32>,
 }
 
 impl Debug for SlotSet {
@@ -94,6 +107,8 @@ impl SlotSet {
             segment_tree: Vec::new(),
             segment_tree_leaf_count: 0,
             segment_tree_dirty: true,
+            anchor_count_cache: HashMap::new(),
+            anchor_count_dirty_slots: HashSet::new(),
         };
         slotset.rebuild_segment_tree();
         slotset
@@ -115,6 +130,8 @@ impl SlotSet {
             segment_tree: Vec::new(),
             segment_tree_leaf_count: 0,
             segment_tree_dirty: true,
+            anchor_count_cache: HashMap::new(),
+            anchor_count_dirty_slots: HashSet::new(),
         };
         slotset.rebuild_segment_tree();
         slotset
@@ -306,6 +323,11 @@ impl SlotSet {
         };
 
         self.slots.insert(new_slot_id, new_slot);
+
+        // New slot inherits proc_set semantics from the original one,
+        // but it has a new slot id, so cached anchor counts must be created for it.
+        self.mark_anchor_count_dirty(new_slot_id);
+
         self.mark_segment_tree_dirty();
         self.increment_next_id();
         (new_slot_id, slot_id)
@@ -403,6 +425,9 @@ impl SlotSet {
             .between(begin_slot_id, end_slot_id)
             .map(|slot| slot.id)
             .collect::<Vec<i32>>();
+
+        self.mark_anchor_counts_dirty(slot_ids.iter());
+
         perf::incr(|s| &mut s.updated_slots, slot_ids.len() as u64);
         slot_ids.iter().for_each(|slot_id| {
                 let slot = self.slots.get_mut(&slot_id).unwrap();
@@ -584,6 +609,7 @@ impl SlotSet {
         }
 
         self.segment_tree_dirty = false;
+        self.resync_anchor_count_caches_after_rebuild();
 
         perf::incr(|s| &mut s.segment_tree_rebuilds, 1);
         perf::add_ns(
@@ -648,6 +674,193 @@ impl SlotSet {
         perf::incr(|s| &mut s.segment_tree_query_slots, (r0 - l0 + 1) as u64);
 
         out
+    }
+
+    pub fn find_first_slot_for_anchor(
+        &mut self,
+        start_time: i64,
+        duration: i64,
+        anchor: &AnchorSpec,
+    ) -> Option<i32> {
+        let start_slot_id = self
+            .iter()
+            .find(|slot| slot.end() > start_time)
+            .map(|slot| slot.id())?;
+
+        let windows: Vec<(i32, i32)> = self
+            .iter()
+            .start_at(start_slot_id)
+            .with_width(duration)
+            .map(|(left_slot, right_slot)| (left_slot.id(), right_slot.id()))
+            .collect();
+
+        for (left_slot_id, right_slot_id) in windows {
+            perf::incr(|s| &mut s.fast_path_candidates, 1);
+
+            let min_count = self
+                .anchor_window_min_count(left_slot_id, right_slot_id, anchor)
+                .unwrap_or(0);
+
+            if min_count >= anchor.count {
+                perf::incr(|s| &mut s.fast_path_hits, 1);
+                return Some(left_slot_id);
+            } else {
+                perf::incr(|s| &mut s.fast_path_skipped_windows, 1);
+            }
+        }
+
+        None
+    }
+
+    fn anchor_cache_key(anchor: &AnchorSpec) -> Box<str> {
+        format!("{}|{}", anchor.filter, anchor.level_name).into_boxed_str()
+    }
+
+    fn ensure_anchor_count_cache(&mut self, anchor: &AnchorSpec) -> &Vec<u32> {
+        self.rebuild_segment_tree_if_dirty();
+
+        let key = Self::anchor_cache_key(anchor);
+
+        if !self.anchor_count_cache.contains_key(&key) {
+            let hierarchy = &self.platform_config.resource_set.hierarchy;
+
+            let _timer = std::time::Instant::now();
+
+            let mut by_slot_id = HashMap::new();
+            let mut counts = Vec::with_capacity(self.ordered_slot_ids.len());
+
+            for slot_id in &self.ordered_slot_ids {
+                let slot = self
+                    .slots
+                    .get(slot_id)
+                    .expect("SlotSet::ensure_anchor_count_cache: slot id missing in map");
+
+                let count = hierarchy
+                    .count_available_units(&slot.proc_set, &anchor.filter, &anchor.level_name)
+                    .unwrap_or(0);
+
+                by_slot_id.insert(*slot_id, count);
+                counts.push(count);
+                perf::incr(|s| &mut s.anchor_cache_slots_recomputed, 1);
+            }
+
+            self.anchor_count_cache.insert(
+                key.clone(),
+                AnchorCountCacheEntry {
+                    filter: anchor.filter.clone(),
+                    level_name: anchor.level_name.clone(),
+                    by_slot_id,
+                    counts,
+                },
+            );
+
+            perf::incr(|s| &mut s.anchor_cache_rebuilds, 1);
+            perf::add_ns(
+                |s| &mut s.anchor_cache_rebuild_ns,
+                _timer.elapsed().as_nanos().try_into().unwrap(),
+            );
+        }
+
+        &self
+            .anchor_count_cache
+            .get(&key)
+            .expect("SlotSet::ensure_anchor_count_cache: cache entry missing right after insert")
+            .counts
+    }
+
+    fn anchor_window_min_count(
+        &mut self,
+        begin_slot_id: i32,
+        end_slot_id: i32,
+        anchor: &AnchorSpec,
+    ) -> Option<u32> {
+        self.rebuild_segment_tree_if_dirty();
+
+        let l = *self
+            .slot_id_to_index
+            .get(&begin_slot_id)
+            .expect("SlotSet::anchor_window_min_count: begin_slot_id not indexed");
+        let r = *self
+            .slot_id_to_index
+            .get(&end_slot_id)
+            .expect("SlotSet::anchor_window_min_count: end_slot_id not indexed");
+
+        let (from, to) = if l <= r { (l, r) } else { (r, l) };
+
+        perf::incr(|s| &mut s.anchor_window_min_queries, 1);
+
+        let counts = self.ensure_anchor_count_cache(anchor);
+
+        perf::time(
+            |s| &mut s.anchor_window_min_ns,
+            || counts[from..=to].iter().copied().min(),
+        )
+    }
+
+    fn mark_anchor_count_dirty(&mut self, slot_id: i32) {
+        self.anchor_count_dirty_slots.insert(slot_id);
+    }
+
+    fn mark_anchor_counts_dirty<'a, I>(&mut self, slot_ids: I)
+    where
+        I: IntoIterator<Item = &'a i32>,
+    {
+        for slot_id in slot_ids {
+            self.anchor_count_dirty_slots.insert(*slot_id);
+        }
+    }
+
+    fn resync_anchor_count_caches_after_rebuild(&mut self) {
+        if self.anchor_count_cache.is_empty() {
+            self.anchor_count_dirty_slots.clear();
+            return;
+        }
+
+        let hierarchy = &self.platform_config.resource_set.hierarchy;
+        let ordered_slot_ids = self.ordered_slot_ids.clone();
+        let dirty_slot_ids: Vec<i32> = self.anchor_count_dirty_slots.iter().copied().collect();
+
+        let _timer = std::time::Instant::now();
+
+        for entry in self.anchor_count_cache.values_mut() {
+            // Drop removed slots from the per-slot map.
+            entry.by_slot_id.retain(|slot_id, _| self.slots.contains_key(slot_id));
+
+            // Recompute only dirty slots that still exist.
+            for slot_id in &dirty_slot_ids {
+                if let Some(slot) = self.slots.get(slot_id) {
+                    let count = hierarchy
+                        .count_available_units(&slot.proc_set, &entry.filter, &entry.level_name)
+                        .unwrap_or(0);
+
+                    entry.by_slot_id.insert(*slot_id, count);
+                    perf::incr(|s| &mut s.anchor_cache_slots_recomputed, 1);
+                } else {
+                    entry.by_slot_id.remove(slot_id);
+                }
+            }
+
+            // Rebuild the ordered vector cheaply from already-known per-slot values.
+            entry.counts = ordered_slot_ids
+                .iter()
+                .map(|slot_id| {
+                    *entry.by_slot_id.get(slot_id).unwrap_or_else(|| {
+                        panic!(
+                            "SlotSet::resync_anchor_count_caches_after_rebuild: missing count for slot_id {}",
+                            slot_id
+                        )
+                    })
+                })
+                .collect();
+        }
+
+        self.anchor_count_dirty_slots.clear();
+
+        perf::incr(|s| &mut s.anchor_cache_rebuilds, 1);
+        perf::add_ns(
+            |s| &mut s.anchor_cache_rebuild_ns,
+            _timer.elapsed().as_nanos().try_into().unwrap(),
+        );
     }
 }
 

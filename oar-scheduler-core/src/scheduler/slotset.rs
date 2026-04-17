@@ -1,5 +1,5 @@
 use crate::model::job::{Job, Moldable, PlaceholderType, ProcSet, ProcSetCoresOp, TimeSharingType};
-use crate::scheduler::hierarchy::{AnchorSpec, Hierarchy};
+use crate::scheduler::hierarchy::{AnchorSpec, Hierarchy, LevelId};
 use crate::perf;
 use crate::platform::PlatformConfig;
 use crate::scheduler::slot::Slot;
@@ -13,6 +13,8 @@ use std::rc::Rc;
 struct AnchorCountCacheEntry {
     filter: ProcSet,
     level_name: Box<str>,
+    level_id: LevelId,
+    is_unit: bool,
     by_slot_id: HashMap<i32, u32>,
     counts: Vec<u32>,
 }
@@ -720,52 +722,57 @@ impl SlotSet {
         self.rebuild_segment_tree_if_dirty();
 
         let key = Self::anchor_cache_key(anchor);
+        let hierarchy = &self.platform_config.resource_set.hierarchy;
 
-        if !self.anchor_count_cache.contains_key(&key) {
-            let hierarchy = &self.platform_config.resource_set.hierarchy;
+        match self.anchor_count_cache.entry(key) {
+            std::collections::hash_map::Entry::Occupied(entry) => &entry.into_mut().counts,
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let _timer = std::time::Instant::now();
 
-            let _timer = std::time::Instant::now();
+                let level_id = hierarchy
+                    .level_id(&anchor.level_name)
+                    .expect("SlotSet::ensure_anchor_count_cache: missing level id for anchor");
+                let is_unit = anchor.is_unit;
 
-            let mut by_slot_id = HashMap::new();
-            let mut counts = Vec::with_capacity(self.ordered_slot_ids.len());
+                let mut by_slot_id = HashMap::with_capacity(self.ordered_slot_ids.len());
+                let mut counts = Vec::with_capacity(self.ordered_slot_ids.len());
 
-            for slot_id in &self.ordered_slot_ids {
-                let slot = self
-                    .slots
-                    .get(slot_id)
-                    .expect("SlotSet::ensure_anchor_count_cache: slot id missing in map");
+                for slot_id in &self.ordered_slot_ids {
+                    let slot = self
+                        .slots
+                        .get(slot_id)
+                        .expect("SlotSet::ensure_anchor_count_cache: slot id missing in map");
 
-                let count = hierarchy
-                    .count_available_units(&slot.proc_set, &anchor.filter, &anchor.level_name)
-                    .unwrap_or(0);
+                    let count = hierarchy.count_available_units_compiled(
+                        &slot.proc_set,
+                        &anchor.filter,
+                        level_id,
+                        is_unit,
+                    );
 
-                by_slot_id.insert(*slot_id, count);
-                counts.push(count);
-                perf::incr(|s| &mut s.anchor_cache_slots_recomputed, 1);
-            }
+                    by_slot_id.insert(*slot_id, count);
+                    counts.push(count);
+                    perf::incr(|s| &mut s.anchor_cache_slots_recomputed, 1);
+                }
 
-            self.anchor_count_cache.insert(
-                key.clone(),
-                AnchorCountCacheEntry {
+                let inserted = entry.insert(AnchorCountCacheEntry {
                     filter: anchor.filter.clone(),
                     level_name: anchor.level_name.clone(),
+                    level_id,
+                    is_unit,
                     by_slot_id,
                     counts,
-                },
-            );
+                });
 
-            perf::incr(|s| &mut s.anchor_cache_rebuilds, 1);
-            perf::add_ns(
-                |s| &mut s.anchor_cache_rebuild_ns,
-                _timer.elapsed().as_nanos().try_into().unwrap(),
-            );
+                perf::incr(|s| &mut s.anchor_cache_rebuilds, 1);
+                perf::add_ns(
+                    |s| &mut s.anchor_cache_rebuild_ns,
+                    _timer.elapsed().as_nanos().try_into().unwrap(),
+                );
+
+                &inserted.counts
+            }
         }
-
-        &self
-            .anchor_count_cache
-            .get(&key)
-            .expect("SlotSet::ensure_anchor_count_cache: cache entry missing right after insert")
-            .counts
     }
 
     fn anchor_window_min_count(
@@ -817,21 +824,22 @@ impl SlotSet {
         }
 
         let hierarchy = &self.platform_config.resource_set.hierarchy;
-        let ordered_slot_ids = self.ordered_slot_ids.clone();
+        let ordered_slot_ids = &self.ordered_slot_ids;
+        let slots = &self.slots;
         let dirty_slot_ids: Vec<i32> = self.anchor_count_dirty_slots.iter().copied().collect();
 
         let _timer = std::time::Instant::now();
 
         for entry in self.anchor_count_cache.values_mut() {
-            // Drop removed slots from the per-slot map.
-            entry.by_slot_id.retain(|slot_id, _| self.slots.contains_key(slot_id));
-
             // Recompute only dirty slots that still exist.
             for slot_id in &dirty_slot_ids {
-                if let Some(slot) = self.slots.get(slot_id) {
-                    let count = hierarchy
-                        .count_available_units(&slot.proc_set, &entry.filter, &entry.level_name)
-                        .unwrap_or(0);
+                if let Some(slot) = slots.get(slot_id) {
+                    let count = hierarchy.count_available_units_compiled(
+                        &slot.proc_set,
+                        &entry.filter,
+                        entry.level_id,
+                        entry.is_unit,
+                    );
 
                     entry.by_slot_id.insert(*slot_id, count);
                     perf::incr(|s| &mut s.anchor_cache_slots_recomputed, 1);
@@ -841,17 +849,15 @@ impl SlotSet {
             }
 
             // Rebuild the ordered vector cheaply from already-known per-slot values.
-            entry.counts = ordered_slot_ids
-                .iter()
-                .map(|slot_id| {
-                    *entry.by_slot_id.get(slot_id).unwrap_or_else(|| {
-                        panic!(
-                            "SlotSet::resync_anchor_count_caches_after_rebuild: missing count for slot_id {}",
-                            slot_id
-                        )
-                    })
-                })
-                .collect();
+            entry.counts.resize(ordered_slot_ids.len(), 0);
+            for (idx, slot_id) in ordered_slot_ids.iter().enumerate() {
+                entry.counts[idx] = *entry.by_slot_id.get(slot_id).unwrap_or_else(|| {
+                    panic!(
+                        "SlotSet::resync_anchor_count_caches_after_rebuild: missing count for slot_id {}",
+                        slot_id
+                    )
+                });
+            }
         }
 
         self.anchor_count_dirty_slots.clear();

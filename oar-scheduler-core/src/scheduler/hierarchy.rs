@@ -515,7 +515,7 @@ impl Hierarchy {
             .unwrap_or_else(|err| panic!("Failed to build hierarchy tree: {:?}", err));
     }
 
-    fn level_id(&self, level_name: &str) -> Option<LevelId> {
+    pub(crate) fn level_id(&self, level_name: &str) -> Option<LevelId> {
         self.level_ids.get(level_name).copied()
     }
 
@@ -661,17 +661,28 @@ impl Hierarchy {
         filter: &ProcSet,
         level_name: &str,
     ) -> Option<u32> {
-        let filtered = available_proc_set.clone() & filter.clone();
-        if filtered.is_empty() {
-            return Some(0);
-        }
-
         let level_id = self.level_id(level_name)?;
-        if self.unit_level_ids.contains(&level_id) {
-            return Some(filtered.core_count());
+        let is_unit = self.unit_level_ids.contains(&level_id);
+        Some(self.count_available_units_compiled(available_proc_set, filter, level_id, is_unit))
+    }
+
+    pub(crate) fn count_available_units_compiled(
+        &self,
+        available_proc_set: &ProcSet,
+        filter: &ProcSet,
+        level_id: LevelId,
+        is_unit: bool,
+    ) -> u32 {
+        let filtered = available_proc_set & filter;
+        if filtered.is_empty() {
+            return 0;
         }
 
-        Some(self.count_units_in_nodes(&self.roots, &filtered, level_id))
+        if is_unit {
+            return filtered.core_count();
+        }
+
+        self.count_units_in_nodes(&self.roots, &filtered, level_id)
     }
 
     fn count_units_in_nodes(
@@ -687,18 +698,19 @@ impl Hierarchy {
                 continue;
             }
 
-            let intersection = node.proc_set.clone() & filtered.clone();
-            if intersection.is_empty() {
-                continue;
-            }
-
             if node.level_id == wanted_level {
                 if node.proc_set.is_subset(filtered) {
                     total += 1;
                 }
-            } else {
-                total += self.count_units_in_nodes(&node.children, filtered, wanted_level);
+                continue;
             }
+
+            let intersection = &node.proc_set & filtered;
+            if intersection.is_empty() {
+                continue;
+            }
+
+            total += self.count_units_in_nodes(&node.children, filtered, wanted_level);
         }
 
         total

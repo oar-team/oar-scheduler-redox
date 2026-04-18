@@ -39,7 +39,7 @@ pub struct SlotSet {
 
     // Fast-path cache: one entry per anchor (filter + level).
     anchor_count_cache: HashMap<Box<str>, AnchorCountCacheEntry>,
-    anchor_count_dirty_slots: HashSet<i32>,
+    anchor_count_dirty_slots_by_key: HashMap<Box<str>, HashSet<i32>>,
 
     slot_order_tree: SlotOrderTree,
 }
@@ -100,7 +100,7 @@ impl SlotSet {
             cache: HashMap::new(),
             platform_config,
             anchor_count_cache: HashMap::new(),
-            anchor_count_dirty_slots: HashSet::new(),
+            anchor_count_dirty_slots_by_key: HashMap::new(),
             slot_order_tree: SlotOrderTree::new(),
         };
         slotset.slot_order_tree = SlotOrderTree::build_from_slotset(&slotset);
@@ -119,7 +119,7 @@ impl SlotSet {
             slots: HashMap::from([(slot.id, slot)]),
             cache: HashMap::new(),
             anchor_count_cache: HashMap::new(),
-            anchor_count_dirty_slots: HashSet::new(),
+            anchor_count_dirty_slots_by_key: HashMap::new(),
             slot_order_tree: SlotOrderTree::new(),
         };
         slotset.slot_order_tree = SlotOrderTree::build_from_slotset(&slotset);
@@ -314,9 +314,19 @@ impl SlotSet {
 
         self.slots.insert(new_slot_id, new_slot);
 
-        // New slot inherits proc_set semantics from the original one,
-        // but it has a new slot id, so cached anchor counts must be created for it.
-        self.mark_anchor_count_dirty(new_slot_id);
+        // New slot inherits the same resource count semantics as the original slot.
+        // Copy the cached per-anchor counts eagerly so later direct updates can stay incremental.
+        for entry in self.anchor_count_cache.values_mut() {
+            if let Some(&count) = entry.by_slot_id.get(&slot_id) {
+                entry.by_slot_id.insert(new_slot_id, count);
+            }
+        }
+        for dirty_slots in self.anchor_count_dirty_slots_by_key.values_mut() {
+            if dirty_slots.remove(&slot_id) {
+                dirty_slots.insert(slot_id);
+                dirty_slots.insert(new_slot_id);
+            }
+        }
 
         let (new_slot_prev, new_slot_next, new_slot_proc_set) = {
             let new_slot_ref = self
@@ -433,7 +443,8 @@ impl SlotSet {
             .map(|slot| slot.id)
             .collect::<Vec<i32>>();
 
-        self.mark_anchor_counts_dirty(slot_ids.iter());
+        let direct_anchor = self.derive_job_anchor_spec(job);
+        self.mark_anchor_counts_dirty_for_slot_ids(&slot_ids, direct_anchor.as_ref());
 
         perf::incr(|s| &mut s.updated_slots, slot_ids.len() as u64);
         for slot_id in slot_ids.iter().copied() {
@@ -484,6 +495,10 @@ impl SlotSet {
 
             self.slot_order_tree
                 .update_slot_proc_set(slot_id, updated_proc_set);
+        }
+
+        if let Some(anchor) = direct_anchor.as_ref() {
+            self.direct_update_anchor_count_cache(anchor, &slot_ids, sub_resources);
         }
 
         perf::add_ns(|s| &mut s.update_slots_ns, _timer.elapsed().as_nanos().try_into().unwrap());
@@ -635,12 +650,16 @@ impl SlotSet {
         let hierarchy = &self.platform_config.resource_set.hierarchy;
         let ordered_slot_ids = self.slot_order_tree_slot_ids();
 
-        match self.anchor_count_cache.entry(key) {
+        match self.anchor_count_cache.entry(key.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
-                if !self.anchor_count_dirty_slots.is_empty() || entry.get().counts.len() != ordered_slot_ids.len() {
-                    let _timer = std::time::Instant::now();
+                let dirty_slot_ids = self
+                    .anchor_count_dirty_slots_by_key
+                    .get(&key)
+                    .map(|slots| slots.iter().copied().collect::<Vec<_>>())
+                    .unwrap_or_default();
 
-                    let dirty_slot_ids: Vec<i32> = self.anchor_count_dirty_slots.iter().copied().collect();
+                if !dirty_slot_ids.is_empty() || entry.get().counts.len() != ordered_slot_ids.len() {
+                    let _timer = std::time::Instant::now();
                     let entry_mut = entry.get_mut();
 
                     for slot_id in &dirty_slot_ids {
@@ -659,15 +678,7 @@ impl SlotSet {
                         }
                     }
 
-                    entry_mut.counts.resize(ordered_slot_ids.len(), 0);
-                    for (idx, slot_id) in ordered_slot_ids.iter().enumerate() {
-                        entry_mut.counts[idx] = *entry_mut.by_slot_id.get(slot_id).unwrap_or_else(|| {
-                            panic!(
-                                "SlotSet::ensure_anchor_count_cache: missing count for slot_id {}",
-                                slot_id
-                            )
-                        });
-                    }
+                    Self::rebuild_anchor_counts_from_map(entry_mut, &ordered_slot_ids);
 
                     perf::incr(|s| &mut s.anchor_cache_rebuilds, 1);
                     perf::add_ns(
@@ -676,7 +687,7 @@ impl SlotSet {
                     );
                 }
 
-                self.anchor_count_dirty_slots.clear();
+                self.anchor_count_dirty_slots_by_key.remove(&key);
                 &entry.into_mut().counts
             }
 
@@ -718,7 +729,7 @@ impl SlotSet {
                     counts,
                 });
 
-                self.anchor_count_dirty_slots.clear();
+                self.anchor_count_dirty_slots_by_key.remove(&key);
 
                 perf::incr(|s| &mut s.anchor_cache_rebuilds, 1);
                 perf::add_ns(
@@ -763,17 +774,59 @@ impl SlotSet {
         )
     }
 
-    fn mark_anchor_count_dirty(&mut self, slot_id: i32) {
-        self.anchor_count_dirty_slots.insert(slot_id);
+
+    fn rebuild_anchor_counts_from_map(entry: &mut AnchorCountCacheEntry, ordered_slot_ids: &[i32]) {
+        entry.counts.clear();
+        entry.counts.reserve(ordered_slot_ids.len());
+        for slot_id in ordered_slot_ids {
+            entry.counts.push(*entry.by_slot_id.get(slot_id).unwrap_or_else(|| {
+                panic!(
+                    "SlotSet::rebuild_anchor_counts_from_map: missing count for slot_id {}",
+                    slot_id
+                )
+            }));
+        }
     }
 
-    fn mark_anchor_counts_dirty<'a, I>(&mut self, slot_ids: I)
-    where
-        I: IntoIterator<Item = &'a i32>,
-    {
-        for slot_id in slot_ids {
-            self.anchor_count_dirty_slots.insert(*slot_id);
+    fn derive_job_anchor_spec(&self, job: &Job) -> Option<AnchorSpec> {
+        let assignment = job.assignment.as_ref()?;
+        let moldable = job.moldables.get(assignment.moldable_index)?;
+        self.platform_config
+            .resource_set
+            .hierarchy
+            .derive_anchor_spec(&moldable.requests)
+    }
+
+    fn mark_anchor_counts_dirty_for_slot_ids(&mut self, slot_ids: &[i32], skip_anchor: Option<&AnchorSpec>) {
+        let skip_key = skip_anchor.map(Self::anchor_cache_key);
+        let keys: Vec<Box<str>> = self.anchor_count_cache.keys().cloned().collect();
+        for key in keys {
+            if skip_key.as_ref().is_some_and(|skip| skip == &key) {
+                continue;
+            }
+            let dirty = self.anchor_count_dirty_slots_by_key.entry(key).or_default();
+            dirty.extend(slot_ids.iter().copied());
         }
+    }
+
+    fn direct_update_anchor_count_cache(&mut self, anchor: &AnchorSpec, slot_ids: &[i32], sub_resources: bool) {
+        let key = Self::anchor_cache_key(anchor);
+        let ordered_slot_ids = self.slot_order_tree_slot_ids();
+        let Some(entry) = self.anchor_count_cache.get_mut(&key) else {
+            return;
+        };
+
+        for slot_id in slot_ids {
+            let count = entry.by_slot_id.entry(*slot_id).or_insert(0);
+            if sub_resources {
+                *count = count.saturating_sub(anchor.count);
+            } else {
+                *count = count.saturating_add(anchor.count);
+            }
+        }
+
+        Self::rebuild_anchor_counts_from_map(entry, &ordered_slot_ids);
+        self.anchor_count_dirty_slots_by_key.remove(&key);
     }
 
     fn debug_assert_slot_order_tree_consistent(&self) {

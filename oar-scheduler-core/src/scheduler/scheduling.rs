@@ -234,15 +234,14 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
         iter = iter.start_at(slot_id);
     }
 
-    // Materialize candidate windows first, so the immutable borrow from `iter`
-    // ends before we need mutable access to `slotset`.
     let windows: Vec<(i32, i32, i64)> = iter
         .with_width(moldable.walltime)
         .map(|(left_slot, right_slot)| (left_slot.id(), right_slot.id(), left_slot.begin()))
         .collect();
 
-    let res = windows.into_iter().find_map(|(left_slot_id, right_slot_id, left_slot_begin)| {
-        try_schedule_window(
+    let mut res: Option<(i32, i32, ProcSet, u32)> = None;
+    for (left_slot_id, right_slot_id, left_slot_begin) in windows {
+        if let Some((l, r, proc_set)) = try_schedule_window(
             slotset,
             job,
             moldable,
@@ -252,9 +251,11 @@ pub fn find_slots_for_moldable(slotset: &mut SlotSet, job: &Job, moldable: &Mold
             left_slot_begin,
             &mut cache_first_slot,
             &mut quotas_hit_count,
-        )
-        .map(|(l, r, proc_set)| (l, r, proc_set, quotas_hit_count))
-    });
+        ) {
+            res = Some((l, r, proc_set, quotas_hit_count));
+            break;
+        }
+    }
 
     perf::add_ns(
         |s| &mut s.find_slots_ns,

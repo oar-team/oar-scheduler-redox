@@ -42,6 +42,8 @@ pub struct SlotSet {
     anchor_count_dirty_slots_by_key: HashMap<Box<str>, HashSet<i32>>,
 
     slot_order_tree: SlotOrderTree,
+    ordered_slot_ids: Vec<i32>,
+    slot_index_by_id: HashMap<i32, usize>,
 }
 
 impl Debug for SlotSet {
@@ -102,8 +104,11 @@ impl SlotSet {
             anchor_count_cache: HashMap::new(),
             anchor_count_dirty_slots_by_key: HashMap::new(),
             slot_order_tree: SlotOrderTree::new(),
+            ordered_slot_ids: Vec::new(),
+            slot_index_by_id: HashMap::new(),
         };
         slotset.slot_order_tree = SlotOrderTree::build_from_slotset(&slotset);
+        slotset.rebuild_slot_order_index();
         slotset.debug_assert_slot_order_tree_consistent();
         slotset
     }
@@ -121,8 +126,11 @@ impl SlotSet {
             anchor_count_cache: HashMap::new(),
             anchor_count_dirty_slots_by_key: HashMap::new(),
             slot_order_tree: SlotOrderTree::new(),
+            ordered_slot_ids: Vec::new(),
+            slot_index_by_id: HashMap::new(),
         };
         slotset.slot_order_tree = SlotOrderTree::build_from_slotset(&slotset);
+        slotset.rebuild_slot_order_index();
         slotset.debug_assert_slot_order_tree_consistent();
         slotset
     }
@@ -316,9 +324,24 @@ impl SlotSet {
 
         // New slot inherits the same resource count semantics as the original slot.
         // Copy the cached per-anchor counts eagerly so later direct updates can stay incremental.
+        let insert_idx = if before {
+            *self
+                .slot_index_by_id
+                .get(&slot_id)
+                .expect("SlotSet::split_at: slot not indexed")
+        } else {
+            self.slot_index_by_id
+                .get(&slot_id)
+                .copied()
+                .expect("SlotSet::split_at: slot not indexed")
+                + 1
+        };
         for entry in self.anchor_count_cache.values_mut() {
             if let Some(&count) = entry.by_slot_id.get(&slot_id) {
                 entry.by_slot_id.insert(new_slot_id, count);
+                if insert_idx <= entry.counts.len() {
+                    entry.counts.insert(insert_idx, count);
+                }
             }
         }
         for dirty_slots in self.anchor_count_dirty_slots_by_key.values_mut() {
@@ -343,6 +366,7 @@ impl SlotSet {
             new_slot_proc_set,
             new_slot_next,
         );
+        self.insert_slot_order_index(slot_id, new_slot_id, before);
 
         self.debug_assert_slot_order_tree_consistent();
 
@@ -648,7 +672,7 @@ impl SlotSet {
     fn ensure_anchor_count_cache(&mut self, anchor: &AnchorSpec) -> &Vec<u32> {
         let key = Self::anchor_cache_key(anchor);
         let hierarchy = &self.platform_config.resource_set.hierarchy;
-        let ordered_slot_ids = self.slot_order_tree_slot_ids();
+        let ordered_slot_ids = self.ordered_slot_ids.clone();
 
         match self.anchor_count_cache.entry(key.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
@@ -658,27 +682,48 @@ impl SlotSet {
                     .map(|slots| slots.iter().copied().collect::<Vec<_>>())
                     .unwrap_or_default();
 
-                if !dirty_slot_ids.is_empty() || entry.get().counts.len() != ordered_slot_ids.len() {
+                let needs_full_sync = entry.get().counts.len() != ordered_slot_ids.len();
+                if !dirty_slot_ids.is_empty() || needs_full_sync {
                     let _timer = std::time::Instant::now();
+
+                    let filter = entry.get().filter.clone();
+                    let level_id = entry.get().level_id;
+                    let is_unit = entry.get().is_unit;
+                    let dirty_updates: Vec<(i32, Option<u32>, Option<usize>)> = dirty_slot_ids
+                        .iter()
+                        .map(|slot_id| {
+                            let count = self.slots.get(slot_id).map(|slot| {
+                                hierarchy.count_available_units_compiled(
+                                    &slot.proc_set,
+                                    &filter,
+                                    level_id,
+                                    is_unit,
+                                )
+                            });
+                            let idx = self.slot_index_by_id.get(slot_id).copied();
+                            (*slot_id, count, idx)
+                        })
+                        .collect();
+
                     let entry_mut = entry.get_mut();
 
-                    for slot_id in &dirty_slot_ids {
-                        if let Some(slot) = self.slots.get(slot_id) {
-                            let count = hierarchy.count_available_units_compiled(
-                                &slot.proc_set,
-                                &entry_mut.filter,
-                                entry_mut.level_id,
-                                entry_mut.is_unit,
-                            );
-
-                            entry_mut.by_slot_id.insert(*slot_id, count);
-                            perf::incr(|s| &mut s.anchor_cache_slots_recomputed, 1);
-                        } else {
-                            entry_mut.by_slot_id.remove(slot_id);
-                        }
+                    if needs_full_sync {
+                        Self::rebuild_anchor_counts_from_map(entry_mut, &ordered_slot_ids);
                     }
 
-                    Self::rebuild_anchor_counts_from_map(entry_mut, &ordered_slot_ids);
+                    for (slot_id, count, idx) in dirty_updates {
+                        if let Some(count) = count {
+                            entry_mut.by_slot_id.insert(slot_id, count);
+                            if let Some(idx) = idx {
+                                if let Some(existing) = entry_mut.counts.get_mut(idx) {
+                                    *existing = count;
+                                }
+                            }
+                            perf::incr(|s| &mut s.anchor_cache_slots_recomputed, 1);
+                        } else {
+                            entry_mut.by_slot_id.remove(&slot_id);
+                        }
+                    }
 
                     perf::incr(|s| &mut s.anchor_cache_rebuilds, 1);
                     perf::add_ns(
@@ -748,17 +793,13 @@ impl SlotSet {
         end_slot_id: i32,
         anchor: &AnchorSpec,
     ) -> Option<u32> {
-        let ordered_slot_ids = self.slot_order_tree_slot_ids();
-
-        let mut index_by_slot_id = HashMap::with_capacity(ordered_slot_ids.len());
-        for (idx, slot_id) in ordered_slot_ids.iter().copied().enumerate() {
-            index_by_slot_id.insert(slot_id, idx);
-        }
-
-        let l = *index_by_slot_id
+        let _timer = std::time::Instant::now();
+        let l = *self
+            .slot_index_by_id
             .get(&begin_slot_id)
             .expect("SlotSet::anchor_window_min_count: begin_slot_id not indexed");
-        let r = *index_by_slot_id
+        let r = *self
+            .slot_index_by_id
             .get(&end_slot_id)
             .expect("SlotSet::anchor_window_min_count: end_slot_id not indexed");
 
@@ -767,11 +808,14 @@ impl SlotSet {
         perf::incr(|s| &mut s.anchor_window_min_queries, 1);
 
         let counts = self.ensure_anchor_count_cache(anchor);
+        let res = counts[from..=to].iter().copied().min();
 
-        perf::time(
+        perf::add_ns(
             |s| &mut s.anchor_window_min_ns,
-            || counts[from..=to].iter().copied().min(),
-        )
+            _timer.elapsed().as_nanos().try_into().unwrap(),
+        );
+
+        res
     }
 
 
@@ -811,22 +855,52 @@ impl SlotSet {
 
     fn direct_update_anchor_count_cache(&mut self, anchor: &AnchorSpec, slot_ids: &[i32], sub_resources: bool) {
         let key = Self::anchor_cache_key(anchor);
-        let ordered_slot_ids = self.slot_order_tree_slot_ids();
+        let slot_updates: Vec<(i32, Option<usize>)> = slot_ids
+            .iter()
+            .copied()
+            .map(|slot_id| (slot_id, self.slot_index_by_id.get(&slot_id).copied()))
+            .collect();
         let Some(entry) = self.anchor_count_cache.get_mut(&key) else {
             return;
         };
 
-        for slot_id in slot_ids {
-            let count = entry.by_slot_id.entry(*slot_id).or_insert(0);
+        for (slot_id, idx) in slot_updates {
+            let count = entry.by_slot_id.entry(slot_id).or_insert(0);
             if sub_resources {
                 *count = count.saturating_sub(anchor.count);
             } else {
                 *count = count.saturating_add(anchor.count);
             }
+            if let Some(idx) = idx {
+                if let Some(existing) = entry.counts.get_mut(idx) {
+                    *existing = *count;
+                }
+            }
         }
 
-        Self::rebuild_anchor_counts_from_map(entry, &ordered_slot_ids);
         self.anchor_count_dirty_slots_by_key.remove(&key);
+    }
+
+    fn rebuild_slot_order_index(&mut self) {
+        self.ordered_slot_ids = self.iter().map(|s| s.id()).collect();
+        self.slot_index_by_id.clear();
+        self.slot_index_by_id.reserve(self.ordered_slot_ids.len());
+        for (idx, slot_id) in self.ordered_slot_ids.iter().copied().enumerate() {
+            self.slot_index_by_id.insert(slot_id, idx);
+        }
+    }
+
+    fn insert_slot_order_index(&mut self, existing_slot_id: i32, new_slot_id: i32, before: bool) {
+        let existing_idx = *self
+            .slot_index_by_id
+            .get(&existing_slot_id)
+            .expect("SlotSet::insert_slot_order_index: existing slot not indexed");
+        let insert_idx = if before { existing_idx } else { existing_idx + 1 };
+        self.ordered_slot_ids.insert(insert_idx, new_slot_id);
+        for idx in insert_idx..self.ordered_slot_ids.len() {
+            let slot_id = self.ordered_slot_ids[idx];
+            self.slot_index_by_id.insert(slot_id, idx);
+        }
     }
 
     fn debug_assert_slot_order_tree_consistent(&self) {
@@ -837,10 +911,6 @@ impl SlotSet {
             from_iter, from_tree,
             "SlotSet / SlotOrderTree order mismatch"
         );
-    }
-
-    fn slot_order_tree_slot_ids(&self) -> Vec<i32> {
-        self.slot_order_tree.inorder_slot_ids()
     }
 }
 

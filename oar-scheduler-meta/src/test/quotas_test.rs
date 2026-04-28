@@ -10,20 +10,22 @@ const OAR_CONFIG: &str = include_str!("../../oar_config.env");
 const QUOTAS_CONFIG: &str = include_str!("../../quotas_config.json");
 
 fn quotas_setup() -> Platform {
-    // Create temp files for configs
-    let oar_config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file for oar config");
-    std::fs::write(oar_config_file.path(), OAR_CONFIG).expect("Failed to write oar config to temp file");
-    oar_config_file.path().to_str().unwrap().to_string();
     let quotas_config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file for quotas config");
     std::fs::write(quotas_config_file.path(), QUOTAS_CONFIG).expect("Failed to write quotas config to temp file");
-    quotas_config_file.path().to_str().unwrap().to_string();
-    unsafe {
-        std::env::set_var("OARCONFFILE", oar_config_file.path());
-    }
 
     let (session, mut config) = setup_for_tests(true);
+
+    // Do not use the global OARCONFFILE.
+    // Instead, configure quotas locally for this test.
+    config.quotas = true;
+    config.quotas_conf_file = Some(
+        quotas_config_file.path().to_str().unwrap().to_string()
+    );
+    config.quotas_window_time_limit = Some(5184000);
+    config.quotas_all_nb_resources_mode =
+        oar_scheduler_core::model::configuration::QuotasAllNbResourcesMode::DefaultNotDead;
+
     info!("quotas config path: {}", quotas_config_file.path().to_str().unwrap());
-    config.quotas_conf_file = Some(quotas_config_file.path().to_str().unwrap().to_string());
 
     Platform::from_database(session, config)
 }

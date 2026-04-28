@@ -1,4 +1,5 @@
 use crate::model::job::{Job, JobAssignment, JobBuilder, ProcSet};
+use crate::perf;
 use crate::platform::PlatformTrait;
 use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slotset::SlotSet;
@@ -9,16 +10,18 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub fn schedule_cycle<T: PlatformTrait>(platform: &mut T, queues: &Vec<String>) -> usize {
-    // Insert the already-scheduled besteffort jobs into the slot sets only if scheduling this queue.
-    let allow_besteffort = queues.len() == 1 && queues[0] == "besteffort";
-    let (mut slot_sets, _besteffort_jobs) = init_slot_sets(platform, allow_besteffort);
+    perf::time(|s| &mut s.total_schedule_cycle_ns, || {
+        // Insert the already-scheduled besteffort jobs into the slot sets only if scheduling this queue.
+        let allow_besteffort = queues.len() == 1 && queues[0] == "besteffort";
+        let (mut slot_sets, _besteffort_jobs) = perf::time(|s| &mut s.init_slot_sets_ns, || init_slot_sets(platform, allow_besteffort));
 
-    internal_schedule_cycle(platform, &mut slot_sets, queues)
+        internal_schedule_cycle(platform, &mut slot_sets, queues)
+    })
 }
 
 pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &mut HashMap<Box<str>, SlotSet>, queues: &Vec<String>) -> usize {
     let _platform_config = platform.get_platform_config();
-    let mut waiting_jobs = platform.get_waiting_jobs(queues.to_vec());
+    let mut waiting_jobs = perf::time(|s| &mut s.get_waiting_jobs_ns, || platform.get_waiting_jobs(queues.to_vec()));
 
     {
         // info!(
@@ -39,10 +42,10 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
 
     if waiting_jobs.len() > 0 {
         // Sorting
-        sort_jobs(platform, queues, &mut waiting_jobs);
+        perf::time(|s| &mut s.sort_jobs_ns, || sort_jobs(platform, queues, &mut waiting_jobs));
 
         // Scheduling
-        schedule_jobs(slot_sets, &mut waiting_jobs);
+        perf::time(|s| &mut s.schedule_jobs_ns, || schedule_jobs(slot_sets, &mut waiting_jobs));
 
         // Save assignments
         let assigned_jobs = waiting_jobs
@@ -50,7 +53,7 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
             .filter(|(_id, job)| job.assignment.is_some())
             .collect::<IndexMap<i64, Job>>();
         debug!("Kamelot internal saving josb: {}", assigned_jobs[0].id);
-        platform.save_assignments(assigned_jobs);
+        perf::time(|s| &mut s.save_assignments_ns, || platform.save_assignments(assigned_jobs));
 
         return slot_sets.get("default").unwrap().slot_count();
     }

@@ -7,3 +7,4 @@ pub mod hierarchy;
 pub mod quotas;
 pub mod calendar;
 pub mod sorting;
+pub mod slot_order_tree;

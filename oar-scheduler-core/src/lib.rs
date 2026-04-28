@@ -1,3 +1,4 @@
+pub mod perf;
 pub mod platform;
 pub mod scheduler;
 pub mod hooks;

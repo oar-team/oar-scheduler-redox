@@ -41,7 +41,7 @@ pub fn schedule_cycle_on_oar_python<T: PlatformTrait>(platform: &mut T, _queues:
         })
         .0;
 
-        let mut waiting_jobs = platform.get_waiting_jobs();
+        let mut waiting_jobs = platform.get_waiting_jobs(Vec::new());
 
         // Gather scheduled jobs scheduling data to update rust objects
         let scheduled_jobs_py: Vec<Bound<PyDict>> = platform_py
@@ -130,7 +130,7 @@ pub fn platform_to_dict<'a, P: PlatformTrait>(py: Python<'a>, platform: &P) -> B
 
     // Convert waiting jobs
     let waiting_jobs = PyList::empty(py);
-    for job in platform.get_waiting_jobs() {
+    for job in platform.get_waiting_jobs(Vec::new()) {
         waiting_jobs.append(&job).unwrap();
     }
     dict.set_item("waiting_jobs", waiting_jobs).unwrap();

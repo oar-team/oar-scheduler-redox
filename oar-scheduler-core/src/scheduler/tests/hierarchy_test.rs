@@ -5,7 +5,11 @@ use std::ops::RangeInclusive;
 
 #[allow(dead_code)]
 fn procsets(ranges: Box<[RangeInclusive<u32>]>) -> Box<[ProcSet]> {
-    ranges.into_iter().map(|r| ProcSet::from_iter(r)).collect()
+    ranges
+        .into_iter()
+        .map(|r| ProcSet::from_iter(r))
+        .filter(|ps| !ps.is_empty())
+        .collect()
 }
 #[allow(dead_code)]
 fn procset(range: RangeInclusive<u32>) -> ProcSet {
@@ -67,7 +71,7 @@ fn test_find_resource_hierarchies_scattered5() {
         .add_partition("node".into(), procsets([1..=16, 17..=32, 33..=49, 50..=64].into()))
         .add_partition(
             "cpus".into(),
-            procsets([1..=8, 9..=16, 17..=24, 25..=32, 33..=41, 42..=29, 50..=58, 51..=64].into()),
+            procsets([1..=8, 9..=16, 17..=24, 25..=32, 33..=41, 42..=49, 50..=58, 59..=64].into()),
         )
         .add_partition(
             "cores".into(),
@@ -150,4 +154,39 @@ fn test_hierarchy_from_platform() {
     let proc_set_2 = proc_set_2.unwrap();
     assert_eq!(proc_set_2, ProcSet::from_iter([1..=64]));
     assert_eq!(proc_set, ProcSet::from_iter([1..=64]));
+}
+
+#[test]
+fn test_find_resource_hierarchies_scattered_unit_partition_respects_availability() {
+    let h = Hierarchy::new()
+        .add_partition("switch".into(), procsets([1..=16, 17..=32].into()))
+        .add_partition("node".into(), procsets([1..=8, 9..=16, 17..=24, 25..=32].into()))
+        .add_unit_partition("core".into());
+
+    // In the first switch, only the second half of the first node is available: 5..=8
+    // In the second switch, only the first half of the first node is available: 17..=20
+    let available = procset(5..=8) | procset(17..=20);
+
+    let result = h.find_resource_hierarchies_scattered(
+        &available,
+        &[("switch".into(), 2), ("node".into(), 1), ("core".into(), 4)],
+    );
+
+    assert_eq!(result, Some(procset(5..=8) | procset(17..=20)));
+}
+
+#[test]
+#[should_panic]
+fn test_hierarchy_build_fails_on_orphan_partition() {
+    let _h = Hierarchy::new()
+        .add_partition("switch".into(), procsets([1..=16].into()))
+        .add_partition("node".into(), procsets([100..=110].into()));
+}
+
+#[test]
+#[should_panic]
+fn test_hierarchy_build_fails_on_ambiguous_partition() {
+    let _h = Hierarchy::new()
+        .add_partition("switch".into(), procsets([1..=16, 8..=24].into()))
+        .add_partition("node".into(), procsets([10..=12].into()));
 }

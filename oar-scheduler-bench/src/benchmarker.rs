@@ -1078,10 +1078,10 @@ pub fn get_sample_waiting_jobs(res_count: u32, nnodes: u32, jobs_count: usize, s
             walltime_step: 60,
 
             res_min: 1,
-            res_max: 39,
+            res_max: 32,
             res_step: 1,
             res_type: "nodes".to_string(),
-            res_in_single_type: "".to_string(),
+            res_in_single_type: "switches".to_string(),
         }
         .generate_jobs(),
         WaitingJobsSampleType::CoreOnly => RandomJobGenerator {
@@ -1096,7 +1096,7 @@ pub fn get_sample_waiting_jobs(res_count: u32, nnodes: u32, jobs_count: usize, s
             walltime_step: 60,
 
             res_min: 1 * 64,
-            res_max: 39 * 64,
+            res_max: 32 * 64,
             res_step: 1,
             res_type: "cores".to_string(),
             res_in_single_type: "switches".to_string(),

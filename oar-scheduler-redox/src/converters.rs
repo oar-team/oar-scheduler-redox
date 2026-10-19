@@ -257,6 +257,23 @@ pub fn build_job(py_job: &Bound<PyAny>) -> Job {
         karma: 0.0,
         message: String::new(),
         state: "".into(), // State is not used in the core
+        // The Python kao Job does not carry these meta-scheduler only fields.
+        job_type: py_job
+            .getattr_opt("type")
+            .unwrap()
+            .map(|v| v.extract::<String>())
+            .unwrap_or(Ok("PASSIVE".to_string()))
+            .unwrap()
+            .into_boxed_str(),
+        info_type: py_job
+            .getattr_opt("info_type")
+            .unwrap()
+            .map(|v| v.extract::<Option<String>>())
+            .unwrap_or(Ok(None))
+            .unwrap()
+            .map(|s| s.into_boxed_str()),
+        checkpoint: py_job.getattr_opt("checkpoint").unwrap().map(|v| v.extract::<i64>()).unwrap_or(Ok(0)).unwrap(),
+        reservation: "None".into(),
     }
 }
 /// Builds a Moldable Rust struct from a Python moldable object.

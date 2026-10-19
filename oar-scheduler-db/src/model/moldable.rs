@@ -261,4 +261,36 @@ impl AllJobMoldables {
             moldable_index,
         })
     }
+
+    /// Get the assignment of a job from the gantt tables, using an explicit
+    /// moldable id and start time coming from `gantt_jobs_predictions`.
+    ///
+    /// This is used for jobs that have been scheduled but not launched yet (so
+    /// their `assigned_moldable_job` column is still `0`).
+    pub(crate) async fn get_gantt_job_assignment(&self, session: &Session, job_id: i64, moldable_id: i64, start_time: i64) -> Option<JobAssignment> {
+        let job_moldables = self.get_job_moldables(job_id);
+        let moldable_index = job_moldables.iter().position(|m| m.id == moldable_id)?;
+        let moldable = &job_moldables[moldable_index];
+
+        let resources_rows = Query::select()
+            .columns(vec![GanttJobsResources::ResourceId])
+            .from(GanttJobsResources::Table)
+            .and_where(Expr::col(GanttJobsResources::MoldableId).eq(moldable_id))
+            .fetch_all(session)
+            .await
+            .unwrap();
+        let resources: ProcSet = ProcSet::from_iter(resources_rows.iter().map(|row| {
+            let res_id: i32 = row.get(GanttJobsResources::ResourceId.unquoted());
+            session
+                .resource_id_to_resource_index(res_id)
+                .expect("Resource not found. There might be a database concurrency issue.")
+        }));
+
+        Some(JobAssignment {
+            begin: start_time,
+            end: start_time + moldable.walltime - 1,
+            resources,
+            moldable_index,
+        })
+    }
 }

@@ -1,0 +1,3 @@
+[submodule "oar3"]
+	path = oar3
+	url = git@github.com:oar-team/oar3.git

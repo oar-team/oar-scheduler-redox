@@ -481,6 +481,10 @@ impl JobDatabaseRequests for Job {
 
             debug!("Job {} state changed to {}", self.id, new_state.as_str());
 
+
+            // TODO: recheck we OAR3 Python part update the JobStateLog table and notify user as done here:
+            // https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/lib/job_handling.py#L1714-L1800
+
             // Close the currently open state log entry and open a new one.
             Query::update()
                 .table(JobStateLogs::Table)

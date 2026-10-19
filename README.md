@@ -91,8 +91,21 @@ Each crate has its own README with full documentation:
 
 - [x] Meta-scheduler base structure with core features.
 - [x] Minimal meta-scheduler (no gantt visualization, no node management, only TOODs marked as `(MVP REQUIRED)`).
-- [ ] Adding more tests to test the whole meta-scheduler.
-- [ ] Full meta-scheduler
+- [x] Adding more tests to test the whole meta-scheduler (end-to-end tests on an in-memory SQLite database).
+- [x] Full meta-scheduler:
+  - [x] Job lifecycle states (`toLaunch`, `toError`, `toAckReservation`) with `oarsub` client notifications.
+  - [x] Advance reservations (ack, expiry, reduced resource set when resources are missing).
+  - [x] Best effort jobs killing (time-sharing aware, checkpoint signals).
+  - [x] Gantt visualization tables update.
+  - [x] Start prediction notification to interactive clients.
+  - [x] Fairshare accounting sums (karma).
+  - [x] Walltime change requests (`process_walltime_change_requests`).
+  - [x] Node energy saving (sleep/wake up decision and node manager commands).
+  - [x] Resume jobs (`Resuming` state).
+  - [x] `job_state_logs` maintenance and resource `last_job_date` update on state change.
+- [ ] Notifications through the bipbip commander are delegated to an external command (see `OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD`):
+  the ZMQ protocol is not implemented in the Rust meta-scheduler.
+- [ ] The internal energy saving module (Greta, ZMQ based) is not implemented: only the external node manager commands are used.
 - [ ] Remove the usage of gantt tables `gantt_jobs_resources` and `gantt_jobs_predictions` as they add an intermediary step with heavy
   database requests. In a full Rust implementation, this is a useless overhead.
 

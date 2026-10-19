@@ -1,17 +1,17 @@
-use crate::model::gantt::GanttJobsPredictions;
+use crate::model::gantt::{GanttJobsPredictions, GanttJobsResources};
 use crate::model::job_dependencies::AllJobDependencies;
 use crate::model::job_types::{AllJobTypes, JobTypes};
 use crate::model::moldable::{AllJobMoldables, JobResourceDescriptions, JobResourceGroups, MoldableJobDescriptions};
 use crate::model::SqlEnum;
 use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use indexmap::IndexMap;
-use log::{debug, info, trace, warn};
+use log::{debug, warn};
 use oar_scheduler_core::model::job::JobBuilder;
 use oar_scheduler_core::platform::Job;
-use sea_query::{Alias, Expr, Func, Query};
+use sea_query::{Alias, Expr, Query};
 use sea_query::{ExprTrait, Iden};
 use sqlx::{Error, Row};
-use std::io::{stdout, Write};
+use std::collections::HashSet;
 
 // jobs and related tables
 #[derive(Iden)]
@@ -225,6 +225,8 @@ pub trait JobDatabaseRequests {
     fn set_state(&self, session: &Session, new_state: JobState) -> Result<(), Error>;
     fn set_message(&self, session: &Session, message: &str) -> Result<(), Error>;
     fn set_resa_state(&self, session: &Session, new_resa_state: &str) -> Result<(), Error>;
+    fn set_info_type(&self, session: &Session, info_type: Option<&str>) -> Result<(), Error>;
+    fn set_job_type(&self, session: &Session, job_type: &str) -> Result<(), Error>;
     fn assign_moldable_and_set_start_time(&self, session: &Session, moldable_id: i64, start_time: i64) -> Result<(), Error>;
 }
 
@@ -254,10 +256,13 @@ impl JobDatabaseRequests for Job {
                     Jobs::SubmissionTime,
                     Jobs::StartTime,
                     Jobs::StopTime,
-                    // Jobs::State,
+                    Jobs::State,
                     Jobs::Message,
                     Jobs::Reservation,
                     Jobs::AssignedMoldableId,
+                    Jobs::Type,
+                    Jobs::InfoType,
+                    Jobs::Checkpoint,
                 ])
                 .from(Jobs::Table)
                 .apply_if(queues, |req, queues| {
@@ -297,9 +302,19 @@ impl JobDatabaseRequests for Job {
                     .assign_opt(jobs_moldables.get_job_assignment(session, &row, false).await)
                     .state(row.try_get(Jobs::State.unquoted()).unwrap_or("Waiting").into())
                     .message(row.try_get(Jobs::Message.unquoted()).unwrap_or("".to_string()))
+                    .job_type(
+                        row.try_get::<String, &str>(Jobs::Type.unquoted())
+                            .unwrap_or_else(|_| "PASSIVE".to_string())
+                            .into_boxed_str(),
+                    )
+                    .info_type_opt(row.try_get::<String, &str>(Jobs::InfoType.unquoted()).ok().map(|s| s.into_boxed_str()))
+                    .checkpoint(row.try_get::<i64, &str>(Jobs::Checkpoint.unquoted()).unwrap_or(0))
+                    .reservation(row.try_get::<String, &str>(Jobs::Reservation.unquoted()).unwrap_or_else(|_| "None".to_string()).into_boxed_str())
                     .moldables(moldables);
-                // Reservation jobs
-                if JobReservation::ToSchedule.as_str() == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
+                // Reservation jobs: keep the reservation start time even before the
+                // job gets an assignment, so that the meta-scheduler can process it.
+                let reservation = row.try_get::<String, &str>(Jobs::Reservation.unquoted()).unwrap_or_else(|_| "None".to_string());
+                if JobReservation::None.as_str() != reservation {
                     job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.unquoted()));
                 };
                 jobs.insert(id, job_builder.build());
@@ -333,28 +348,43 @@ impl JobDatabaseRequests for Job {
                     (Jobs::Table, Jobs::State),
                     (Jobs::Table, Jobs::Message),
                     (Jobs::Table, Jobs::Reservation),
-                    (Jobs::Table, Jobs::AssignedMoldableId),
+                    (Jobs::Table, Jobs::Type),
+                    (Jobs::Table, Jobs::InfoType),
+                    (Jobs::Table, Jobs::Checkpoint),
                 ])
-                .columns(vec![(GanttJobsPredictions::Table, GanttJobsPredictions::StartTime)])
+                .columns(vec![
+                    (GanttJobsPredictions::Table, GanttJobsPredictions::MoldableId),
+                    (GanttJobsPredictions::Table, GanttJobsPredictions::StartTime),
+                ])
                 .from(Jobs::Table)
                 .inner_join(
+                    MoldableJobDescriptions::Table,
+                    Expr::col((MoldableJobDescriptions::Table, MoldableJobDescriptions::JobId)).equals((Jobs::Table, Jobs::Id)),
+                )
+                .inner_join(
                     GanttJobsPredictions::Table,
-                    Expr::col(Jobs::AssignedMoldableId).equals(GanttJobsPredictions::MoldableId),
+                    Expr::col((GanttJobsPredictions::Table, GanttJobsPredictions::MoldableId))
+                        .equals((MoldableJobDescriptions::Table, MoldableJobDescriptions::Id)),
+                )
+                .inner_join(
+                    GanttJobsResources::Table,
+                    Expr::col((GanttJobsResources::Table, GanttJobsResources::MoldableId))
+                        .equals((GanttJobsPredictions::Table, GanttJobsPredictions::MoldableId)),
                 )
                 .apply_if(reservation, |req, reservation| {
-                    req.and_where(Expr::col(Jobs::Reservation).eq(reservation.as_str()));
+                    req.and_where(Expr::col((Jobs::Table, Jobs::Reservation)).eq(reservation.as_str()));
                 })
                 .apply_if(queues, |req, queues| {
-                    req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
+                    req.and_where(Expr::col((Jobs::Table, Jobs::QueueName)).is_in(queues));
                 })
                 .apply_if(states, |req, states| {
-                    req.and_where(Expr::col(Jobs::State).is_in(states.iter().map(|s| s.as_str().as_enum("job_state"))));
+                    req.and_where(Expr::col((Jobs::Table, Jobs::State)).is_in(states.iter().map(|s| s.as_str().as_enum("job_state"))));
                 })
                 .apply_if(max_start_time, |req, max_start_time| {
                     req.and_where(Expr::col((GanttJobsPredictions::Table, GanttJobsPredictions::StartTime)).lte(max_start_time));
                 })
                 .order_by((GanttJobsPredictions::Table, GanttJobsPredictions::StartTime), sea_query::Order::Asc)
-                .order_by(Jobs::Id, sea_query::Order::Asc)
+                .order_by((Jobs::Table, Jobs::Id), sea_query::Order::Asc)
                 .to_owned()
                 .fetch_all(session)
                 .await?;
@@ -366,9 +396,17 @@ impl JobDatabaseRequests for Job {
             let jobs_moldables = AllJobMoldables::load_moldables_for_jobs(session, job_ids).await?;
 
             let mut jobs: Vec<Job> = Vec::with_capacity(rows.len());
+            let mut seen_jobs: HashSet<i64> = HashSet::new();
             for row in rows {
                 let id: i64 = row.get(Jobs::Id.unquoted());
+                // The join on `gantt_jobs_resources` duplicates rows (one per resource).
+                if !seen_jobs.insert(id) {
+                    continue;
+                }
+                let moldable_id: i64 = row.get(GanttJobsPredictions::MoldableId.unquoted());
+                let start_time: i64 = row.get(GanttJobsPredictions::StartTime.unquoted());
                 let moldables = jobs_moldables.get_job_moldables(id);
+                let assignment = jobs_moldables.get_gantt_job_assignment(session, id, moldable_id, start_time).await;
 
                 let mut job_builder = JobBuilder::new(id)
                     .types(jobs_types.get_job_types(id))
@@ -378,13 +416,22 @@ impl JobDatabaseRequests for Job {
                     .queue(row.get::<String, &str>(Jobs::QueueName.unquoted()).into_boxed_str())
                     .dependencies(jobs_dependencies.get_job_dependencies(id))
                     .submission_time(row.get::<i64, &str>(Jobs::SubmissionTime.unquoted()))
-                    .assign_opt(jobs_moldables.get_job_assignment(session, &row, true).await)
+                    .assign_opt(assignment)
                     .state(row.try_get(Jobs::State.unquoted()).unwrap_or("Waiting").into())
                     .message(row.try_get(Jobs::Message.unquoted()).unwrap_or("".to_string()))
+                    .job_type(
+                        row.try_get::<String, &str>(Jobs::Type.unquoted())
+                            .unwrap_or_else(|_| "PASSIVE".to_string())
+                            .into_boxed_str(),
+                    )
+                    .info_type_opt(row.try_get::<String, &str>(Jobs::InfoType.unquoted()).ok().map(|s| s.into_boxed_str()))
+                    .checkpoint(row.try_get::<i64, &str>(Jobs::Checkpoint.unquoted()).unwrap_or(0))
+                    .reservation(row.try_get::<String, &str>(Jobs::Reservation.unquoted()).unwrap_or_else(|_| "None".to_string()).into_boxed_str())
                     .moldables(moldables);
-                // Reservation jobs
-                if JobReservation::ToSchedule.as_str() == row.get::<String, &str>(Jobs::Reservation.unquoted()) {
-                    job_builder = job_builder.set_advance_reservation_start_time(row.get::<i64, &str>(Jobs::StartTime.unquoted()));
+                // Reservation jobs: keep the reservation start time.
+                let reservation = row.try_get::<String, &str>(Jobs::Reservation.unquoted()).unwrap_or_else(|_| "None".to_string());
+                if JobReservation::None.as_str() != reservation {
+                    job_builder = job_builder.set_advance_reservation_start_time(start_time);
                 };
                 jobs.push(job_builder.build());
             }
@@ -393,8 +440,10 @@ impl JobDatabaseRequests for Job {
     }
 
     fn set_state(&self, session: &Session, new_state: JobState) -> Result<(), Error> {
+        // `get_now` runs its own blocking runtime, so it must be called outside
+        // of the `block_on` below.
+        let now = session.get_now();
         session.runtime.block_on(async {
-            let tx = session.begin().await;
             let mut states = vec![
                 "toLaunch",
                 "toError",
@@ -407,7 +456,13 @@ impl JobDatabaseRequests for Job {
                 "Suspended",
                 "Resuming",
             ];
-            states.remove(states.iter().position(|s| *s == new_state.as_str()).expect("Invalid state"));
+            // If the target state is one of the source states, remove it so that
+            // re-setting the same state is a no-op. Unlike the Python code, an
+            // unknown target state (e.g. "Error") must NOT panic: it is simply
+            // allowed to transition from any listed source state.
+            if let Some(pos) = states.iter().position(|s| *s == new_state.as_str()) {
+                states.remove(pos);
+            }
             let states = states.into_iter().map(|s| s.as_enum("job_state"));
             let res = Query::update()
                 .table(Jobs::Table)
@@ -416,7 +471,6 @@ impl JobDatabaseRequests for Job {
                 .value(Jobs::State, new_state.as_str().as_enum("job_state"))
                 .execute(session)
                 .await?;
-            tx.commit().await.unwrap();
             if res == 0 {
                 warn!(
                     "Job is already terminated or in error or wanted state, job_id: {}, wanted state: {}",
@@ -427,8 +481,29 @@ impl JobDatabaseRequests for Job {
 
             debug!("Job {} state changed to {}", self.id, new_state.as_str());
 
-            // TODO: update the JobStateLog table and notify user as done here:
-            //   https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/lib/job_handling.py#L1714-L1800
+            // Close the currently open state log entry and open a new one.
+            Query::update()
+                .table(JobStateLogs::Table)
+                .and_where(Expr::col(JobStateLogs::DateStop).eq(0))
+                .and_where(Expr::col(JobStateLogs::JobId).eq(self.id))
+                .value(JobStateLogs::DateStop, now)
+                .execute(session)
+                .await?;
+            Query::insert()
+                .into_table(JobStateLogs::Table)
+                .columns(vec![JobStateLogs::JobId, JobStateLogs::JobState, JobStateLogs::DateStart])
+                .values_panic(vec![self.id.into(), new_state.as_str().into(), now.into()])
+                .execute(session)
+                .await?;
+
+            // Error/Terminated jobs no longer use their resources: update the
+            // `last_job_date` of those resources (used by node energy saving).
+            if matches!(new_state, JobState::Error)
+                && let Some(assignment) = self.assignment.as_ref()
+                && let Some(moldable) = self.moldables.get(assignment.moldable_index)
+            {
+                crate::model::meta::update_scheduler_last_job_date_async(session, now, moldable.id).await?;
+            }
 
             Ok(())
         })
@@ -463,6 +538,30 @@ impl JobDatabaseRequests for Job {
                     self.id, new_resa_state
                 );
             }
+            Ok(())
+        })
+    }
+
+    fn set_info_type(&self, session: &Session, info_type: Option<&str>) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .value(Jobs::InfoType, info_type)
+                .execute(session)
+                .await?;
+            Ok(())
+        })
+    }
+
+    fn set_job_type(&self, session: &Session, job_type: &str) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .value(Jobs::Type, job_type)
+                .execute(session)
+                .await?;
             Ok(())
         })
     }

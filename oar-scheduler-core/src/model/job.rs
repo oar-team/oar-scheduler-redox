@@ -36,6 +36,17 @@ pub struct Job {
     pub karma: f64,
     pub message: String,
     pub state: String,
+    /// `jobs.job_type` column: `PASSIVE`, `INTERACTIVE`, etc.
+    /// It is distinct from the `job_types` table stored in [`Job::types`].
+    pub job_type: Box<str>,
+    /// `jobs.info_type` column: `addr:port` used to notify the `oarsub` client
+    /// (interactive/passive jobs) about state changes and reservation acks.
+    pub info_type: Option<Box<str>>,
+    /// `jobs.checkpoint` column: checkpoint duration in seconds (0 means the job
+    /// must not be checkpointed before being killed).
+    pub checkpoint: i64,
+    /// `jobs.reservation` column: `None`, `toSchedule`, `Scheduled` or `Error`.
+    pub reservation: Box<str>,
 }
 
 #[derive(Debug, Clone)]
@@ -198,6 +209,10 @@ pub struct JobBuilder {
     submission_time: i64,
     message: String,
     state: String,
+    job_type: Box<str>,
+    info_type: Option<Box<str>>,
+    checkpoint: i64,
+    reservation: Box<str>,
 }
 
 impl JobBuilder {
@@ -218,6 +233,10 @@ impl JobBuilder {
             submission_time: 0,
             message: String::new(),
             state: "Waiting".into(),
+            job_type: "PASSIVE".into(),
+            info_type: None,
+            checkpoint: 0,
+            reservation: "None".into(),
         }
     }
     pub fn moldable_auto(mut self, id: i64, walltime: i64, requests: HierarchyRequests) -> Self {
@@ -319,6 +338,22 @@ impl JobBuilder {
         self.state = state;
         self
     }
+    pub fn job_type(mut self, job_type: Box<str>) -> Self {
+        self.job_type = job_type;
+        self
+    }
+    pub fn info_type_opt(mut self, info_type: Option<Box<str>>) -> Self {
+        self.info_type = info_type;
+        self
+    }
+    pub fn checkpoint(mut self, checkpoint: i64) -> Self {
+        self.checkpoint = checkpoint;
+        self
+    }
+    pub fn reservation(mut self, reservation: Box<str>) -> Self {
+        self.reservation = reservation;
+        self
+    }
     // Computes automatically the no_quotas from the types and TimeSharing and Placeholder if None.
     pub fn build(self) -> Job {
         Job {
@@ -342,6 +377,10 @@ impl JobBuilder {
             karma: 0.0,
             message: self.message,
             state: self.state,
+            job_type: self.job_type,
+            info_type: self.info_type,
+            checkpoint: self.checkpoint,
+            reservation: self.reservation,
         }
     }
 }

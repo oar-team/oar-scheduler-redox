@@ -29,7 +29,7 @@ impl PlatformTrait for PlatformBenchMock {
     fn get_scheduled_jobs(&self) -> Vec<Job> {
         self.scheduled_jobs.clone()
     }
-    fn get_waiting_jobs(&self) -> IndexMap<i64, Job> {
+    fn get_waiting_jobs(&self, queues: Vec<String>) -> IndexMap<i64, Job> {
         self.waiting_jobs.clone()
     }
 
@@ -52,8 +52,14 @@ impl PlatformTrait for PlatformBenchMock {
     }
 }
 
-
-pub fn generate_mock_platform_config(cache_enabled: bool, res_count: u32, switch_size: u32, node_size: u32, cpu_size: u32, quotas_enable: bool) -> PlatformConfig {
+pub fn generate_mock_platform_config(
+    cache_enabled: bool,
+    res_count: u32,
+    switch_size: u32,
+    node_size: u32,
+    cpu_size: u32,
+    quotas_enable: bool,
+) -> PlatformConfig {
     let mut config = Configuration::default();
     config.quotas = quotas_enable;
     config.cache_enabled = cache_enabled;
@@ -68,11 +74,10 @@ pub fn generate_mock_platform_config(cache_enabled: bool, res_count: u32, switch
 /// Generates a mock resource set with a hierarchy of switches, nodes, cpus and cores as the unit.
 /// `switch_size` is expressed in number of nodes, `node_size` in number of CPUs, and `cpu_size` in number of cores.
 pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u32, cpu_size: u32) -> ResourceSet {
-
     let mut switches = Vec::new();
     let mut i = 1;
     while i <= res_count {
-        let next_i = (i + (switch_size * node_size * cpu_size)).min(res_count+1);
+        let next_i = (i + (switch_size * node_size * cpu_size)).min(res_count + 1);
         switches.push(ProcSet::from_iter([i..=(next_i - 1)]));
         i = next_i;
     }
@@ -80,7 +85,7 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
     let mut nodes = Vec::new();
     i = 1;
     while i <= res_count {
-        let next_i = (i + (node_size * cpu_size)).min(res_count+1);
+        let next_i = (i + (node_size * cpu_size)).min(res_count + 1);
         nodes.push(ProcSet::from_iter([i..=(next_i - 1)]));
         i = next_i;
     }
@@ -88,7 +93,7 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
     let mut cpus = Vec::new();
     i = 1;
     while i <= res_count {
-        let next_i = (i + cpu_size).min(res_count+1);
+        let next_i = (i + cpu_size).min(res_count + 1);
         cpus.push(ProcSet::from_iter([i..=(next_i - 1)]));
         i = next_i;
     }
@@ -109,13 +114,29 @@ pub fn generate_mock_resource_set(res_count: u32, switch_size: u32, node_size: u
     }
 }
 pub fn generate_mock_quotas_config(enabled: bool, res_count: u32) -> QuotasConfig {
-
     let default_rules = HashMap::from([
-        (("*".into(), "*".into(), "besteffort".into(), "*".into()), QuotasValue::new(None, None, None)),
-        (("*".into(), "*".into(), "smalljobs".into(), "*".into()), QuotasValue::new(Some(res_count * 8 / 10), None, None)),
-        (("*".into(), "*".into(), "midjobs".into(), "*".into()), QuotasValue::new(Some(res_count * 8 / 10), None, None)),
-        (("*".into(), "*".into(), "longrun".into(), "*".into()), QuotasValue::new(None, Some(5), None)),
+        (
+            ("*".into(), "*".into(), "besteffort".into(), "*".into()),
+            QuotasValue::new(None, None, None),
+        ),
+        (
+            ("*".into(), "*".into(), "smalljobs".into(), "*".into()),
+            QuotasValue::new(Some(res_count * 8 / 10), None, None),
+        ),
+        (
+            ("*".into(), "*".into(), "midjobs".into(), "*".into()),
+            QuotasValue::new(Some(res_count * 8 / 10), None, None),
+        ),
+        (
+            ("*".into(), "*".into(), "longrun".into(), "*".into()),
+            QuotasValue::new(None, Some(5), None),
+        ),
     ]);
 
-    QuotasConfig::new(enabled, None, default_rules, Box::new(["*".into(), "besteffort".into(), "smalljobs".into(), "midjobs".into(), "longrun".into()]))
+    QuotasConfig::new(
+        enabled,
+        None,
+        default_rules,
+        Box::new(["*".into(), "besteffort".into(), "smalljobs".into(), "midjobs".into(), "longrun".into()]),
+    )
 }

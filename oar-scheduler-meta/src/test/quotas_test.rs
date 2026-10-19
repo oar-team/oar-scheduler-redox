@@ -1,7 +1,5 @@
 use crate::platform::Platform;
-use crate::test::setup_for_tests;
-use dotenvy::dotenv;
-use log::{info, LevelFilter};
+use log::info;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_db::Session;
@@ -10,20 +8,22 @@ const OAR_CONFIG: &str = include_str!("../../oar_config.env");
 const QUOTAS_CONFIG: &str = include_str!("../../quotas_config.json");
 
 fn quotas_setup() -> Platform {
-    // Create temp files for configs
-    let oar_config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file for oar config");
-    std::fs::write(oar_config_file.path(), OAR_CONFIG).expect("Failed to write oar config to temp file");
-    oar_config_file.path().to_str().unwrap().to_string();
+    // Create a temp file for the quotas config.
     let quotas_config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file for quotas config");
     std::fs::write(quotas_config_file.path(), QUOTAS_CONFIG).expect("Failed to write quotas config to temp file");
-    quotas_config_file.path().to_str().unwrap().to_string();
-    unsafe {
-        std::env::set_var("OARCONFFILE", oar_config_file.path());
-    }
 
-    let (session, mut config) = setup_for_tests(true);
-    info!("quotas config path: {}", quotas_config_file.path().to_str().unwrap());
+    // Build the configuration from the embedded oar config string, WITHOUT touching
+    // any global environment variable (doing so would race with the other tests).
+    let mut config = Configuration::load_from_str(OAR_CONFIG).expect("Failed to parse oar config");
+    // Use an in-memory sqlite database and the freshly created quotas config file.
+    config.db_type = "sqlite".to_string();
+    config.db_hostname = ":memory:".to_string();
     config.quotas_conf_file = Some(quotas_config_file.path().to_str().unwrap().to_string());
+
+    info!("quotas config path: {}", quotas_config_file.path().to_str().unwrap());
+
+    let session = Session::new(&config);
+    session.create_schema();
 
     Platform::from_database(session, config)
 }

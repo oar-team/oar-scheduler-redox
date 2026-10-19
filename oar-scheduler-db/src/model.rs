@@ -7,6 +7,7 @@ pub mod queues;
 pub mod job_types;
 pub mod job_dependencies;
 pub mod moldable;
+pub mod meta;
 
 pub trait SqlEnum {
     fn as_str(&self) -> &str;

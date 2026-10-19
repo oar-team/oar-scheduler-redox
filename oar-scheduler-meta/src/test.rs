@@ -6,6 +6,8 @@ use oar_scheduler_db::Session;
 #[cfg(test)]
 mod job_test;
 #[cfg(test)]
+mod meta_schedule_test;
+#[cfg(test)]
 mod queues_test;
 #[cfg(test)]
 mod quotas_test;

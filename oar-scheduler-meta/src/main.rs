@@ -1,13 +1,15 @@
 mod platform;
 mod queues_schedule;
 mod meta_schedule;
+mod notification;
+mod walltime_change;
+mod energy_saving;
 #[cfg(test)]
 mod test;
 
 use dotenvy::dotenv;
 use log::LevelFilter;
 use oar_scheduler_core::model::configuration::Configuration;
-use oar_scheduler_core::platform::PlatformTrait;
 use oar_scheduler_db::Session;
 use platform::Platform;
 

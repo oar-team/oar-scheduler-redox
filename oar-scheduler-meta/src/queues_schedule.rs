@@ -1,19 +1,28 @@
 use crate::platform::Platform;
 use indexmap::IndexMap;
 use log::{debug, info, warn};
-use oar_scheduler_core::model::job::JobAssignment;
+use oar_scheduler_core::model::job::{JobAssignment, ProcSet};
 use oar_scheduler_core::platform::{Job, PlatformTrait, ProcSetCoresOp};
 use oar_scheduler_core::scheduler::slotset::SlotSet;
 use oar_scheduler_core::scheduler::{kamelot, quotas};
 use oar_scheduler_db::model::jobs::{JobDatabaseRequests, JobState};
 use oar_scheduler_db::model::queues::Queue;
+use oar_scheduler_db::model::{events, meta};
 use std::collections::HashMap;
 
 ///
 pub fn queues_schedule(platform: &mut Platform) -> Vec<Job> {
     // Init slotset
-    let (mut slot_sets, besteffort_scheduled_jobs) = kamelot::init_slot_sets(platform, false);
+    let (mut slot_sets, _) = kamelot::init_slot_sets(platform, false);
     info!("Slotset map: {:?}", slot_sets.keys().collect::<Vec<&Box<str>>>());
+
+    // Besteffort jobs currently occupying resources, used later to detect which
+    // besteffort jobs must be killed when higher priority jobs get scheduled.
+    let besteffort_scheduled_jobs = platform
+        .get_scheduled_jobs()
+        .into_iter()
+        .filter(|job| job.types.contains_key::<Box<str>>(&"besteffort".into()))
+        .collect::<Vec<Job>>();
 
     // Schedule each queue
     let grouped_queues: Vec<Vec<Queue>> = Queue::get_all_grouped_by_priority(&platform.session()).expect("Failed to get queues from database");
@@ -39,15 +48,152 @@ pub fn queues_schedule(platform: &mut Platform) -> Vec<Job> {
         // Schedule jobs
         kamelot::internal_schedule_cycle(&mut *platform, &mut slot_sets, &active_queues);
 
+        // Resources that are currently usable (Alive or Absent), used to detect
+        // advance reservations waiting for their resources.
+        let alive_resources = get_alive_resources(platform);
+
         for queue in active_queues {
-            // TODO: Manage waiting reservation jobs with the `handle_waiting_reservation_jobs` behavior:
-            //   https://github.com/oar-team/oar3/blob/e6b6e7e59eb751cc2e7388d6c2fb7f94a3ac8c6e/oar/kao/queues_sched.py#L421-L512
+            // Process accepted advance reservations waiting for their resources
+            handle_waiting_reservation_jobs(platform, &queue, &alive_resources);
 
             // Check new AR jobs
             check_reservation_jobs(platform, &mut slot_sets, &queue)
         }
     }
     besteffort_scheduled_jobs
+}
+
+/// The set of resources that are currently `Alive` or `Absent` (mirrors
+/// `resource_set.roid_itvs`).
+fn get_alive_resources(platform: &Platform) -> ProcSet {
+    let session = platform.session();
+    meta::get_alive_resource_ids(session)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|resource_id| session.resource_id_to_resource_index(*resource_id))
+        .collect()
+}
+
+/// Replace every `R=<digits>` occurrence of a job message by `R=<nb>`.
+/// Returns `None` when the message does not change.
+fn replace_resource_count(message: &str, nb_resources: usize) -> Option<String> {
+    let mut new_message = String::with_capacity(message.len());
+    let bytes = message.as_bytes();
+    let mut i = 0;
+    let mut replaced = false;
+    while i < bytes.len() {
+        if bytes[i] == b'R' && i + 1 < bytes.len() && bytes[i + 1] == b'=' {
+            let mut j = i + 2;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > i + 2 {
+                new_message.push_str(&format!("R={}", nb_resources));
+                replaced = true;
+                i = j;
+                continue;
+            }
+        }
+        new_message.push(bytes[i] as char);
+        i += 1;
+    }
+    if replaced { Some(new_message) } else { None }
+}
+
+/// Handle the accepted advance reservations that are waiting for their
+/// resources. Mirrors `oar.kao.meta_sched.handle_waiting_reservation_jobs`.
+fn handle_waiting_reservation_jobs(platform: &Platform, queue_name: &str, alive_resources: &ProcSet) {
+    let session = platform.session();
+    let now = platform.get_now();
+    let reservation_waiting_timeout = platform.get_platform_config().config.reservation_waiting_resources_timeout;
+
+    debug!("Queue {}: begin processing accepted Advance Reservations", queue_name);
+
+    let ar_jobs = platform.get_gantt_waiting_scheduled_ar_jobs(queue_name.to_string());
+
+    for job in ar_jobs {
+        let Some(assignment) = job.assignment.as_ref() else {
+            continue;
+        };
+        let Some(moldable) = job.moldables.get(assignment.moldable_index) else {
+            continue;
+        };
+        let moldable_id = moldable.id;
+        let walltime = moldable.walltime;
+        let res_set = assignment.resources.clone();
+        let start_time = assignment.begin;
+
+        // Test if the AR job is expired and handle it.
+        if now > start_time + walltime {
+            warn!(
+                "[{}] set job state to Error: advance reservation expired and couldn't be started",
+                job.id
+            );
+            if let Err(err) = job.set_state(session, JobState::Error) {
+                warn!("Unable to set job {} state to Error: {}", job.id, err);
+            }
+            if let Err(err) = job.set_message(session, "Reservation expired and couldn't be started.") {
+                warn!("Unable to set job {} message: {}", job.id, err);
+            }
+        } else {
+            // Determine the currently available resources of this reservation.
+            let avail_res = alive_resources.clone() & res_set.clone();
+
+            if avail_res.is_empty() && start_time < now {
+                warn!("[{}] advance reservation is waiting because no resource is present", job.id);
+                // Delay the launching time.
+                if let Err(err) = meta::set_gantt_job_start_time(session, moldable_id, now + 1) {
+                    warn!("Unable to delay reservation {}: {}", job.id, err);
+                }
+            } else if start_time < now {
+                if (start_time + reservation_waiting_timeout) > now {
+                    if avail_res != res_set {
+                        // The expected resources are not all available, wait the timeout.
+                        warn!(
+                            "[{}] advance reservation is waiting because not all resources are available yet (timeout in {} seconds)",
+                            job.id,
+                            start_time + reservation_waiting_timeout - now
+                        );
+                        if let Err(err) = meta::set_gantt_job_start_time(session, moldable_id, now + 1) {
+                            warn!("Unable to delay reservation {}: {}", job.id, err);
+                        }
+                    }
+                } else {
+                    // It's time to launch the AR job: remove the missing resources.
+                    let missing_resources = res_set.clone() - avail_res.clone();
+                    let missing_ids = missing_resources
+                        .iter()
+                        .filter_map(|resource_index| session.resource_index_to_resource_id(resource_index))
+                        .collect::<Vec<i32>>();
+                    if let Err(err) = meta::remove_gantt_resources(session, moldable_id, &missing_ids) {
+                        warn!("Unable to remove missing resources of reservation {}: {}", job.id, err);
+                    }
+                    warn!(
+                        "[{}] remove some resources assigned to this advance reservation, because they are not Alive",
+                        job.id
+                    );
+                    events::add_new_event(
+                        session,
+                        "SCHEDULER_REDUCE_NB_RESSOURCES_FOR_RESERVATION",
+                        job.id,
+                        format!("[MetaSched] Reduce the number of resources for the job {}", job.id).as_str(),
+                    );
+
+                    let nb_res = (res_set.len() - missing_resources.len()) as usize;
+                    if let Some(new_message) = replace_resource_count(job.message.as_str(), nb_res) {
+                        if let Err(err) = job.set_message(session, &new_message) {
+                            warn!("Unable to set job {} message: {}", job.id, err);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    debug!(
+        "Queue {}: end processing of reservations with missing resources",
+        queue_name
+    );
 }
 
 fn check_reservation_jobs(platform: &mut Platform, slot_sets: &mut HashMap<Box<str>, SlotSet>, queue: &String) {
@@ -145,4 +291,21 @@ fn set_job_resa_scheduled(platform: &Platform, job: &Job, error: Option<&str>) {
 }
 fn set_job_resa_not_scheduled(platform: &Platform, job: &Job, error: &str) {
     set_job_resa_state(platform, job, JobState::Error, Some(error), false);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::replace_resource_count;
+
+    #[test]
+    fn test_replace_resource_count() {
+        assert_eq!(replace_resource_count("R=4 W=1:00:00", 2).as_deref(), Some("R=2 W=1:00:00"));
+        assert_eq!(
+            replace_resource_count("R=4/R=7 W=1", 3).as_deref(),
+            Some("R=3/R=3 W=1")
+        );
+        // No `R=<digits>` in the message: it must not change.
+        assert_eq!(replace_resource_count("Reservation expired", 2), None);
+        assert_eq!(replace_resource_count("R=", 2), None);
+    }
 }

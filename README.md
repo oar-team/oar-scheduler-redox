@@ -106,7 +106,9 @@ Each crate has its own README with full documentation:
 - [x] Notifications to the bipbip commander through a native ZMQ `PUSH` socket (`omq` crate, `BIPBIP_COMMANDER_SERVER` /
   `BIPBIP_COMMANDER_PORT`), sending the same `OARRUN` JSON payload as the Python meta-scheduler.
   Setting `OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD` keeps the older behaviour (delegation to `oar-notify-to-run-job`).
-- [ ] The internal energy saving module (Greta, ZMQ based) is not implemented: only the external node manager commands are used.
+- [x] Greta client (internal energy saving, ZMQ based): with `ENERGY_SAVING_INTERNAL=yes`, the `HALT`, `WAKEUP` and `CHECK`
+  commands are pushed to `GRETA_SERVER`:`GRETA_PORT` instead of running the external node manager commands.
+  The Greta daemon itself remains the Python `oar.modules.greta` module.
 - [ ] Remove the usage of gantt tables `gantt_jobs_resources` and `gantt_jobs_predictions` as they add an intermediary step with heavy
   database requests. In a full Rust implementation, this is a useless overhead.
 

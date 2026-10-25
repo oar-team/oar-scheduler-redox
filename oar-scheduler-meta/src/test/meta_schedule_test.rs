@@ -95,7 +95,7 @@ fn setup(nb_resources: usize) -> (Platform, Rc<RefCell<Notifications>>) {
 }
 
 /// Creates a platform like [`setup`] but lets the caller customize the configuration.
-fn setup_with_config(nb_resources: usize, customize: impl FnOnce(&mut Configuration)) -> Platform {
+pub(crate) fn setup_with_config(nb_resources: usize, customize: impl FnOnce(&mut Configuration)) -> Platform {
     let (session, mut config) = setup_for_tests(true);
     session.reset();
     for i in 1..=nb_resources {

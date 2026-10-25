@@ -4,6 +4,8 @@ mod meta_schedule;
 mod notification;
 mod walltime_change;
 mod energy_saving;
+mod greta;
+mod zmq;
 #[cfg(test)]
 mod test;
 

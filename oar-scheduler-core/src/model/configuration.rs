@@ -85,6 +85,13 @@ pub struct Configuration {
     /// Port of the bipbip commander ZMQ `PULL` socket (`BIPBIP_COMMANDER_PORT`).
     #[serde(default)]
     pub bipbip_commander_port: Option<String>,
+    // --- Energy saving (Greta) configuration ---
+    /// Host of the internal energy saving module ZMQ `PULL` socket (`GRETA_SERVER`).
+    #[serde(default)]
+    pub greta_server: Option<String>,
+    /// Port of the internal energy saving module ZMQ `PULL` socket (`GRETA_PORT`).
+    #[serde(default)]
+    pub greta_port: Option<String>,
 }
 
 impl Configuration {
@@ -169,6 +176,8 @@ impl Default for Configuration {
             suspend_resume_script_timeout: None,
             bipbip_commander_server: None,
             bipbip_commander_port: None,
+            greta_server: None,
+            greta_port: None,
         }
     }
 }
@@ -193,6 +202,27 @@ impl Configuration {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or("6671");
+        format!("tcp://{}:{}", server, port)
+    }
+
+    /// Returns the ZMQ endpoint of the internal energy saving module (Greta), as
+    /// a `tcp://host:port` URI.
+    ///
+    /// Defaults mirror the Python meta-scheduler (`oar.lib.configuration`):
+    /// `localhost` on port `6672`.
+    pub fn greta_endpoint(&self) -> String {
+        let server = self
+            .greta_server
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("localhost");
+        let port = self
+            .greta_port
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("6672");
         format!("tcp://{}:{}", server, port)
     }
 

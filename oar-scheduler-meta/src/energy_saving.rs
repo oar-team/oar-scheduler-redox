@@ -3,6 +3,7 @@
 //! Rust counterpart of `oar.kao.meta_sched.nodes_energy_saving` and the
 //! `oar/lib/node.py` helpers it relies on.
 
+use crate::greta::GretaClient;
 use crate::platform::Platform;
 use log::{debug, error, info, warn};
 use oar_scheduler_core::platform::PlatformTrait;
@@ -151,27 +152,31 @@ pub fn run_command_with_args(command: &str, args: &[String], timeout_secs: u64) 
     }
 }
 
-/// Apply the computed node changes by running the configured node manager
-/// commands. Mirrors the command execution part of `nodes_energy_saving` and
+/// Apply the computed node changes, through Greta when the internal energy
+/// saving module is enabled, or through the configured node manager commands
+/// otherwise. Mirrors the command execution part of `nodes_energy_saving` and
 /// the `meta_schedule` call site.
 ///
-/// The internal energy saving module (Greta, based on ZMQ) is not available in
-/// the Rust meta-scheduler: when `ENERGY_SAVING_INTERNAL` is enabled a warning
-/// is emitted and the external commands are used instead.
+/// Like the Python meta-scheduler:
+/// - `ENERGY_SAVING_INTERNAL=yes` sends `HALT` / `WAKEUP` commands to Greta;
+/// - otherwise the `SCHEDULER_NODE_MANAGER_SLEEP_CMD` /
+///   `SCHEDULER_NODE_MANAGER_WAKE_UP_CMD` commands are run;
+/// - with the internal module, a `CHECK` is sent when no `HALT`/`WAKEUP` was
+///   needed, so that Greta keeps track of booting nodes and timeouts.
 pub fn apply_nodes_energy_saving(platform: &Platform, changes: &NodeChanges) {
     let config = &platform.get_platform_config().config;
     let internal = is_yes(config.energy_saving_internal.as_deref());
     let timeout = config.scheduler_timeout.unwrap_or(30).max(0) as u64;
 
-    if internal {
-        warn!(
-            "ENERGY_SAVING_INTERNAL is enabled but the internal energy saving module (Greta/ZMQ) is not available in the Rust meta-scheduler"
-        );
-    }
+    // Created on demand only: no ZMQ socket (and no IO thread) when Greta is not
+    // used.
+    let greta = internal.then(|| GretaClient::from_config(config));
 
     if !changes.halt.is_empty() {
         debug!("Powering off some nodes (energy saving): {:?}", changes.halt);
-        if let Some(cmd) = config
+        if let Some(greta) = greta.as_ref() {
+            greta.halt_nodes(&changes.halt);
+        } else if let Some(cmd) = config
             .scheduler_node_manager_sleep_cmd
             .as_deref()
             .or(config.energy_saving_node_manager_sleep_cmd.as_deref())
@@ -186,7 +191,9 @@ pub fn apply_nodes_energy_saving(platform: &Platform, changes: &NodeChanges) {
 
     if !changes.wakeup.is_empty() {
         debug!("Waking up some nodes (energy saving): {:?}", changes.wakeup);
-        if let Some(cmd) = config
+        if let Some(greta) = greta.as_ref() {
+            greta.wake_up_nodes(&changes.wakeup);
+        } else if let Some(cmd) = config
             .scheduler_node_manager_wake_up_cmd
             .as_deref()
             .or(config.energy_saving_node_manager_wake_up_cmd.as_deref())
@@ -196,6 +203,13 @@ pub fn apply_nodes_energy_saving(platform: &Platform, changes: &NodeChanges) {
             }
         } else {
             warn!("No node manager wake up command configured: nodes will not be woken up");
+        }
+    }
+
+    // Nothing to do for Greta: ask it to check booting nodes and timeouts.
+    if let Some(greta) = greta.as_ref() {
+        if changes.halt.is_empty() && changes.wakeup.is_empty() {
+            greta.check_nodes();
         }
     }
 }

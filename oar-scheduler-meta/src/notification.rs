@@ -15,12 +15,11 @@
 //! Everything goes through the [`JobNotifier`] trait so that tests can record
 //! notifications instead of emitting them.
 
+use crate::zmq::PushSocket;
 use log::{debug, warn};
-use omq::{Message, Options, SocketType, blocking};
 use std::io::Write;
 use std::net::TcpStream;
 use std::process::Command;
-use std::sync::Mutex;
 use std::time::Duration;
 
 /// ZMQ endpoint used when none is configured (mirrors `oar.lib.configuration`).
@@ -59,81 +58,26 @@ pub fn bipbip_run_job_payload(job_id: i64) -> String {
 /// the notifier (like the Python `tools.bipbip_commander_socket` global), so a
 /// cycle that launches several jobs only pays for one connection.
 pub struct ZmqBipbipNotifier {
-    endpoint: String,
-    socket: Mutex<Option<blocking::Socket>>,
+    socket: PushSocket,
 }
 
 impl ZmqBipbipNotifier {
     /// Creates a notifier for the given `tcp://host:port` endpoint.
     pub fn new(endpoint: impl Into<String>) -> Self {
         Self {
-            endpoint: endpoint.into(),
-            socket: Mutex::new(None),
+            socket: PushSocket::with_linger(endpoint, SEND_LINGER),
         }
     }
 
     /// Returns the endpoint this notifier pushes to.
     pub fn endpoint(&self) -> &str {
-        &self.endpoint
-    }
-
-    /// Sends one message, connecting on first use. Returns `true` when the
-    /// message was handed to the socket.
-    fn send(&self, payload: String) -> bool {
-        let mut guard = self.socket.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-
-        if guard.is_none() {
-            // `omq::Context` owns its IO thread(s); the blocking socket keeps a
-            // handle on it, so the context can be dropped here.
-            let context = omq::Context::new();
-            let mut options = Options::default();
-            // The meta-scheduler is a short-lived process: keep queued messages
-            // alive long enough for the handshake with the commander to finish.
-            options.linger = Some(SEND_LINGER);
-            let socket = context.blocking_socket(SocketType::Push, options);
-            if let Err(err) = socket.connect(self.endpoint.as_str()) {
-                warn!("Unable to connect to the bipbip commander at '{}': {}", self.endpoint, err);
-                return false;
-            }
-            debug!("Connected to the bipbip commander at '{}'", self.endpoint);
-            *guard = Some(socket);
-        }
-
-        let Some(socket) = guard.as_ref() else {
-            return false;
-        };
-        match socket.send(Message::from(payload)) {
-            Ok(()) => true,
-            Err(err) => {
-                warn!("Unable to notify the bipbip commander at '{}': {}", self.endpoint, err);
-                false
-            }
-        }
-    }
-}
-
-impl Drop for ZmqBipbipNotifier {
-    /// Closes the socket with its linger.
-    ///
-    /// The meta-scheduler is a short-lived process: without an explicit,
-    /// blocking close, queued messages are discarded when the process exits
-    /// right after `send` (the ZMTP handshake may not have completed yet).
-    fn drop(&mut self) {
-        let socket = match self.socket.get_mut() {
-            Ok(socket) => socket.take(),
-            Err(poisoned) => poisoned.into_inner().take(),
-        };
-        if let Some(socket) = socket {
-            if let Err(err) = socket.close() {
-                warn!("Unable to close the bipbip commander socket at '{}': {}", self.endpoint, err);
-            }
-        }
+        self.socket.endpoint()
     }
 }
 
 impl JobNotifier for ZmqBipbipNotifier {
     fn notify_to_run_job(&self, job_id: i64) -> bool {
-        let sent = self.send(bipbip_run_job_payload(job_id));
+        let sent = self.socket.send(bipbip_run_job_payload(job_id));
         if sent {
             debug!("Notified bipbip commander to launch job {}", job_id);
         }
@@ -254,7 +198,7 @@ mod tests {
     #[test]
     fn test_zmq_notifier_sends_oarrun_to_bipbip_commander() {
         let context = omq::Context::new();
-        let commander = context.blocking_socket(SocketType::Pull, Options::default());
+        let commander = context.blocking_socket(omq::SocketType::Pull, omq::Options::default());
         let endpoint = commander.bind("tcp://127.0.0.1:0").expect("bind the fake bipbip commander");
 
         let notifier = ZmqBipbipNotifier::new(endpoint.to_string());

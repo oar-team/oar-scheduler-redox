@@ -1308,6 +1308,7 @@ dependencies = [
  "oar-scheduler-db",
  "oar-scheduler-hooks",
  "omq-tokio",
+ "serde_json",
  "tempfile",
 ]
 

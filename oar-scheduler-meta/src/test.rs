@@ -4,6 +4,8 @@ use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_db::Session;
 
 #[cfg(test)]
+mod energy_saving_test;
+#[cfg(test)]
 mod job_test;
 #[cfg(test)]
 mod meta_schedule_test;

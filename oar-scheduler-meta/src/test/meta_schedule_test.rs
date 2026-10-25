@@ -153,6 +153,27 @@ fn test_meta_schedule_launches_job() {
     assert!(!waiting.contains_key(&job_id));
 }
 
+/// A job that cannot be scheduled (it requests no available resource) must not
+/// make the meta-scheduler panic: no assignment is saved, the job stays
+/// `Waiting` and the cycle still succeeds.
+#[test]
+fn test_meta_schedule_unschedulable_job_does_not_panic() {
+    let (mut platform, notifications) = setup(1);
+    insert_queue(&platform, "default", 2);
+    let job_id = insert_job(&platform, "default", "resource_id=42", 60, vec![]);
+
+    let exit_code = meta_schedule(&mut platform);
+    assert_eq!(exit_code, 0);
+
+    let job = get_job(&platform, job_id);
+    assert_eq!(job.state, JobState::Waiting.as_str());
+    assert!(job.assignment.is_none(), "no resource matches the request");
+    assert!(notifications.borrow().launched.is_empty());
+
+    let gantt_jobs = Job::get_gantt_jobs(&platform.session(), None, None, None, None).unwrap();
+    assert!(!gantt_jobs.iter().any(|job| job.id == job_id));
+}
+
 /// A besteffort job occupying a resource is flagged for deletion when a higher
 /// priority job is scheduled on the same resource, and the higher priority job
 /// is NOT launched during this cycle (exit code 2).

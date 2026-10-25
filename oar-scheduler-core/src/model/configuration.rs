@@ -78,6 +78,13 @@ pub struct Configuration {
     pub just_before_resume_exec_file: Option<String>,
     #[serde(default)]
     pub suspend_resume_script_timeout: Option<i64>,
+    // --- Notification (bipbip commander) configuration ---
+    /// Host of the bipbip commander ZMQ `PULL` socket (`BIPBIP_COMMANDER_SERVER`).
+    #[serde(default)]
+    pub bipbip_commander_server: Option<String>,
+    /// Port of the bipbip commander ZMQ `PULL` socket (`BIPBIP_COMMANDER_PORT`).
+    #[serde(default)]
+    pub bipbip_commander_port: Option<String>,
 }
 
 impl Configuration {
@@ -160,6 +167,8 @@ impl Default for Configuration {
             scheduler_timeout: None,
             just_before_resume_exec_file: None,
             suspend_resume_script_timeout: None,
+            bipbip_commander_server: None,
+            bipbip_commander_port: None,
         }
     }
 }
@@ -167,6 +176,26 @@ impl Default for Configuration {
 impl Configuration {
     /// In OAR configuration files, booleans are usually written as `yes`/`no`.
     /// This returns `true` only for `yes` (case-insensitive) or `true`.
+    /// Returns the ZMQ endpoint of the bipbip commander, as a `tcp://host:port` URI.
+    ///
+    /// Defaults mirror the Python meta-scheduler (`oar.lib.configuration`):
+    /// `localhost` on port `6671`.
+    pub fn bipbip_commander_endpoint(&self) -> String {
+        let server = self
+            .bipbip_commander_server
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("localhost");
+        let port = self
+            .bipbip_commander_port
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("6671");
+        format!("tcp://{}:{}", server, port)
+    }
+
     pub fn walltime_change_enabled(&self) -> bool {
         matches!(
             self.walltime_change_enabled.as_deref().map(str::trim).map(str::to_ascii_uppercase).as_deref(),

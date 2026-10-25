@@ -1,4 +1,4 @@
-use crate::notification::{CommandNotifier, JobNotifier};
+use crate::notification::{CommandNotifier, JobNotifier, ZmqBipbipNotifier};
 use indexmap::IndexMap;
 use oar_scheduler_core::model::configuration::Configuration;
 use oar_scheduler_core::model::job::Job;
@@ -26,6 +26,14 @@ impl Platform {
         let resource_set = session.get_resource_set(&config);
         let quotas_config = oar_scheduler_core::platform::build_quotas_config(&config, &resource_set);
 
+        // Notify the bipbip commander through ZMQ by default. Deployments that
+        // delegate the launch to an external command keep that behaviour by
+        // setting `OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD`.
+        let notifier: Box<dyn JobNotifier> = match std::env::var("OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD") {
+            Ok(command) if !command.trim().is_empty() => Box::new(CommandNotifier),
+            _ => Box::new(ZmqBipbipNotifier::new(config.bipbip_commander_endpoint())),
+        };
+
         let platform_config = Rc::new(PlatformConfig {
             resource_set,
             quotas_config,
@@ -36,7 +44,7 @@ impl Platform {
             now,
             session,
             platform_config,
-            notifier: Box::new(CommandNotifier),
+            notifier,
             notified_jobs: HashSet::new(),
         }
     }

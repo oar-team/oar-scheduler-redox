@@ -162,6 +162,9 @@ fn test_insert_job_and_queues() {
         .expect("Failed to insert test resource");
 
     let mut platform = Platform::from_database(session, config);
+    // Record notifications instead of pushing them to a real bipbip commander.
+    let (notifier, _notifications) = crate::test::meta_schedule_test::RecordingNotifier::new(true);
+    platform.set_notifier(Box::new(notifier));
 
     // Queue {
     //     queue_name: "admin".to_string(),

@@ -12,8 +12,10 @@ use oar_scheduler_db::model::queues::Queue;
 use oar_scheduler_db::model::resources::NewResource;
 use oar_scheduler_db::model::SqlEnum;
 use oar_scheduler_db::Session;
+use crate::notification::ZmqBipbipNotifier;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
 
 /// Records the notifications emitted by the meta-scheduler.
 #[derive(Default)]
@@ -151,6 +153,32 @@ fn test_meta_schedule_launches_job() {
     // The job is no longer waiting.
     let waiting = platform.get_waiting_jobs(vec!["default".to_string()]);
     assert!(!waiting.contains_key(&job_id));
+}
+
+/// The meta-scheduler notifies the bipbip commander natively through ZMQ: a job
+/// that gets launched produces exactly one `OARRUN` JSON message on the
+/// commander's `PULL` socket, in the format expected by `recv_json()`.
+#[test]
+fn test_meta_schedule_notifies_bipbip_over_zmq() {
+    let context = omq::Context::new();
+    let commander = context.blocking_socket(omq::SocketType::Pull, omq::Options::default());
+    let endpoint = commander.bind("tcp://127.0.0.1:0").expect("bind the fake bipbip commander");
+
+    let (mut platform, _notifications) = setup(1);
+    platform.set_notifier(Box::new(ZmqBipbipNotifier::new(endpoint.to_string())));
+    insert_queue(&platform, "default", 2);
+    let job_id = insert_job(&platform, "default", "resource_id=1", 60, vec![]);
+
+    assert_eq!(meta_schedule(&mut platform), 0);
+
+    let message = commander
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the bipbip commander should receive the OARRUN notification");
+    assert_eq!(message.len(), 1, "the commander reads a single JSON frame");
+    assert_eq!(
+        std::str::from_utf8(&message[0]).unwrap(),
+        format!(r#"{{"job_id":{}, "cmd":"OARRUN", "args":[]}}"#, job_id)
+    );
 }
 
 /// A job that cannot be scheduled (it requests no available resource) must not

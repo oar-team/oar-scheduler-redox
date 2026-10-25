@@ -103,8 +103,9 @@ Each crate has its own README with full documentation:
   - [x] Node energy saving (sleep/wake up decision and node manager commands).
   - [x] Resume jobs (`Resuming` state).
   - [x] `job_state_logs` maintenance and resource `last_job_date` update on state change.
-- [ ] Notifications through the bipbip commander are delegated to an external command (see `OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD`):
-  the ZMQ protocol is not implemented in the Rust meta-scheduler.
+- [x] Notifications to the bipbip commander through a native ZMQ `PUSH` socket (`omq` crate, `BIPBIP_COMMANDER_SERVER` /
+  `BIPBIP_COMMANDER_PORT`), sending the same `OARRUN` JSON payload as the Python meta-scheduler.
+  Setting `OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD` keeps the older behaviour (delegation to `oar-notify-to-run-job`).
 - [ ] The internal energy saving module (Greta, ZMQ based) is not implemented: only the external node manager commands are used.
 - [ ] Remove the usage of gantt tables `gantt_jobs_resources` and `gantt_jobs_predictions` as they add an intermediary step with heavy
   database requests. In a full Rust implementation, this is a useless overhead.

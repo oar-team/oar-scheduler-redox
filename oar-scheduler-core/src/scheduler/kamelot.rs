@@ -49,7 +49,11 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
             .into_iter()
             .filter(|(_id, job)| job.assignment.is_some())
             .collect::<IndexMap<i64, Job>>();
-        debug!("Kamelot internal saving josb: {}", assigned_jobs[0].id);
+        debug!(
+            "Kamelot internal saving {} assigned job(s): {:?}",
+            assigned_jobs.len(),
+            assigned_jobs.keys().collect::<Vec<_>>()
+        );
         platform.save_assignments(assigned_jobs);
 
         return slot_sets.get("default").unwrap().slot_count();

@@ -176,7 +176,7 @@ pub fn get_gantt_waiting_interactive_prediction_date(session: &Session) -> Resul
                 Expr::col((GanttJobsPredictions::Table, GanttJobsPredictions::MoldableId))
                     .equals((MoldableJobDescriptions::Table, MoldableJobDescriptions::Id)),
             )
-            .and_where(Expr::col((Jobs::Table, Jobs::State)).eq("Waiting"))
+            .and_where(crate::model::enum_as_text((Jobs::Table, Jobs::State)).eq("Waiting"))
             .and_where(Expr::col((Jobs::Table, Jobs::Type)).eq("INTERACTIVE"))
             .and_where(Expr::col((Jobs::Table, Jobs::Reservation)).eq("None"))
             .fetch_all(session)
@@ -432,7 +432,7 @@ pub fn get_jobs_with_walltime_change(session: &Session) -> Result<Vec<WalltimeCh
                 AssignedResources::Table,
                 Expr::col((Jobs::Table, Jobs::AssignedMoldableId)).equals((AssignedResources::Table, AssignedResources::MoldableId)),
             )
-            .and_where(Expr::col((Jobs::Table, Jobs::State)).eq("Running"))
+            .and_where(crate::model::enum_as_text((Jobs::Table, Jobs::State)).eq("Running"))
             .and_where(Expr::col((WalltimeChange::Table, WalltimeChange::Pending)).ne(0))
             .order_by((Jobs::Table, Jobs::Id), sea_query::Order::Asc)
             .to_owned()
@@ -490,7 +490,9 @@ pub fn get_job_suspended_sum_duration(session: &Session, job_id: i64, now: i64) 
             .from(JobStateLogs::Table)
             .and_where(Expr::col(JobStateLogs::JobId).eq(job_id))
             .and_where(
-                Expr::col(JobStateLogs::JobState).is_in(["Suspended".as_enum("job_state"), "Resuming".as_enum("job_state")]),
+                // `job_state_logs.job_state` is a varchar column (not the `job_state`
+                // enum), so it must be compared with plain string values.
+                Expr::col(JobStateLogs::JobState).is_in(["Suspended", "Resuming"]),
             )
             .to_owned()
             .fetch_all(session)
@@ -521,7 +523,7 @@ pub fn get_running_job(session: &Session, job_id: i64) -> Result<Option<(i64, i6
                 Expr::col((Jobs::Table, Jobs::AssignedMoldableId)).equals((MoldableJobDescriptions::Table, MoldableJobDescriptions::Id)),
             )
             .and_where(Expr::col((Jobs::Table, Jobs::Id)).eq(job_id))
-            .and_where(Expr::col((Jobs::Table, Jobs::State)).eq("Running"))
+            .and_where(crate::model::enum_as_text((Jobs::Table, Jobs::State)).eq("Running"))
             .to_owned()
             .fetch_all(session)
             .await?;
@@ -935,7 +937,7 @@ pub fn get_gantt_hostname_to_wake_up(session: &Session, date: i64, wakeup_time: 
                 Expr::col((MoldableJobDescriptions::Table, MoldableJobDescriptions::JobId)).equals((Jobs::Table, Jobs::Id)),
             )
             .and_where(Expr::col((GanttJobsPredictions::Table, GanttJobsPredictions::StartTime)).lte(date + wakeup_time))
-            .and_where(Expr::col((Jobs::Table, Jobs::State)).eq("Waiting"))
+            .and_where(crate::model::enum_as_text((Jobs::Table, Jobs::State)).eq("Waiting"))
             .and_where(Expr::col((NodeResources::Table, NodeResources::State)).eq("Absent"))
             .and_where(Expr::col((NodeResources::Table, NodeResources::NetworkAddress)).ne(""))
             .and_where(Expr::col((NodeResources::Table, NodeResources::Type)).eq("default"))
@@ -1096,7 +1098,7 @@ pub fn get_jobs_on_resuming_job_resources(session: &Session, job_id: i64, moldab
             .column(AssignedResources::ResourceId)
             .from(AssignedResources::Table)
             .and_where(Expr::col(AssignedResources::MoldableId).eq(moldable_id))
-            .and_where(Expr::col(AssignedResources::Index).eq("CURRENT"))
+            .and_where(crate::model::enum_as_text(AssignedResources::Index).eq("CURRENT"))
             .to_owned();
         let rows = Query::select()
             .distinct()
@@ -1107,7 +1109,7 @@ pub fn get_jobs_on_resuming_job_resources(session: &Session, job_id: i64, moldab
                 Expr::col((AssignedResources::Table, AssignedResources::MoldableId))
                     .equals((Jobs::Table, Jobs::AssignedMoldableId)),
             )
-            .and_where(Expr::col((AssignedResources::Table, AssignedResources::Index)).eq("CURRENT"))
+            .and_where(crate::model::enum_as_text((AssignedResources::Table, AssignedResources::Index)).eq("CURRENT"))
             .and_where(Expr::col((AssignedResources::Table, AssignedResources::ResourceId)).in_subquery(resource_subquery))
             .and_where(Expr::col((Jobs::Table, Jobs::Id)).ne(job_id))
             .and_where(Expr::col((Jobs::Table, Jobs::State)).is_in(states.iter().map(|s| s.as_enum("job_state"))))

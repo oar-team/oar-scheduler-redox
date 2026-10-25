@@ -1,6 +1,6 @@
 use crate::model::jobs::Jobs;
 use crate::{Session, SessionSelectStatement};
-use sea_query::{Expr, ExprTrait, Iden, Query};
+use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::{Error, Row};
 use std::collections::HashMap;
 
@@ -28,11 +28,11 @@ impl AllJobDependencies {
         }
 
         let dependencies = Query::select()
-            .columns(vec![
-                JobDependencies::RequiredJobId.to_string(),
-                Jobs::State.to_string(),
-                Jobs::ExitCode.to_string(),
-            ])
+            .column(JobDependencies::RequiredJobId)
+            // `jobs.state` is a PostgreSQL enum: cast it to text so the `Any`
+            // driver can decode it (see `enum_as_text`).
+            .expr_as(crate::model::enum_as_text((Jobs::Table, Jobs::State)), Alias::new(Jobs::State.unquoted()))
+            .column(Jobs::ExitCode)
             .columns(vec![
                 (JobDependencies::Table, JobDependencies::JobId)
             ])

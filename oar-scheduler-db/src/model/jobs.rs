@@ -256,7 +256,6 @@ impl JobDatabaseRequests for Job {
                     Jobs::SubmissionTime,
                     Jobs::StartTime,
                     Jobs::StopTime,
-                    Jobs::State,
                     Jobs::Message,
                     Jobs::Reservation,
                     Jobs::AssignedMoldableId,
@@ -264,6 +263,9 @@ impl JobDatabaseRequests for Job {
                     Jobs::InfoType,
                     Jobs::Checkpoint,
                 ])
+                // `jobs.state` is a PostgreSQL enum: cast it to text so the
+                // `Any` driver can decode it (see `enum_as_text`).
+                .expr_as(crate::model::enum_as_text(Jobs::State), Alias::new(Jobs::State.unquoted()))
                 .from(Jobs::Table)
                 .apply_if(queues, |req, queues| {
                     req.and_where(Expr::col(Jobs::QueueName).is_in(queues));
@@ -345,7 +347,6 @@ impl JobDatabaseRequests for Job {
                     (Jobs::Table, Jobs::Project),
                     (Jobs::Table, Jobs::QueueName),
                     (Jobs::Table, Jobs::SubmissionTime),
-                    (Jobs::Table, Jobs::State),
                     (Jobs::Table, Jobs::Message),
                     (Jobs::Table, Jobs::Reservation),
                     (Jobs::Table, Jobs::Type),
@@ -356,6 +357,9 @@ impl JobDatabaseRequests for Job {
                     (GanttJobsPredictions::Table, GanttJobsPredictions::MoldableId),
                     (GanttJobsPredictions::Table, GanttJobsPredictions::StartTime),
                 ])
+                // `jobs.state` is a PostgreSQL enum: cast it to text so the
+                // `Any` driver can decode it (see `enum_as_text`).
+                .expr_as(crate::model::enum_as_text((Jobs::Table, Jobs::State)), Alias::new(Jobs::State.unquoted()))
                 .from(Jobs::Table)
                 .inner_join(
                     MoldableJobDescriptions::Table,

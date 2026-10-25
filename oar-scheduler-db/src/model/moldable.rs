@@ -231,7 +231,7 @@ impl AllJobMoldables {
                 .columns(vec![AssignedResources::ResourceId])
                 .from(AssignedResources::Table)
                 .and_where(Expr::col(AssignedResources::MoldableId).eq(moldable.id))
-                .and_where(Expr::col(AssignedResources::Index).eq("CURRENT"))
+                .and_where(crate::model::enum_as_text(AssignedResources::Index).eq("CURRENT"))
                 .fetch_all(session)
                 .await
                 .unwrap()

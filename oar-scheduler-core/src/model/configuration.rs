@@ -1,3 +1,4 @@
+use log::warn;
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CONFIG_FILE: &str = "/etc/oar/oar.conf";
@@ -17,6 +18,14 @@ pub struct Configuration {
     /// become available before being launched with a reduced resource set.
     #[serde(default = "default_reservation_waiting_resources_timeout")]
     pub reservation_waiting_resources_timeout: i64,
+    /// Maximum number of jobs scheduled per scheduling round for a group of
+    /// queues (`MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND`).
+    ///
+    /// Kept as a string because a non-integer value must be ignored (with a
+    /// warning) instead of failing the whole configuration parsing; see
+    /// [`Configuration::max_job_per_queues_group`].
+    #[serde(default)]
+    pub max_job_per_queues_group_scheduling_round: Option<String>,
     // --- Database configuration ---
     pub db_type: String,
     pub db_hostname: String,
@@ -131,6 +140,7 @@ impl Default for Configuration {
             cache_enabled: true,
             scheduler_besteffort_kill_duration_before_reservation: 60, // 1 minute
             reservation_waiting_resources_timeout: default_reservation_waiting_resources_timeout(),
+            max_job_per_queues_group_scheduling_round: None,
             // --- Database configuration ---
             db_type: "Pg".to_string(),
             db_hostname: "localhost".to_string(),
@@ -183,8 +193,27 @@ impl Default for Configuration {
 }
 
 impl Configuration {
-    /// In OAR configuration files, booleans are usually written as `yes`/`no`.
-    /// This returns `true` only for `yes` (case-insensitive) or `true`.
+    /// Returns the maximum number of jobs to schedule per round for a group of
+    /// queues (`MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND`), or `None` when the
+    /// option is unset or non-positive (no limit).
+    ///
+    /// Mirrors `oar.kao.kamelot.get_max_job_per_queues_group`: an invalid value
+    /// is ignored with a warning instead of failing.
+    pub fn max_job_per_queues_group(&self) -> Option<usize> {
+        let raw = self.max_job_per_queues_group_scheduling_round.as_deref()?.trim();
+        if raw.is_empty() {
+            return None;
+        }
+        match raw.parse::<i64>() {
+            Ok(value) if value > 0 => Some(value as usize),
+            Ok(_) => None,
+            Err(_) => {
+                warn!("MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND is not an integer: '{}' (ignored)", raw);
+                None
+            }
+        }
+    }
+
     /// Returns the ZMQ endpoint of the bipbip commander, as a `tcp://host:port` URI.
     ///
     /// Defaults mirror the Python meta-scheduler (`oar.lib.configuration`):
@@ -226,6 +255,8 @@ impl Configuration {
         format!("tcp://{}:{}", server, port)
     }
 
+    /// In OAR configuration files, booleans are usually written as `yes`/`no`.
+    /// This returns `true` only for `yes` (case-insensitive) or `true`.
     pub fn walltime_change_enabled(&self) -> bool {
         matches!(
             self.walltime_change_enabled.as_deref().map(str::trim).map(str::to_ascii_uppercase).as_deref(),
@@ -246,4 +277,29 @@ pub enum JobPriority {
 pub enum QuotasAllNbResourcesMode {
     All,
     DefaultNotDead,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Mirrors `test_get_max_job_per_queues_group_parsing` of the Python test
+    /// suite (`oar3/tests/kao/test_max_job_per_queues_group_per_round.py`).
+    #[test]
+    fn test_max_job_per_queues_group_parsing() {
+        let mut config = Configuration::default();
+        assert_eq!(config.max_job_per_queues_group(), None, "unset means no limit");
+
+        for raw in ["", "  ", "0", "-1", "abc"] {
+            config.max_job_per_queues_group_scheduling_round = Some(raw.to_string());
+            assert_eq!(config.max_job_per_queues_group(), None, "raw value {raw:?} means no limit");
+        }
+
+        config.max_job_per_queues_group_scheduling_round = Some("1000".to_string());
+        assert_eq!(config.max_job_per_queues_group(), Some(1000));
+
+        // Like Python's `int()`, surrounding whitespace is tolerated.
+        config.max_job_per_queues_group_scheduling_round = Some(" 2 ".to_string());
+        assert_eq!(config.max_job_per_queues_group(), Some(2));
+    }
 }

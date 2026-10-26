@@ -4,7 +4,7 @@ use crate::scheduler::scheduling::schedule_jobs;
 use crate::scheduler::slotset::SlotSet;
 use crate::scheduler::sorting::sort_jobs;
 use indexmap::IndexMap;
-use log::debug;
+use log::{debug, info};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -41,6 +41,9 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
         // Sorting
         sort_jobs(platform, queues, &mut waiting_jobs);
 
+        // Limit the number of jobs scheduled per round for this group of queues.
+        limit_jobs_per_round(platform, queues, &mut waiting_jobs);
+
         // Scheduling
         schedule_jobs(slot_sets, &mut waiting_jobs);
 
@@ -59,6 +62,29 @@ pub fn internal_schedule_cycle<T: PlatformTrait>(platform: &mut T, slot_sets: &m
         return slot_sets.get("default").unwrap().slot_count();
     }
     0
+}
+
+/// Limit the number of jobs scheduled in this round for this group of queues
+/// (`MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND`).
+///
+/// The kept jobs are the first ones of the scheduling order, i.e. the ones
+/// [`sort_jobs`] put in front of `waiting_jobs`; the others are left untouched
+/// in the `Waiting` state and are candidates for the next scheduling round.
+/// Mirrors the truncation done in `oar.kao.kamelot.internal_schedule_cycle`.
+fn limit_jobs_per_round<T: PlatformTrait>(platform: &T, queues: &[String], waiting_jobs: &mut IndexMap<i64, Job>) {
+    let Some(max_jobs) = platform.get_platform_config().config.max_job_per_queues_group() else {
+        return;
+    };
+    if waiting_jobs.len() > max_jobs {
+        info!(
+            "MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND={} reached for queues {:?}: scheduling {} of {} waiting jobs",
+            max_jobs,
+            queues,
+            max_jobs,
+            waiting_jobs.len()
+        );
+        waiting_jobs.truncate(max_jobs);
+    }
 }
 
 /// Initialize slot sets map with the `default` SlotSet initialized with resource availability and already scheduled jobs.

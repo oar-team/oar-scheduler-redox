@@ -400,6 +400,52 @@ fn test_meta_schedule_expires_waiting_reservation() {
     let _ = notifications;
 }
 
+/// Without `MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND`, every waiting job of the
+/// queue group is scheduled in the round.
+#[test]
+fn test_max_job_per_queues_group_without_limit_schedules_all_jobs() {
+    let mut platform = setup_with_config(1, |_config| {});
+    insert_queue(&platform, "default", 2);
+    let job_ids: Vec<i64> = (0..5)
+        .map(|_| insert_job(&platform, "default", "resource_id=1", 60, vec![]))
+        .collect();
+
+    assert_eq!(meta_schedule(&mut platform), 0);
+
+    let gantt_jobs = Job::get_gantt_jobs(&platform.session(), None, None, None, None).unwrap();
+    assert_eq!(gantt_jobs.len(), 5, "all the waiting jobs should be scheduled");
+    assert!(job_ids.iter().all(|job_id| gantt_jobs.iter().any(|job| job.id == *job_id)));
+}
+
+/// `MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND` limits the number of jobs
+/// scheduled per round for a group of queues: the extra jobs are not scheduled
+/// at all and stay `Waiting` for the next round.
+#[test]
+fn test_max_job_per_queues_group_limits_the_scheduling_round() {
+    let mut platform = setup_with_config(1, |config| {
+        config.max_job_per_queues_group_scheduling_round = Some("2".to_string());
+    });
+    insert_queue(&platform, "default", 2);
+    let job_ids: Vec<i64> = (0..5)
+        .map(|_| insert_job(&platform, "default", "resource_id=1", 60, vec![]))
+        .collect();
+
+    assert_eq!(meta_schedule(&mut platform), 0);
+
+    let gantt_jobs = Job::get_gantt_jobs(&platform.session(), None, None, None, None).unwrap();
+    assert_eq!(gantt_jobs.len(), 2, "only MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND jobs should be scheduled");
+
+    // The two first jobs of the scheduling order (FIFO: the oldest ones) are kept.
+    assert!(gantt_jobs.iter().any(|job| job.id == job_ids[0]));
+    assert!(gantt_jobs.iter().any(|job| job.id == job_ids[1]));
+
+    // The others are left untouched in the Waiting state.
+    for job_id in &job_ids[2..] {
+        assert!(!gantt_jobs.iter().any(|job| job.id == *job_id));
+        assert_eq!(get_job(&platform, *job_id).state, JobState::Waiting.as_str());
+    }
+}
+
 /// An idle alive node is selected to be halted.
 #[test]
 fn test_energy_saving_halts_idle_node() {

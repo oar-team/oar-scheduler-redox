@@ -103,6 +103,8 @@ Each crate has its own README with full documentation:
   - [x] Node energy saving (sleep/wake up decision and node manager commands).
   - [x] Resume jobs (`Resuming` state).
   - [x] `job_state_logs` maintenance and resource `last_job_date` update on state change.
+  - [x] Limit the number of jobs scheduled per round for a group of queues
+    (`MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND`).
 - [x] Notifications to the bipbip commander through a native ZMQ `PUSH` socket (`omq` crate, `BIPBIP_COMMANDER_SERVER` /
   `BIPBIP_COMMANDER_PORT`), sending the same `OARRUN` JSON payload as the Python meta-scheduler.
   Setting `OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD` keeps the older behaviour (delegation to `oar-notify-to-run-job`).

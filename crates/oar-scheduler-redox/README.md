@@ -2,7 +2,7 @@
 
 ## Overview
 
-This crate is a Maturin Python library exposing the [`oar-scheduler-core`](/oar-scheduler-core) crate to Python.
+This crate is a Maturin Python library exposing the [`oar-scheduler-core`](../oar-scheduler-core) crate to Python.
 It can be used by the OAR3 Python meta-scheduler instead of the legacy Python scheduler. Though the meta-scheduler implementation and database
 requests stay in Python.
 

@@ -12,7 +12,7 @@ set, global configuration, quotas configuration and more.
 
 ## Usage
 
-Crates such as [`oar-scheduler-redox`](/oar-scheduler-redox) or [`oar-scheduler-meta`](/oar-scheduler-meta) can use this library to implement a full
+Crates such as [`oar-scheduler-redox`](../oar-scheduler-redox) or [`oar-scheduler-meta`](../oar-scheduler-meta) can use this library to implement a full
 scheduler.
 
 A struct implementing the `Platform` trait must be initialized first. Then, the scheduling cycle can be started with:

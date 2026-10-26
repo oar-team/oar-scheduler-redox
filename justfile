@@ -77,10 +77,10 @@ rm_db:
     rm -rf "{{ pgdata }}"
 
 build-scheduler-redox:
-    cd oar-scheduler-redox && maturin build
+    cd crates/oar-scheduler-redox && maturin build
 
 build-scheduler-meta:
-    cargo build
+    cargo build -p oar-scheduler-meta
 
 test-scheduler-core:
     cargo test -p oar-scheduler-core

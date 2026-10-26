@@ -10,10 +10,9 @@ test:
   stage: test
   image: rustlang/rust:latest
   script:
-    - cd oar-scheduler-core
-    - cargo build --verbose
-    - cargo test --verbose
-    - cargo tarpaulin --out Xml --cobertura --ignore-tests
+    - cargo build --verbose -p oar-scheduler-core
+    - cargo test --verbose -p oar-scheduler-core
+    - cargo tarpaulin --out Xml --cobertura --ignore-tests -p oar-scheduler-core
   artifacts:
     reports:
       coverage_report:

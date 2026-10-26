@@ -42,7 +42,7 @@
           ];
 
           # find a better way to indicate where to operate
-          configurePhase = "cd oar-scheduler-redox";
+          configurePhase = "cd crates/oar-scheduler-redox";
 
           cargoDeps = pkgs.rustPlatform.importCargoLock {
             lockFile = ./Cargo.lock;

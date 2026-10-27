@@ -9,6 +9,8 @@ oar-scheduler-redox fully re-implements the scheduling algorithm of OAR3, includ
   branch [redox](https://github.com/oar-team/oar3/tree/redox) since significant changes have been made to the Python meta-scheduler to support this
   mode.
 
+The [changelog](CHANGELOG.md) records what has been implemented so far.
+
 This Rust implementation is 10 to 100 times faster than the original Python implementation:
 
 |                                                                    Python Scheduler                                                                    |                                               Rust Scheduler called from Python (Release maturin build)                                                |

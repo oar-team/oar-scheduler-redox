@@ -95,6 +95,7 @@ Each crate has its own README with full documentation:
 - [x] Benchmarking framework
 - [x] Calling the Python scheduler from the benchmarking framework
 - [x] Macros for function time measurement ([auto_bench_fct](https://crates.io/crates/auto_bench_fct))
+- [x] Meta-scheduler end-to-end benchmark, quotas OFF vs ON (Rust equivalent of `oar3/bench/bench_quotas_metasched.py`)
 
 ### Python integration ([`oar-scheduler-redox`](crates/oar-scheduler-redox))
 

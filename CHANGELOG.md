@@ -43,7 +43,8 @@ will therefore be `0.1.0`. Crate names refer to the workspace layout decided in
   dynamically built schema.
 - CRUD operations for platform initialization: resources, queues, moldables, job types, dependencies and reservations.
 - CRUD operations for job and moldable updates: assignments, gantt predictions and their resources, `job_state_logs`, job
-  `state` / `job_type` / `info_type` / `checkpoint` / `reservation`, and resource `last_job_date`.
+  `state` / `job_type` / `info_type` / `checkpoint` / `reservation` / `project`, and resource `last_job_date`.
+- `Session::execute_raw`, for connection-level SQL settings that the connection URL cannot express.
 
 **Python bindings — `oar-scheduler-redox`**
 
@@ -64,12 +65,18 @@ will therefore be `0.1.0`. Crate names refer to the workspace layout decided in
   payload as the Python meta-scheduler; `OAR_SCHEDULER_NOTIFY_TO_RUN_JOB_CMD` keeps the legacy `oar-notify-to-run-job` delegation.
 - Greta client for node energy management: sleep / wake up over ZMQ, with external commands as a fallback;
   `ENERGY_SAVING_INTERNAL` selects the in-process implementation.
+- `meta_schedule` and `queues_schedule` are exposed by the library (not only by the binary), so that external programs such as the
+  meta-scheduler benchmark can run a whole scheduling round.
 
 **Benchmarking — `oar-scheduler-bench`**
 
 - Benchmark framework with precisely controlled workloads: cache, hyper-threading, hierarchies, quotas and timesharing sample types.
 - Three targets: `Rust`, `Python` (the original OAR3 scheduler) and `RustFromPython` (the Python scheduler using the Rust library).
 - SVG plot generation and per-function CPU-time measurement through the `auto_bench_fct` crate.
+- `bench_quotas_metasched` (behind the `meta-bench` feature), the Rust equivalent of the OAR3
+  `oar3/bench/bench_quotas_metasched.py`: an end-to-end benchmark of `meta_schedule` against a temporary SQLite database, sweeping
+  the number of waiting jobs and comparing quotas OFF vs ON, with a `profile` mode splitting the platform construction from the
+  scheduling round, and CSV + SVG outputs.
 
 **Tooling and packaging**
 
@@ -114,6 +121,8 @@ will therefore be `0.1.0`. Crate names refer to the workspace layout decided in
   walltime equalled `SCHEDULER_JOB_SECURITY_TIME` could not be scheduled.
 - Best-effort jobs killed in advance: the whole security window is now considered, including the reservations starting less than
   `SCHEDULER_BESTEFFORT_KILL_DURATION_BEFORE_RESERVATION` seconds in the future.
+- `Session::empty_all` was a no-op on SQLite: the SQL script only *selected* the `DELETE` statements to run instead of running them.
+  The tables are now listed from `sqlite_master` and deleted one by one, with the foreign keys disabled for the batch.
 
 ### Removed
 
@@ -123,6 +132,9 @@ will therefore be `0.1.0`. Crate names refer to the workspace layout decided in
 
 ### Notes
 
+- The meta-scheduler benchmark measures rounds that last a few milliseconds: pin it to one core
+  (`taskset -c N`) for reproducible numbers, since on a hybrid CPU the migration between performance and efficiency cores changes
+  the measurement by a factor of up to five.
 - Internal (job in / job out) mode requires the OAR3 Python branch
   [`redox`](https://github.com/oar-team/oar3/tree/redox), which adapts the Python meta-scheduler to the Rust library.
 - External mode replaces the scheduling functions of `oar.kao.kamelot` without modifying the Python meta-scheduler.

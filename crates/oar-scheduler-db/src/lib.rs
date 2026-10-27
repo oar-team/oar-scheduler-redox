@@ -134,6 +134,16 @@ impl Session {
     pub(crate) async fn begin(&self) -> sqlx::Transaction<'_, Any> {
         self.pool.begin().await.expect("Failed to begin transaction")
     }
+    /// Executes raw SQL on the session connection.
+    ///
+    /// Meant for connection-level settings that the connection URL cannot express,
+    /// e.g. the `PRAGMA` statements benchmarks use to remove the disk synchronisation
+    /// cost of SQLite.
+    pub fn execute_raw(&self, sql: &str) {
+        self.runtime.block_on(async {
+            sqlx::raw_sql(sql).execute(&self.pool).await.expect("Failed to execute SQL");
+        });
+    }
     pub fn create_schema(&self) {
         let sql = match self.backend {
             Backend::Postgres => include_str!("sql/up-postgres.sql"),
@@ -145,13 +155,44 @@ impl Session {
     }
     /// From test with DB: empty all tables
     pub fn empty_all(&self) {
-        let sql = match self.backend {
-            Backend::Postgres => include_str!("sql/truncate-postgres.sql"),
-            Backend::Sqlite => include_str!("sql/delete-sqlite.sql"),
-        };
-        self.runtime.block_on(async {
-            sqlx::raw_sql(sql).execute(&self.pool).await.expect("Failed to create schema");
-        });
+        match self.backend {
+            Backend::Postgres => {
+                let sql = include_str!("sql/truncate-postgres.sql");
+                self.runtime.block_on(async {
+                    sqlx::raw_sql(sql).execute(&self.pool).await.expect("Failed to empty all tables");
+                });
+            }
+            Backend::Sqlite => {
+                // SQLite cannot execute generated statements, so the table list is
+                // read from `sqlite_master` and one `DELETE` is executed per table.
+                // Foreign keys are disabled for the duration of the batch so that the
+                // deletion order does not matter, as in the PostgreSQL `CASCADE`.
+                self.runtime.block_on(async {
+                    let mut conn = self.pool.acquire().await.expect("Failed to acquire connection");
+                    let tables: Vec<(String,)> = sqlx::query_as(
+                        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                    )
+                    .fetch_all(&mut *conn)
+                    .await
+                    .expect("Failed to list the tables");
+                    sqlx::raw_sql("PRAGMA foreign_keys = OFF;")
+                        .execute(&mut *conn)
+                        .await
+                        .expect("Failed to disable the foreign keys");
+                    for (table,) in tables {
+                        let statement = format!("DELETE FROM \"{}\";", table.replace('"', "\"\""));
+                        sqlx::raw_sql(&statement)
+                            .execute(&mut *conn)
+                            .await
+                            .unwrap_or_else(|err| panic!("Failed to empty table '{}': {}", table, err));
+                    }
+                    sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+                        .execute(&mut *conn)
+                        .await
+                        .expect("Failed to enable the foreign keys");
+                });
+            }
+        }
     }
     /**
     From test with DB: reset resources by drop it (if exists) and recreate it. Needed
@@ -324,5 +365,52 @@ impl SessionDeleteStatement for DeleteStatement {
         debug!("SQL: {}   VALUES: {:?}", sql, values);
         let result = sqlx::query_with(sql.as_str(), values).execute(&session.pool).await?;
         Ok(result.rows_affected())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Session;
+    use crate::model::queues::Queue;
+    use oar_scheduler_core::model::configuration::Configuration;
+
+    fn sqlite_memory_session() -> Session {
+        let config = Configuration {
+            db_type: "sqlite".to_string(),
+            db_hostname: ":memory:".to_string(),
+            ..Default::default()
+        };
+        let session = Session::new(&config);
+        session.create_schema();
+        session
+    }
+
+    fn insert_queue(session: &Session, name: &str) {
+        Queue {
+            queue_name: name.to_string(),
+            priority: 3,
+            scheduler_policy: "kamelot".to_string(),
+            state: "Active".to_string(),
+        }
+        .insert(session)
+        .expect("Failed to insert the queue");
+    }
+
+    /// `empty_all` used to run the SQLite script `delete-sqlite.sql`, which only
+    /// selected the `DELETE` statements instead of executing them.
+    #[test]
+    fn test_empty_all_clears_the_tables() {
+        let session = sqlite_memory_session();
+        insert_queue(&session, "default");
+        insert_queue(&session, "besteffort");
+        assert_eq!(Queue::get_all_ordered_by_priority(&session).expect("Failed to read the queues").len(), 2);
+
+        session.empty_all();
+
+        assert_eq!(
+            Queue::get_all_ordered_by_priority(&session).expect("Failed to read the queues").len(),
+            0,
+            "empty_all must delete the rows of every table"
+        );
     }
 }

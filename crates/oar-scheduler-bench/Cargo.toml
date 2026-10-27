@@ -2,7 +2,18 @@
 name = "oar-scheduler-bench"
 version = "0.1.0"
 edition = "2024"
+# Two binaries: this package also ships `bench_quotas_metasched` (behind the
+# `meta-bench` feature), so the default binary must be named explicitly.
+default-run = "oar-scheduler-bench"
 
+
+[features]
+# Enables the `bench_quotas_metasched` benchmark, the Rust equivalent of
+# `oar3/bench/bench_quotas_metasched.py`. It is not enabled by default because it
+# pulls in the meta-scheduler crate, whose dependency on `oar-scheduler-core`
+# enables the core default features (`benchmark_disable*`) and would therefore
+# disable the instrumentation used by the scheduler-level benchmarks above.
+meta-bench = ["dep:oar-scheduler-meta", "dep:oar-scheduler-db"]
 
 [dependencies]
 log = "0.4"
@@ -15,3 +26,5 @@ plotters = { version = "0.3.7", default-features = false, features = ["svg_backe
 tokio = { version = "1.46.0", features = ["sync", "macros", "rt-multi-thread"] }
 futures = "0.3.31"
 pyo3 = { version = "0.25", features = ["auto-initialize"] }
+oar-scheduler-meta = { path = "../oar-scheduler-meta", optional = true }
+oar-scheduler-db = { path = "../oar-scheduler-db", optional = true }

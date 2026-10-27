@@ -231,6 +231,9 @@ pub trait JobDatabaseRequests {
     /// Sets the `jobs.start_time` column (used by advance reservations, before they
     /// get a moldable assigned).
     fn set_start_time(&self, session: &Session, start_time: i64) -> Result<(), Error>;
+
+    /// Sets the `project` of the job (`jobs.project`).
+    fn set_project(&self, session: &Session, project: &str) -> Result<(), Error>;
 }
 
 impl JobDatabaseRequests for Job {
@@ -612,6 +615,21 @@ impl JobDatabaseRequests for Job {
             Ok(())
         })
     }
+
+    fn set_project(&self, session: &Session, project: &str) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            let res = Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .value(Jobs::Project, project)
+                .execute(session)
+                .await?;
+            if res == 0 {
+                warn!("Job not found when setting project, job_id: {}", self.id);
+            }
+            Ok(())
+        })
+    }
 }
 
 pub struct NewJob {
@@ -620,6 +638,22 @@ pub struct NewJob {
     /// res = [(walltime, [("res_hierarchy", "properties_sql"), ...]), ...]
     pub res: Vec<(i64, Vec<(String, String)>)>,
     pub types: Vec<String>,
+}
+
+/// Sets the project of a job by id.
+///
+/// [`NewJob`] does not expose the `project` column: tests and benchmarks insert the
+/// job first, then set its project with this helper.
+pub fn set_job_project(session: &Session, job_id: i64, project: &str) -> Result<(), Error> {
+    session.runtime.block_on(async {
+        Query::update()
+            .table(Jobs::Table)
+            .and_where(Expr::col(Jobs::Id).eq(job_id))
+            .value(Jobs::Project, project)
+            .execute(session)
+            .await?;
+        Ok(())
+    })
 }
 
 impl NewJob {

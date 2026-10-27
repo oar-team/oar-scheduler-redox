@@ -61,6 +61,9 @@ fn test_find_resource_hierarchies_scattered4() {
 }
 
 #[test]
+// `42..=29` is deliberately malformed (a partition that overlaps and reverses another one):
+// the test checks how such an input is handled.
+#[allow(clippy::reversed_empty_ranges)]
 fn test_find_resource_hierarchies_scattered5() {
     let h = Hierarchy::new()
         .add_partition("switch".into(), procsets([1..=32, 33..=64].into()))

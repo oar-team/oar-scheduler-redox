@@ -29,6 +29,8 @@ will therefore be `0.1.0`. Crate names refer to the workspace layout decided in
 - `Configuration` struct parsed from an OAR `oar.conf` file, including booleans written as `yes` / `no`.
 - Limit of the number of jobs scheduled per round for a group of queues (`MAX_JOB_PER_QUEUES_GROUP_SCHEDULING_ROUND`), keeping the
   first jobs in scheduling order and leaving the others `Waiting` for the next round.
+- Port of the OAR3 `kao` Python test suite to Rust: 135 of the 174 `oar3/tests/kao/` tests are ported or covered (the 39 others are
+  documented as not portable, with the reason, in [`docs/tests/oar3-port.md`](docs/tests/oar3-port.md)).
 
 **Plugins — `oar-scheduler-hooks`**
 
@@ -105,6 +107,13 @@ will therefore be `0.1.0`. Crate names refer to the workspace layout decided in
 - Resource queries ordered by id, making platform initialization deterministic.
 - Job events were always inserted with `to_check = 'YES'`; the new `add_new_event_with_to_check` lets the caller decide.
 - Test suite refactored to run against PostgreSQL and SQLite with a common setup and teardown.
+- Fairshare and multifactor ordering were degenerate: `get_sum_accounting_window`, `get_sum_accounting_by_project` and
+  `get_sum_accounting_by_user` decoded the `SUM(consumption)` column as `f64` while SQLite and PostgreSQL both return an integer for
+  a `BIGINT` column, so every sum silently fell back to `0.0`, the karma became `NaN` and the jobs kept their insertion order.
+- Advance-reservation end-of-window computation was one time unit short (`end_time + 1 - job_security_time`), so a reservation whose
+  walltime equalled `SCHEDULER_JOB_SECURITY_TIME` could not be scheduled.
+- Best-effort jobs killed in advance: the whole security window is now considered, including the reservations starting less than
+  `SCHEDULER_BESTEFFORT_KILL_DURATION_BEFORE_RESERVATION` seconds in the future.
 
 ### Removed
 

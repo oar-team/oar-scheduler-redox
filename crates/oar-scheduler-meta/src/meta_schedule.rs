@@ -38,8 +38,14 @@ pub fn meta_schedule(platform: &mut Platform) -> i64 {
         })
         .collect::<Vec<_>>();
 
+    // Besteffort jobs are killed for the jobs that are about to be launched, i.e.
+    // the jobs of the whole security window (as in OAR3, which passes
+    // `jobs_to_launch_with_security_time` to `check_besteffort_jobs_to_kill`), and
+    // not only for the jobs that are launched during this round.
+    let jobs_within_security_time = jobs_to_launch_with_security_time.iter().collect::<Vec<_>>();
+
     // Killing besteffort jobs on which new jobs have been scheduled.
-    let jobs_to_frag = check_besteffort_jobs_to_kill(platform, &besteffort_scheduled_jobs, &jobs_to_launch);
+    let jobs_to_frag = check_besteffort_jobs_to_kill(platform, &besteffort_scheduled_jobs, &jobs_within_security_time);
     if !jobs_to_frag {
         if handle_jobs_to_launch(platform, &jobs_to_launch) == 1 {
             exit_code = 0; // Exit code was already at 0 anyway... Following the Python code.

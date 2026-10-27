@@ -1,11 +1,14 @@
-use crate::model::job::{JobBuilder, Moldable};
+use crate::model::job::{Job, JobBuilder, Moldable, ProcSet};
 use crate::platform::PlatformConfig;
 use crate::scheduler::calendar::QuotasConfig;
-use crate::scheduler::hierarchy::HierarchyRequests;
+use crate::scheduler::hierarchy::{HierarchyRequest, HierarchyRequests};
 use crate::scheduler::quotas;
+use crate::scheduler::scheduling;
 use crate::scheduler::slotset::SlotSet;
 use crate::scheduler::tests::platform_mock::generate_mock_platform_config;
 use chrono::{Datelike, Local, TimeZone};
+use indexmap::indexmap;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 fn period_weekstart(now_epoch: i64) -> i64 {
@@ -403,4 +406,347 @@ fn test_check_slots_quotas_against_limits() {
     // 20 resources entirely inside first 3 days period (limit 16) -> should fail
     let res = quotas::check_slots_quotas(ss.iter().between(left, left), &job, t0, t0 + 3600, 20);
     assert!(res.is_some());
+}
+
+// ---------------------------------------------------------------------------
+// Ports of `oar3/tests/kao/test_temporal_quotas.py` (calendar / slot splitting)
+// ---------------------------------------------------------------------------
+
+/// Builds a platform config whose quotas calendar is the "simple" example
+/// (Mon-Wed: `quotas_1`, Thu-Sun: `quotas_2`) with a 3 weeks period.
+fn simple_calendar_platform_config() -> Rc<PlatformConfig> {
+    let mut platform_config: PlatformConfig = generate_mock_platform_config(false, 256, 8, 4, 8, true);
+    platform_config.quotas_config = QuotasConfig::load_from_json(rules_example_simple_json(), true, 100, 3 * 7 * 24 * 3600);
+    Rc::new(platform_config)
+}
+
+/// Returns `(slot id, duration, quotas rules id)` for each slot of the set.
+fn slots_description(ss: &SlotSet) -> Vec<(i32, i64, i32)> {
+    let mut description = Vec::new();
+    let mut slot = ss.first_slot().cloned();
+    while let Some(s) = slot {
+        description.push((s.id(), s.end() - s.begin() + 1, s.quotas().rules_id()));
+        slot = s.next().and_then(|next_id| ss.get_slot(next_id)).cloned();
+    }
+    description
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_calendar_periodical_default_fromJson`
+#[test]
+fn test_calendar_periodical_default_fromJson() {
+    let platform_config = simple_calendar_platform_config();
+    let calendar = platform_config.quotas_config.calendar.as_ref().expect("a calendar");
+    // Every day of the week is covered by a periodical rule.
+    assert_eq!(calendar.ordered_periodicals().len(), 2);
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_calendar_periodical_only_default_fromJson`
+#[test]
+fn test_calendar_periodical_only_default_fromJson() {
+    let json = r#"{
+        "periodical": [
+            ["* * * *", "quotas_workday", "workdays"]
+        ],
+        "quotas_workday": {"*,*,*,john": [100, -1, -1]}
+    }"#
+    .to_string();
+    let quotas_config = QuotasConfig::load_from_json(json, true, 100, 3 * 7 * 24 * 3600);
+    let calendar = quotas_config.calendar.as_ref().expect("a calendar");
+    assert_eq!(calendar.ordered_periodicals().len(), 1);
+}
+
+// The Python tests use the 0-based `quotas_rules_id` of the periodicals list; the Rust
+// `Quotas::rules_id` numbering is 1-based (`0` is kept for "no calendar entry").
+/// `oar3/tests/kao/test_temporal_quotas.py::test_calendar_simple_slotSet_2`
+#[test]
+fn test_calendar_simple_slotSet_2() {
+    let platform_config = simple_calendar_platform_config();
+    let t0 = period_weekstart(Local::now().timestamp());
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), t0, t0 + 4 * 86400);
+
+    let first = ss.first_slot().expect("a first slot");
+    assert_eq!(first.quotas().rules_id(), 1);
+    let second = ss.get_slot(first.next().expect("a next slot")).expect("a second slot");
+    assert_eq!(second.quotas().rules_id(), 2);
+    assert_eq!(first.end() - first.begin(), 3 * 86400 - 1);
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_calendar_simple_slotSet_3`
+#[test]
+fn test_calendar_simple_slotSet_3() {
+    let platform_config = simple_calendar_platform_config();
+    let t0 = period_weekstart(Local::now().timestamp());
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), t0, t0 + 5 * 86400);
+
+    let first = ss.first_slot().expect("a first slot");
+    assert_eq!(first.quotas().rules_id(), 1);
+    let second = ss.get_slot(first.next().expect("a next slot")).expect("a second slot");
+    assert_eq!(second.quotas().rules_id(), 2);
+    assert_eq!(first.end() - first.begin(), 3 * 86400 - 1);
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_calendar_simple_slotSet_4`
+#[test]
+fn test_calendar_simple_slotSet_4() {
+    let platform_config = simple_calendar_platform_config();
+    let t0 = period_weekstart(Local::now().timestamp());
+    let t1 = t0 + 2 * 7 * 86400 - 1;
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), t0, t1);
+
+    assert_eq!(
+        slots_description(&ss),
+        vec![(1, 259200, 1), (2, 345600, 2), (3, 259200, 1), (4, 345600, 2)]
+    );
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_calendar_simple_slotSet_5`
+#[test]
+fn test_calendar_simple_slotSet_5() {
+    let platform_config = simple_calendar_platform_config();
+    let t0 = period_weekstart(Local::now().timestamp());
+    let t1 = t0 + 2 * 7 * 86400;
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), t0, t1);
+
+    assert_eq!(
+        slots_description(&ss),
+        vec![(1, 259200, 1), (2, 345600, 2), (3, 259200, 1), (4, 345600, 2), (5, 1, 1)]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Ports of `oar3/tests/kao/test_temporal_quotas.py` (jobs against the calendar)
+// ---------------------------------------------------------------------------
+
+/// Builds a 32 resources platform (4 nodes of 8 cores) whose quotas calendar is
+/// the "simple" example, and a [`SlotSet`] covering `[begin, end]`.
+fn simple_calendar_slot_set(begin: i64, end: i64) -> (Rc<PlatformConfig>, SlotSet) {
+    let mut platform_config: PlatformConfig = generate_mock_platform_config(false, 32, 4, 8, 1, true);
+    platform_config.quotas_config = QuotasConfig::load_from_json(rules_example_simple_json(), true, 100, 3 * 7 * 24 * 3600);
+    let platform_config = Rc::new(platform_config);
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), begin, end);
+    (platform_config, ss)
+}
+
+/// Builds a job requesting `nodes` nodes (each of 8 cores) with the given
+/// walltime.
+fn node_job(platform_config: &Rc<PlatformConfig>, id: i64, nodes: u32, walltime: i64) -> Job {
+    let res = platform_config.resource_set.default_resources.clone();
+    let moldable = Moldable::new(
+        0,
+        walltime,
+        HierarchyRequests::from_requests(vec![HierarchyRequest::new(res, vec![("nodes".into(), nodes)])]),
+    );
+    JobBuilder::new(id).user("toto".into()).queue("default".into()).moldable(moldable).build()
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_test`
+///
+/// A job requesting 3 nodes (24 cores) does not fit in the Mon-Wed period (16
+/// cores quota): it is scheduled at the beginning of the Thu-Sun period.
+/// Divergence: an unscheduled job has no assignment in Rust (`assignment == None`)
+/// where Python uses `start_time == -1`.
+#[test]
+fn test_test() {
+    let t0 = period_weekstart(Local::now().timestamp());
+    let (platform_config, ss) = simple_calendar_slot_set(t0, t0 + 7 * 86400 - 1);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let j1 = node_job(&platform_config, 1, 3, 60);
+    let j2 = node_job(&platform_config, 2, 4, 60);
+    let mut jobs = indexmap![1 => j1, 2 => j2];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    let j1 = &jobs[0];
+    let j2 = &jobs[1];
+    let assignment1 = j1.assignment.as_ref().expect("j1 should be scheduled");
+    assert_eq!(assignment1.begin - t0, 259200);
+    assert!(j2.assignment.is_none(), "j2 should not be scheduled");
+    assert_eq!(assignment1.resources, ProcSet::from_iter(1..=24));
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_temporal_quotas_4_jobs_rule_nb_res_1`
+#[test]
+fn test_temporal_quotas_4_jobs_rule_nb_res_1() {
+    let t0 = period_weekstart(Local::now().timestamp());
+    let (platform_config, ss) = simple_calendar_slot_set(t0, t0 + 7 * 86400 - 1);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let j1 = node_job(&platform_config, 1, 3, 60);
+    let j2 = node_job(&platform_config, 2, 4, 60);
+    let j3 = node_job(&platform_config, 3, 1, (3.5 * 86400.0) as i64);
+    let j4 = node_job(&platform_config, 4, 1, 60);
+    let mut jobs = indexmap![1 => j1, 2 => j2, 3 => j3, 4 => j4];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    let j1 = &jobs[0];
+    let j2 = &jobs[1];
+    let j3 = &jobs[2];
+    let j4 = &jobs[3];
+    let assignment1 = j1.assignment.as_ref().expect("j1 should be scheduled");
+    assert_eq!(assignment1.begin - t0, 259200);
+    assert!(j2.assignment.is_none(), "j2 should not be scheduled");
+    let assignment3 = j3.assignment.as_ref().expect("j3 should be scheduled");
+    assert_eq!(assignment3.begin - t0, 259260);
+    let assignment4 = j4.assignment.as_ref().expect("j4 should be scheduled");
+    assert_eq!(assignment4.begin - t0, 0);
+
+    assert_eq!(assignment1.resources, ProcSet::from_iter(1..=24));
+    assert_eq!(assignment3.resources, ProcSet::from_iter(1..=8));
+    assert_eq!(assignment4.resources, ProcSet::from_iter(1..=8));
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_temporal_quotas_oneshot_1_job_rule_nb_res_1`
+///
+/// The oneshot window (Monday 12:00 for 2.5 days) lifts the quota to 32 cores: the
+/// job requesting 4 nodes (32 cores) waits for it.
+#[test]
+fn test_temporal_quotas_oneshot_1_job_rule_nb_res_1() {
+    let mut platform_config: PlatformConfig = generate_mock_platform_config(false, 32, 4, 8, 1, true);
+    let tw = period_weekstart(Local::now().timestamp());
+    let oneshot_start = tw + 86400 / 2;
+    let oneshot_stop = oneshot_start + (2.5 * 86400.0) as i64;
+    let rules = rules_example_simple_json().replacen(
+        "{",
+        &format!(
+            "{{\n\"oneshot\": [[\"{}\", \"{}\", \"quotas_holiday\", \"summer holiday\"]],\n\"quotas_holiday\": {{\"*,*,*,*\": [32, -1, -1]}},",
+            local_to_sql_minutes(oneshot_start),
+            local_to_sql_minutes(oneshot_stop)
+        ),
+        1,
+    );
+    platform_config.quotas_config = QuotasConfig::load_from_json(rules, true, 100, 3 * 7 * 24 * 3600);
+    let platform_config = Rc::new(platform_config);
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), tw, tw + 7 * 86400 - 1);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let job = node_job(&platform_config, 1, 4, 60);
+    let mut jobs = indexmap![1 => job];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    let assignment = jobs[0].assignment.as_ref().expect("the job should be scheduled");
+    assert_eq!(assignment.begin - tw, 43200);
+    assert_eq!(assignment.resources, ProcSet::from_iter(1..=32));
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_temporal_quotas_job_no_quotas`
+///
+/// A job with `no_quotas` ignores the calendar limits: it starts immediately even
+/// though it requests more resources than the current period allows.
+#[test]
+fn test_temporal_quotas_job_no_quotas() {
+    let t0 = period_weekstart(Local::now().timestamp());
+    let (platform_config, ss) = simple_calendar_slot_set(t0, t0 + 7 * 86400 - 1);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let mut job = node_job(&platform_config, 1, 4, 60);
+    job.no_quotas = true;
+    let mut jobs = indexmap![1 => job];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    let assignment = jobs[0].assignment.as_ref().expect("the job should be scheduled");
+    assert_eq!(assignment.begin - t0, 0);
+    assert_eq!(assignment.resources, ProcSet::from_iter(1..=32));
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_temporal_quotas_window_time_limit_reached`
+///
+/// The first job (3 nodes for 3 days) exhausts the resources time quota of the
+/// window: the second job (5 nodes for 10 days) cannot be scheduled at all.
+#[test]
+fn test_temporal_quotas_window_time_limit_reached() {
+    let t0 = period_weekstart(Local::now().timestamp());
+    let (platform_config, ss) = simple_calendar_slot_set(t0, t0 + 14 * 86400);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let j1 = node_job(&platform_config, 1, 3, 3 * 86400);
+    let j2 = node_job(&platform_config, 2, 5, 10 * 86400);
+    let mut jobs = indexmap![1 => j1, 2 => j2];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    let assignment1 = jobs[0].assignment.as_ref().expect("j1 should be scheduled");
+    assert_eq!(assignment1.begin - t0, 259200);
+    assert!(jobs[1].assignment.is_none(), "j2 should not be scheduled");
+    assert_eq!(assignment1.resources, ProcSet::from_iter(1..=24));
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_temporal_quots_multi_periods_nb_resources`
+///
+/// Divergence: the Python test builds the oneshot window from `datetime.utcnow()`
+/// while the calendar parses the windows in local time (the test is therefore
+/// timezone dependent); the Rust port uses the local time.
+#[test]
+fn test_temporal_quots_multi_periods_nb_resources() {
+    let json = format!(
+        r#"{{
+            "periodical": [["* * * *", "quotas_1", "test1"]],
+            "oneshot": [["{}", "{}", "quotas_2", "not important"]],
+            "quotas_1": {{"*,*,*,/": [24, -1, -1]}},
+            "quotas_2": {{"*,*,*,/": [8, -1, -1]}}
+        }}"#,
+        local_to_sql_minutes(Local::now().timestamp() + 5 * 60),
+        local_to_sql_minutes(Local::now().timestamp() + 10 * 60)
+    );
+    let mut platform_config: PlatformConfig = generate_mock_platform_config(false, 32, 4, 8, 1, true);
+    platform_config.quotas_config = QuotasConfig::load_from_json(json, true, 100, 3 * 7 * 24 * 3600);
+    let platform_config = Rc::new(platform_config);
+
+    let t0 = Local::now().timestamp();
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), t0, t0 + 14 * 86400);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    // A single node: it fits both in the periodical (24 cores) and in the oneshot
+    // window (8 cores) quotas.
+    let j = node_job(&platform_config, 2, 1, 300);
+    // Two nodes (16 cores): it does not fit in the oneshot window and must be
+    // delayed until after it.
+    let j1 = node_job(&platform_config, 3, 2, 300);
+    let mut jobs = indexmap![2 => j, 3 => j1];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    let assignment = jobs[&2].assignment.as_ref().expect("the first job should be scheduled");
+    assert_eq!(assignment.begin - t0, 0);
+    let delayed = jobs[&3].assignment.as_ref().expect("the second job should be scheduled");
+    assert!(delayed.begin - t0 > 0, "the second job should be delayed");
+}
+
+/// `oar3/tests/kao/test_temporal_quotas.py::test_temporal_quots_multi_periods_nb_jobs`
+///
+/// Same scenario as [`test_temporal_quots_multi_periods_nb_resources`] but the
+/// oneshot window limits the number of running jobs (1) instead of the resources.
+#[test]
+fn test_temporal_quots_multi_periods_nb_jobs() {
+    let json = format!(
+        r#"{{
+            "periodical": [["* * * *", "quotas_1", "test1"]],
+            "oneshot": [["{}", "{}", "quotas_2", "not important"]],
+            "quotas_1": {{"*,*,*,/": [-1, 2, -1]}},
+            "quotas_2": {{"*,*,*,/": [-1, 1, -1]}}
+        }}"#,
+        local_to_sql_minutes(Local::now().timestamp() + 5 * 60),
+        local_to_sql_minutes(Local::now().timestamp() + 10 * 60)
+    );
+    let mut platform_config: PlatformConfig = generate_mock_platform_config(false, 32, 4, 8, 1, true);
+    platform_config.quotas_config = QuotasConfig::load_from_json(json, true, 100, 3 * 7 * 24 * 3600);
+    let platform_config = Rc::new(platform_config);
+
+    let t0 = Local::now().timestamp();
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), t0, t0 + 14 * 86400);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let j = node_job(&platform_config, 2, 1, 300);
+    let j1 = node_job(&platform_config, 3, 2, 300);
+    let mut jobs = indexmap![2 => j, 3 => j1];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    let assignment = jobs[&2].assignment.as_ref().expect("the first job should be scheduled");
+    assert_eq!(assignment.begin - t0, 0);
+    let delayed = jobs[&3].assignment.as_ref().expect("the second job should be scheduled");
+    assert!(delayed.begin - t0 > 0, "the second job should be delayed");
 }

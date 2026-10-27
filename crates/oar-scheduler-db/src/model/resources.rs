@@ -1,7 +1,7 @@
-use crate::{Session, SessionInsertStatement, SessionSelectStatement};
+use crate::{Session, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use indexmap::IndexMap;
 use log::debug;
-use sea_query::{Alias, Expr, Iden, Query};
+use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::{Error, Row};
 use std::collections::HashMap;
 
@@ -174,6 +174,32 @@ pub struct Resource {
     pub labels: HashMap<Box<str>, ResourceLabelValue>,
 }
 impl Resource {
+    /// Updates the state of the resource in the database.
+    pub fn set_state(&self, session: &Session, state: &str) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            Query::update()
+                .table(Alias::new("resources"))
+                .and_where(Expr::col(Alias::new("resource_id")).eq(self.id))
+                .value(Alias::new("state"), state)
+                .execute(session)
+                .await?;
+            Ok(())
+        })
+    }
+
+    /// Updates the `available_upto` date of the resource in the database.
+    pub fn set_available_upto(&self, session: &Session, available_upto: i64) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            Query::update()
+                .table(Alias::new("resources"))
+                .and_where(Expr::col(Alias::new("resource_id")).eq(self.id))
+                .value(Alias::new("available_upto"), available_upto)
+                .execute(session)
+                .await?;
+            Ok(())
+        })
+    }
+
     /// Get all resources, sorted by the given order_by_clause (e.g., "type, network_address").
     pub fn get_all_sorted(
         session: &Session,
@@ -183,7 +209,7 @@ impl Resource {
         let customs = parse_order_clause(order_by_clause);
         let rows = session.runtime.block_on(async {
             Query::select()
-                .columns(vec![Resources::Type, Resources::State, Resources::AvailableUpto])
+                .columns(vec![Resources::ResourceId, Resources::Type, Resources::State, Resources::AvailableUpto])
                 .columns(labels.iter().map(|s| Alias::new(s.as_ref())).collect::<Vec<Alias>>())
                 .from(Resources::Table)
                 .order_by_customs(customs)

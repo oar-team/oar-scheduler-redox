@@ -59,7 +59,7 @@ impl JobNotifier for RecordingNotifier {
     }
 }
 
-fn insert_default_resource(session: &Session, address: &str) {
+pub(crate) fn insert_default_resource(session: &Session, address: &str) {
     NewResource {
         network_address: address.to_string(),
         r#type: "default".to_string(),
@@ -70,7 +70,7 @@ fn insert_default_resource(session: &Session, address: &str) {
     .expect("Failed to insert test resource");
 }
 
-fn insert_queue(platform: &Platform, name: &str, priority: i32) {
+pub(crate) fn insert_queue(platform: &Platform, name: &str, priority: i32) {
     Queue {
         queue_name: name.to_string(),
         priority,
@@ -82,12 +82,36 @@ fn insert_queue(platform: &Platform, name: &str, priority: i32) {
 }
 
 /// Creates a platform with `nb_resources` default resources and a recording notifier.
-fn setup(nb_resources: usize) -> (Platform, Rc<RefCell<Notifications>>) {
+pub(crate) fn setup(nb_resources: usize) -> (Platform, Rc<RefCell<Notifications>>) {
     let (session, config) = setup_for_tests(true); // Sqlite in-memory
     session.reset();
     for i in 1..=nb_resources {
         insert_default_resource(&session, format!("10.0.0.{}", i).as_str());
     }
+    let mut platform = Platform::from_database(session, config);
+    let (notifier, notifications) = RecordingNotifier::new(true);
+    platform.set_notifier(Box::new(notifier));
+    (platform, notifications)
+}
+
+/// Creates a platform whose resources have the given network addresses (the
+/// resources are grouped by network address in the hierarchy).
+pub(crate) fn setup_with_addresses(addresses: &[&str]) -> (Platform, Rc<RefCell<Notifications>>) {
+    setup_with_addresses_and_config(addresses, |_| {})
+}
+
+/// Creates a platform like [`setup_with_addresses`] but lets the caller customize
+/// the configuration.
+pub(crate) fn setup_with_addresses_and_config(
+    addresses: &[&str],
+    customize: impl FnOnce(&mut Configuration),
+) -> (Platform, Rc<RefCell<Notifications>>) {
+    let (session, mut config) = setup_for_tests(true); // Sqlite in-memory
+    session.reset();
+    for address in addresses {
+        insert_default_resource(&session, address);
+    }
+    customize(&mut config);
     let mut platform = Platform::from_database(session, config);
     let (notifier, notifications) = RecordingNotifier::new(true);
     platform.set_notifier(Box::new(notifier));
@@ -108,7 +132,7 @@ pub(crate) fn setup_with_config(nb_resources: usize, customize: impl FnOnce(&mut
     platform
 }
 
-fn insert_job(platform: &Platform, queue: &str, hierarchy: &str, walltime: i64, types: Vec<String>) -> i64 {
+pub(crate) fn insert_job(platform: &Platform, queue: &str, hierarchy: &str, walltime: i64, types: Vec<String>) -> i64 {
     NewJob {
         user: Some("user1".to_string()),
         queue_name: queue.to_string(),
@@ -119,7 +143,7 @@ fn insert_job(platform: &Platform, queue: &str, hierarchy: &str, walltime: i64, 
     .expect("Failed to insert job")
 }
 
-fn get_job(platform: &Platform, job_id: i64) -> Job {
+pub(crate) fn get_job(platform: &Platform, job_id: i64) -> Job {
     Job::get_jobs(&platform.session(), None, None, None)
         .unwrap()
         .get(&job_id)

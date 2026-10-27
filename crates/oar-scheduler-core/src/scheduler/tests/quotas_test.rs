@@ -365,3 +365,136 @@ fn test_quotas_two_jobs_job_type_proc() {
     assert_eq!(sched1.begin, 0);
     assert_eq!(sched2.begin, 50);
 }
+
+// ---------------------------------------------------------------------------
+// Ports of `oar3/tests/kao/test_quotas.py` (placement oriented tests)
+// ---------------------------------------------------------------------------
+
+/// Schedules `nb_jobs` jobs (2 nodes each, 60 s) on a 32 nodes platform and
+/// returns their start times, ordered by job id. Mirrors the Python
+/// `sched_placement` helper.
+fn sched_placement(nb_jobs: usize, rules: Option<Vec<(&str, &str, &str, &str, QuotasValue)>>, alt_users: bool) -> Vec<i64> {
+    let mut platform_config = generate_mock_platform_config(false, 32, 32, 1, 1, rules.is_some());
+    platform_config.quotas_config = match rules {
+        Some(rules) => {
+            let map = rules
+                .into_iter()
+                .map(|(queue, project, job_type, user, value)| {
+                    (
+                        (queue.into(), project.into(), job_type.into(), user.into()),
+                        value,
+                    )
+                })
+                .collect();
+            QuotasConfig::new(true, None, map, Box::new(["*".into()]))
+        }
+        None => QuotasConfig::new(false, None, HashMap::new(), Box::new(["*".into()])),
+    };
+    let platform_config = Rc::new(platform_config);
+    let res = platform_config.resource_set.default_resources.clone();
+
+    let slot = Slot::new(Rc::clone(&platform_config), 1, None, None, 0, 2_i64.pow(31), res.clone(), None);
+    let ss = SlotSet::from_slot(slot);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let mut jobs = indexmap::IndexMap::new();
+    for i in 1..=nb_jobs as i64 {
+        let user = if alt_users {
+            if i % 2 == 0 { "u0" } else { "u1" }
+        } else {
+            ["u0", "u1", "u2", "u3"][(i % 4) as usize]
+        };
+        let moldable = Moldable::new(
+            i,
+            60,
+            HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 2)])]),
+        );
+        let job = JobBuilder::new(i)
+            .user(user.into())
+            .queue("default".into())
+            .project("".into())
+            .moldable(moldable)
+            .build();
+        jobs.insert(i, job);
+    }
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    jobs.values()
+        .map(|job| job.assignment.as_ref().map(|assignment| assignment.begin).unwrap_or(-1))
+        .collect()
+}
+
+/// `oar3/tests/kao/test_quotas.py::test_quotas_two_jobs_job_user_proc`
+///
+/// A rule limiting the number of running jobs of user `yop` to 1 serializes the
+/// two jobs.
+#[test]
+fn test_quotas_two_jobs_job_user_proc() {
+    let quotas_config = QuotasConfig::new(
+        true,
+        None,
+        HashMap::from([(("*".into(), "*".into(), "*".into(), "yop".into()), QuotasValue::new(None, Some(1), None))]),
+        Box::new(["*".into()]),
+    );
+    let mut platform_config = generate_mock_platform_config(false, 32, 32, 1, 1, true);
+    platform_config.quotas_config = quotas_config;
+    let res = platform_config.resource_set.default_resources.clone();
+    let platform_config = Rc::new(platform_config);
+
+    let ss = SlotSet::from_platform_config(Rc::clone(&platform_config), 0, 100);
+    let mut all_ss = HashMap::from([("default".into(), ss)]);
+
+    let moldable = |id: i64| {
+        Moldable::new(
+            id,
+            50,
+            HierarchyRequests::from_requests(vec![HierarchyRequest::new(res.clone(), vec![("nodes".into(), 1)])]),
+        )
+    };
+    let j1 = JobBuilder::new(1).user("yop".into()).queue("default".into()).moldable(moldable(0)).build();
+    let j2 = JobBuilder::new(2).user("yop".into()).queue("default".into()).moldable(moldable(1)).build();
+    let mut jobs = indexmap![1 => j1, 2 => j2];
+
+    scheduling::schedule_jobs(&mut all_ss, &mut jobs);
+
+    assert_eq!(jobs[0].assignment.as_ref().map(|assignment| assignment.begin), Some(0));
+    assert_eq!(jobs[1].assignment.as_ref().map(|assignment| assignment.begin), Some(50));
+}
+
+/// `oar3/tests/kao/test_quotas.py::test_quotas_nonblocking_placement_equals_no_quotas`
+///
+/// Non-blocking quotas (huge limits) reject nothing: the placement must be the
+/// same as without quotas.
+#[test]
+fn test_quotas_nonblocking_placement_equals_no_quotas() {
+    let big_quota = 1_000_000_000;
+    let nb = 48;
+    let without_quotas = sched_placement(nb, None, false);
+    let nonblocking = vec![
+        ("*", "*", "*", "/", QuotasValue::new(Some(big_quota), None, None)),
+        ("*", "/", "*", "*", QuotasValue::new(Some(big_quota), None, None)),
+        ("*", "*", "*", "*", QuotasValue::new(None, None, None)),
+    ];
+    let with_quotas = sched_placement(nb, Some(nonblocking), false);
+    assert_eq!(with_quotas, without_quotas);
+}
+
+/// `oar3/tests/kao/test_quotas.py::test_quotas_cache_no_gap_under_blocking`
+///
+/// With a blocking per-user quota and mixed users, the scheduling cache must not
+/// leave a gap in the first time layer. The 32 resources of the platform hold 16
+/// jobs of 2 resources each: one `u0` job (the `u0` rule allows 2 resources) and
+/// fifteen `u1` jobs.
+#[test]
+fn test_quotas_cache_no_gap_under_blocking() {
+    let nb = 64;
+    let rules = vec![
+        ("*", "*", "*", "u0", QuotasValue::new(Some(2), None, None)),
+        ("*", "*", "*", "*", QuotasValue::new(None, None, None)),
+    ];
+    let start_times = sched_placement(nb, Some(rules), true);
+    let t0 = *start_times.iter().min().unwrap();
+    let nb_first_layer = start_times.iter().filter(|start| **start == t0).count();
+    assert_eq!(nb_first_layer, 16, "gap in first layer: {}/16 jobs, start times: {:?}", nb_first_layer, start_times);
+}

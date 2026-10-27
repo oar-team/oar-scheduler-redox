@@ -29,7 +29,12 @@ fn parse_perl_hash(value: &str) -> Option<Vec<(String, (f64, bool))>> {
         if entry.is_empty() {
             continue;
         }
-        let (key, val) = entry.split_once("=>")?;
+        // Both `{key => value}` (Perl) and `{'key': value}` (Python dict, also
+        // accepted by `oar.lib.walltime.get_conf`) are supported.
+        let (key, val) = match entry.split_once("=>") {
+            Some(kv) => kv,
+            None => entry.split_once(':')?,
+        };
         let key = key.trim().trim_matches(|c| c == '\'' || c == '"').to_string();
         let (val, is_float) = parse_config_number(val)?;
         entries.push((key, (val, is_float)));
@@ -88,7 +93,7 @@ fn duration_to_sql_signed(seconds: i64) -> String {
 /// Mirrors `oar.kao.walltime_change.process_walltime_change_requests`.
 pub fn process_walltime_change_requests(platform: &Platform) {
     let session = platform.session();
-    let now = session.get_now();
+    let now = platform.get_now();
     let platform_config = platform.get_platform_config();
     let security_time = platform_config.config.scheduler_job_security_time;
     let apply_time_conf = platform_config.config.walltime_change_apply_time.clone();

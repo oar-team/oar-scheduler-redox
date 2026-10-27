@@ -11,6 +11,7 @@ use crate::model::jobs::{FragJobs, JobStateLogs, Jobs};
 use crate::model::moldable::MoldableJobDescriptions;
 use crate::{Session, SessionDeleteStatement, SessionInsertStatement, SessionSelectStatement, SessionUpdateStatement};
 use sea_query::{Alias, Expr, ExprTrait, Func, Iden, Query};
+use sqlx::any::AnyRow;
 use sqlx::{Error, Row};
 use std::collections::HashMap;
 
@@ -39,6 +40,7 @@ enum Accounting {
 pub struct JobEvent {
     pub ev_type: String,
     pub date: i64,
+    pub description: String,
 }
 
 /// Inserts a job in the `frag_jobs` table so that it is later killed by the
@@ -95,7 +97,7 @@ pub fn get_fragged_jobs(session: &Session) -> Result<Vec<i64>, Error> {
 pub fn get_job_events(session: &Session, job_id: i64) -> Result<Vec<JobEvent>, Error> {
     session.runtime.block_on(async {
         let rows = Query::select()
-            .columns(vec![EventLogs::Type, EventLogs::Date])
+            .columns(vec![EventLogs::Type, EventLogs::Date, EventLogs::Description])
             .from(EventLogs::Table)
             .and_where(Expr::col(EventLogs::JobId).eq(job_id))
             .order_by(EventLogs::Date, sea_query::Order::Asc)
@@ -106,6 +108,7 @@ pub fn get_job_events(session: &Session, job_id: i64) -> Result<Vec<JobEvent>, E
             .map(|row| JobEvent {
                 ev_type: row.try_get(EventLogs::Type.unquoted()).unwrap_or_default(),
                 date: row.try_get(EventLogs::Date.unquoted()).unwrap_or(0),
+                description: row.try_get(EventLogs::Description.unquoted()).unwrap_or_default(),
             })
             .collect())
     })
@@ -261,11 +264,26 @@ fn accounting_rows(
                 (
                     key,
                     row.try_get::<String, &str>(Accounting::ConsumptionType.unquoted()).unwrap_or_default(),
-                    row.try_get::<f64, &str>("total_consumption").unwrap_or(0.0),
+                    // SQLite (and PostgreSQL) return an INTEGER/NUMERIC for SUM over a
+                    // BIGINT column: decode both representations (a `f64` only decode
+                    // silently returned 0.0, which made every karma NaN).
+                    decode_consumption(row),
                 )
             })
             .collect())
     })
+}
+
+/// Decodes the `total_consumption` column of an accounting aggregate query,
+/// accepting both a floating point and an integer representation.
+fn decode_consumption(row: &AnyRow) -> f64 {
+    if let Ok(value) = row.try_get::<f64, &str>("total_consumption") {
+        return value;
+    }
+    if let Ok(value) = row.try_get::<i64, &str>("total_consumption") {
+        return value as f64;
+    }
+    0.0
 }
 
 fn split_consumption_maps(rows: Vec<(String, String, f64)>) -> (HashMap<String, f64>, HashMap<String, f64>) {
@@ -283,6 +301,58 @@ fn split_consumption_maps(rows: Vec<(String, String, f64)>) -> (HashMap<String, 
         }
     }
     (asked, used)
+}
+
+/// A single accounting record, as inserted by [`insert_accounting`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccountingRecord {
+    pub window_start: i64,
+    pub window_stop: i64,
+    pub user: String,
+    pub project: String,
+    pub queue_name: String,
+    /// Either `"ASKED"` or `"USED"`.
+    pub consumption_type: String,
+    pub consumption: i64,
+}
+
+/// Inserts an accounting record (used by the fairshare/karma tests and by the
+/// accounting hooks). Mirrors `oar.lib.models.Accounting.create`.
+pub fn insert_accounting(session: &Session, record: &AccountingRecord) -> Result<(), Error> {
+    session.runtime.block_on(async {
+        Query::insert()
+            .into_table(Accounting::Table)
+            .columns([
+                Accounting::WindowStart,
+                Accounting::WindowStop,
+                Accounting::User,
+                Accounting::Project,
+                Accounting::QueueName,
+                Accounting::ConsumptionType,
+                Accounting::Consumption,
+            ])
+            .values_panic([
+                record.window_start.into(),
+                record.window_stop.into(),
+                record.user.clone().into(),
+                record.project.clone().into(),
+                record.queue_name.clone().into(),
+                record.consumption_type.clone().into(),
+                record.consumption.into(),
+            ])
+            .execute(session)
+            .await?;
+        Ok(())
+    })
+}
+
+/// Deletes all the accounting records. Mirrors the `del_accounting` helper of the
+/// OAR3 tests.
+pub fn delete_accountings(session: &Session) -> Result<(), Error> {
+    session.runtime.block_on(async {
+        Query::delete().from_table(Accounting::Table).execute(session).await?;
+        Ok(())
+    })
 }
 
 /// Returns the summed accounting consumption for the given queues in
@@ -561,6 +631,29 @@ pub fn update_walltime_change_request(
             .execute(session)
             .await?;
         Ok(())
+    })
+}
+
+/// Returns the `(pending, granted)` values of the walltime change request of a
+/// job, if it exists. Unlike [`get_jobs_with_walltime_change`], already granted
+/// requests (pending = 0) are returned too.
+pub fn get_walltime_change(session: &Session, job_id: i64) -> Result<Option<(i64, i64)>, Error> {
+    session.runtime.block_on(async {
+        let rows = Query::select()
+            .columns(vec![
+                (WalltimeChange::Table, WalltimeChange::Pending),
+                (WalltimeChange::Table, WalltimeChange::Granted),
+            ])
+            .from(WalltimeChange::Table)
+            .and_where(Expr::col((WalltimeChange::Table, WalltimeChange::JobId)).eq(job_id))
+            .fetch_all(session)
+            .await?;
+        Ok(rows.first().map(|row| {
+            (
+                row.get::<i64, &str>(WalltimeChange::Pending.unquoted()),
+                row.get::<i64, &str>(WalltimeChange::Granted.unquoted()),
+            )
+        }))
     })
 }
 

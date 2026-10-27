@@ -228,6 +228,9 @@ pub trait JobDatabaseRequests {
     fn set_info_type(&self, session: &Session, info_type: Option<&str>) -> Result<(), Error>;
     fn set_job_type(&self, session: &Session, job_type: &str) -> Result<(), Error>;
     fn assign_moldable_and_set_start_time(&self, session: &Session, moldable_id: i64, start_time: i64) -> Result<(), Error>;
+    /// Sets the `jobs.start_time` column (used by advance reservations, before they
+    /// get a moldable assigned).
+    fn set_start_time(&self, session: &Session, start_time: i64) -> Result<(), Error>;
 }
 
 impl JobDatabaseRequests for Job {
@@ -590,6 +593,21 @@ impl JobDatabaseRequests for Job {
                 );
             } else {
                 debug!("Job {} assigned to moldable {} with start time {}", self.id, moldable_id, start_time);
+            }
+            Ok(())
+        })
+    }
+
+    fn set_start_time(&self, session: &Session, start_time: i64) -> Result<(), Error> {
+        session.runtime.block_on(async {
+            let res = Query::update()
+                .table(Jobs::Table)
+                .and_where(Expr::col(Jobs::Id).eq(self.id))
+                .value(Jobs::StartTime, start_time)
+                .execute(session)
+                .await?;
+            if res == 0 {
+                warn!("Job not found when setting start time, job_id: {}, start_time: {}", self.id, start_time);
             }
             Ok(())
         })

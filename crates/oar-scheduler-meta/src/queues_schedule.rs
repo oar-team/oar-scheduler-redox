@@ -225,7 +225,10 @@ fn check_reservation_jobs(platform: &mut Platform, slot_sets: &mut HashMap<Box<s
         let ss_name = job.slot_set_name();
         let slot_set = slot_sets.get_mut(&*ss_name).expect("SlotSet not found");
 
-        let effective_end = end_time - job_security_time;
+        // The security window ends at `start_time + walltime - job_security_time`
+        // (Python's `t_e`), i.e. `end_time + 1 - job_security_time` with an
+        // inclusive end.
+        let effective_end = end_time + 1 - job_security_time;
         let (left_slot_id, right_slot_id) = match slot_set.get_encompassing_range(start_time, effective_end, None) {
             Some((s1, s2)) => (s1.id(), s2.id()),
             None => {

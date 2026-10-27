@@ -24,7 +24,7 @@ Product crates live in [`crates/`](crates); the repository root only holds repos
 | Path      | Contents                                                                                                                                                               |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crates/` | All the Rust crates: the scheduler, the meta-scheduler, the Python bindings, the benchmark framework, and the daemons and CLI of the full OAR port as they are ported. |
-| `docs/`   | Documentation: `docs/adr/` holds the architecture decision records, `docs/architecture/` the generated architecture diagrams.                                          |
+| `docs/`   | Documentation: `docs/adr/` holds the architecture decision records, `docs/architecture/` the generated architecture diagrams, `docs/tests/` the OAR3 test-port coverage matrix. |
 | `oar3/`   | Git submodule pointing to the upstream Python OAR3 implementation, used as the reference for behaviour parity during the port.                                         |
 
 Adding a crate means creating it under `crates/` and listing it in the `members` of the root `Cargo.toml`. This layout is decided in

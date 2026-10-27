@@ -52,6 +52,15 @@ impl Platform {
         &self.session
     }
 
+    /// Overrides the current time of the platform.
+    ///
+    /// The platform takes the current time from the database when it is created
+    /// ([`Session::get_now`]). Simulations and tests use this method to run the
+    /// meta-scheduler at a controlled date.
+    pub fn set_now(&mut self, now: i64) {
+        self.now = now;
+    }
+
     /// Returns the notifier used to send notifications.
     pub fn notifier(&self) -> &dyn JobNotifier {
         self.notifier.as_ref()

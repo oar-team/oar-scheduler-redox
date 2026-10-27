@@ -1,3 +1,7 @@
+// The ported tests keep the name of the Python test they mirror, even when it is not
+// snake case (e.g. `test_calendar_simple_slotSet_2`).
+#![allow(non_snake_case)]
+
 #[cfg(test)]
 pub mod slot_test;
 #[cfg(test)]
@@ -18,3 +22,5 @@ mod placeholder_test;
 mod quotas_parsing_test;
 #[cfg(test)]
 mod temporal_quotas_test;
+#[cfg(test)]
+mod oar3_scheduling_test;
